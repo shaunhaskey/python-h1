@@ -29,4 +29,8 @@ def read_metadata(filename):
     if not file_mimetype in supported_mimetypes.keys():
         raise NotImplementedError("File type not supported.")
     
-    return supported_mimetypes[file_mimetype](filename)
+    metadata = supported_mimetypes[file_mimetype](filename)
+
+    filetype = metadata['filetype']
+
+    return (filetype, file_mimetype, metadata)
