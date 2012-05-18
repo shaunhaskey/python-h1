@@ -27,7 +27,7 @@ def netcdf(filename):
     except UnknownMetadataError:
         pass
 
-    raise UnknownMetadataError
+    raise NotImplementedError("File metadata not supported.")
 
 
 def tryBOOZER(ncfile):
