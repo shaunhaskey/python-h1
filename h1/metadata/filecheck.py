@@ -80,7 +80,7 @@ def tryPoincareSVG(filename):
     filetype = "Poincare plot (SVG)"
     kh_str = basename[2:6]
     beta_av = 0
-    phi = float(basename.split('.')[0][10:])
+    phi = float(basename[10:-4])
     ret = dict([
             ("filename", basename),
             ("filetype", filetype),
