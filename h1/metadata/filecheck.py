@@ -3,7 +3,6 @@ Code to return metadata for specified mime types.
 """
 
 import os
-import collections
 from scipy.io import netcdf as scipy_netcdf
 
 
@@ -78,7 +77,7 @@ def tryPoincareSVG(filename):
     kh_str = basename[2:6]
     beta_av = 0
     phi = float(basename.split('.')[0][10:])
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -96,7 +95,7 @@ def tryMagWellSVG(filename):
     kh_str = basename.split("_")[1][2:-4]
     beta_av = 0
     
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -113,7 +112,7 @@ def tryIotaBarSVG(filename):
     kh_str = basename.split("_")[1][2:-4]
     beta_av = 0
     
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -133,7 +132,7 @@ def tryMagWellPNG(filename):
     kh_str = basename.split("_")[1][2:]
     beta_av = 0
     
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -152,7 +151,7 @@ def tryPoincarePNG(filename):
     kh_str = basename[2:6]
     beta_av = 0
     phi = float(basename.split('_')[0][10:])
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -172,7 +171,7 @@ def tryIotaBarPNG(filename):
     kh_str = basename.split("_")[1][2:]
     beta_av = 0
     
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", basename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -231,7 +230,7 @@ def tryBOOZER(ncfile):
 
     ncd.close()
 
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", filename),
             ("filetype", filetype),
             ("beta_av", beta_av),
@@ -325,16 +324,16 @@ def tryVMEC(ncfile):
     else:
         raw_coil_cur = []
 
-    coil_cur_currents = collections.OrderedDict()
+    coil_cur_currents = dict()
     for i,coiln in enumerate(coil_group):
         coil_cur_currents.update({"".join(coiln).strip():raw_coil_cur[i]})
 
-    mgrid_file = collections.OrderedDict([
+    mgrid_file = dict([
             ("mgrid_filename", mgrid_filename),
             ("coil_currents", coil_cur_currents)
             ])
 
-    ret = collections.OrderedDict([
+    ret = dict([
             ("filename", filename),
             ("filetype", filetype),
             ("beta_av", beta_av),
