@@ -38,12 +38,16 @@ def netcdf(filename):
     
     try:
         return tryBOOZER(filename)
-    except UnknownMetadataError:
+    except (UnknownMetadataError, TypeError):
+        # TODO: TypeError is raised on netcdf4 (bline) files
+        # TODO: handle these
         pass
 
     try:
         return tryVMEC(filename)
-    except UnknownMetadataError:
+    except (UnknownMetadataError, TypeError):
+        # TODO: TypeError is raised on netcdf4 (bline) files
+        # TODO: handle these
         pass
 
     raise NotImplementedError("File metadata not supported.")
