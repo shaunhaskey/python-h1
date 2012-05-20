@@ -15,6 +15,26 @@ class UnknownMetadataError(Exception):
     """
     pass
 
+def png(filename):
+    
+    try:
+        return tryMagWellPNG(filename)
+    except UnknownMetadataError:
+        pass
+
+    try:
+        return tryPoincarePNG(filename)
+    except UnknownMetadataError:
+        pass
+
+    try:
+        return tryIotaBarPNG(filename)
+    except UnknownMetadataError:
+        pass
+
+
+    raise NotImplementedError("File metadata not supported.")
+    
 def netcdf(filename):
     
     try:
@@ -28,6 +48,138 @@ def netcdf(filename):
         pass
 
     raise NotImplementedError("File metadata not supported.")
+
+def svg(filename):
+
+    try:
+        return tryMagWellSVG(filename)
+    except UnknownMetadataError:
+        pass
+
+    try:
+        return tryPoincareSVG(filename)
+    except UnknownMetadataError:
+        pass
+
+    try:
+        return tryIotaBarSVG(filename)
+    except UnknownMetadataError:
+        pass
+    
+    raise NotImplementedError("File metadata not supported.")
+
+
+def tryPoincareSVG(filename):
+    basename = os.path.basename(filename)
+    if not '-phi' in basename:
+        raise UnknownMetadataError
+
+    filetype = "Poincare plot (SVG)"
+    kh_str = basename[2:6]
+    beta_av = 0
+    phi = float(basename.split('.')[0][10:])
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ("phi", phi),
+            ])
+    return ret
+
+def tryMagWellSVG(filename):
+    basename = os.path.basename(filename)
+    if not basename.startswith("magwell_"):
+        raise UnknownMetadataError
+
+    filetype = "Magnetic Well (SVG)"
+    kh_str = basename.split("_")[1][2:-4]
+    beta_av = 0
+    
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ])
+    return ret
+
+def tryIotaBarSVG(filename):
+    basename = os.path.basename(filename)
+    if not basename.startswith("iotabar_"):
+        raise UnknownMetadataError
+
+    filetype = "Rotational Transform (SVG)"
+    kh_str = basename.split("_")[1][2:-4]
+    beta_av = 0
+    
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ])
+    return ret
+
+
+def tryMagWellPNG(filename):
+    basename = os.path.basename(filename)
+    if not basename.startswith("magwell_"):
+        raise UnknownMetadataError
+    if not filename.endswith("_large.png"):
+        raise UnknownMetadataError
+
+    filetype = "Magnetic Well (PNG)"
+    kh_str = basename.split("_")[1][2:]
+    beta_av = 0
+    
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ])
+    return ret
+
+def tryPoincarePNG(filename):
+    basename = os.path.basename(filename)
+    if not '-phi' in basename:
+        raise UnknownMetadataError
+    if not filename.endswith("_large.png"):
+        raise UnknownMetadataError
+
+    filetype = "Poincare plot (PNG)"
+    kh_str = basename[2:6]
+    beta_av = 0
+    phi = float(basename.split('_')[0][10:])
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ("phi", phi),
+            ])
+    return ret
+
+def tryIotaBarPNG(filename):
+    basename = os.path.basename(filename)
+    if not basename.startswith("iotabar_"):
+        raise UnknownMetadataError
+    if not filename.endswith("_large.png"):
+        raise UnknownMetadataError
+
+    filetype = "Rotational Transform (PNG)"
+    kh_str = basename.split("_")[1][2:]
+    beta_av = 0
+    
+    ret = collections.OrderedDict([
+            ("filename", basename),
+            ("filetype", filetype),
+            ("beta_av", beta_av),
+            ("k_h", float(kh_str)),
+            ])
+    return ret
+
 
 
 def tryBOOZER(ncfile):

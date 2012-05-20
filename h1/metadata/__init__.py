@@ -12,6 +12,8 @@ from h1.metadata import filecheck
 
 supported_mimetypes = {
     'application/x-netcdf':filecheck.netcdf,
+    'image/png':filecheck.png,
+    'image/svg+xml':filecheck.svg,
     }
 
 def read_metadata(filename):
