@@ -994,6 +994,7 @@ def calculate_inverse_matrix2(obj,n_segments, eig_func = None, n=None, m=None, i
         ax[1].set_ylabel('Phase')
         fig.canvas.draw(); fig.show()
         return profile, s_values
+
 def intersection_gradient(focal_point, points_r, points_z):
     points1r = focal_point[0]
     points1z = focal_point[1]
