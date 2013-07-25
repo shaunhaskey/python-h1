@@ -27,8 +27,10 @@ def _plot_coil_vertical(center, radius, thickness, width, phi, phi_samples = 50,
 def _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = 50):
     '''Plot a horizontal coil like hte PFC or OVC
     '''
+    print('center {}, radius {}, thickness {}, width {}, phi {}, phi_samples {}'.format(center, radius, thickness, width, phi, phi_samples))
     rmin = radius - width/2
     rmax = radius + width/2
+    print('rmin:{}, rmax:{}'.format(rmin,rmax))
     heights = [-thickness/2,thickness/2,thickness/2,-thickness/2,-thickness/2]
     r_values = [rmax,rmax,rmin,rmin,rmax]
     phi = phi/180.*np.pi
@@ -136,48 +138,50 @@ class tfc_details():
         0.039000, 0.115500, 0.175500, 0.204500, 0.163500, 0.067500,
         -0.074000, -0.173500, -0.207500, -0.177000, -0.115500, -0.043000];
 
-def tfc_points(coil, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50):
+def tfc_points(coil_num = None, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50,coords=None):
     '''return the points describing a tfc
 
     SRH: 12July2013
     '''
     #TFC details
     tfc = tfc_details()
-    return _coil_vertical_points([tfc.x[coil],tfc.y[coil],tfc.z[coil]], tfc_radius, tfc_thickness, tfc_width, np.arctan2(tfc.y[coil],tfc.x[coil])*180./np.pi, phi_samples = phi_samples)
+    if coords==None:
+        coords = [tfc.x[coil_num],tfc.y[coil_num],tfc.z[coil_num]]
+    return _coil_vertical_points(coords, tfc_radius, tfc_thickness, tfc_width, np.arctan2(coords[1], coords[0])*180./np.pi, phi_samples = phi_samples)
 
-def tfc_points_triangular_mesh(coil, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50, plot=0):
-    '''return the points describing a tfc
+# def tfc_points_triangular_mesh(coil, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50, plot=0):
+#     '''return the points describing a tfc
 
-    SRH: 12July2013
-    '''
-    #TFC details
-    tfc = tfc_details()
-    coil_x, coil_y, coil_z =  _coil_vertical_points([tfc.x[coil],tfc.y[coil],tfc.z[coil]], tfc_radius, tfc_thickness, tfc_width, np.arctan2(tfc.y[coil],tfc.x[coil])*180./np.pi, phi_samples = phi_samples)
-    edges, pts_per_edge = coil_x.shape
-    x = []; y = []; z = []
-    for i in range(edges):
-        x.extend(coil_x[i,:])
-        y.extend(coil_y[i,:])
-        z.extend(coil_z[i,:])
-    vertices = np.array([x, y, z]).T
-    cut_start_points = np.arange(edges)*pts_per_edge
-    faces = np.zeros((2*(pts_per_edge-1)*(edges-1),3),dtype=int)
-    for i in range(edges-1):
-        ind1 = i*(pts_per_edge-1)
-        ind2 = ind1 + pts_per_edge - 1
-        faces[ind1:ind2,:] = np.array([range(cut_start_points[i],cut_start_points[i]+pts_per_edge-1), 
-                                       range(cut_start_points[i+1],cut_start_points[i+1]+pts_per_edge-1), 
-                                       range(cut_start_points[i+1]+1,cut_start_points[i+1]+pts_per_edge)]).T
-        ind1 = (i+edges-1)*(pts_per_edge-1)
-        ind2 = ind1 + pts_per_edge-1
-        faces[ind1:ind2,:] = np.array([range(cut_start_points[i],cut_start_points[i]+pts_per_edge-1), 
-                                       range(cut_start_points[i+1]+1,cut_start_points[i+1]+pts_per_edge),  
-                                       range(cut_start_points[i]+1,cut_start_points[i]+pts_per_edge)]).T
-    if plot:
-        import mayavi.mlab as mlab
-        mlab.triangular_mesh(vertices[:,0], vertices[:,1], vertices[:,2],faces)
-        mlab.triangular_mesh(vertices[:,0], vertices[:,1], vertices[:,2],faces,representation='wireframe',color=(0,0,0))
-    return vertices, faces
+#     SRH: 12July2013
+#     '''
+#     #TFC details
+#     tfc = tfc_details()
+#     coil_x, coil_y, coil_z =  _coil_vertical_points([tfc.x[coil],tfc.y[coil],tfc.z[coil]], tfc_radius, tfc_thickness, tfc_width, np.arctan2(tfc.y[coil],tfc.x[coil])*180./np.pi, phi_samples = phi_samples)
+#     edges, pts_per_edge = coil_x.shape
+#     x = []; y = []; z = []
+#     for i in range(edges):
+#         x.extend(coil_x[i,:])
+#         y.extend(coil_y[i,:])
+#         z.extend(coil_z[i,:])
+#     vertices = np.array([x, y, z]).T
+#     cut_start_points = np.arange(edges)*pts_per_edge
+#     faces = np.zeros((2*(pts_per_edge-1)*(edges-1),3),dtype=int)
+#     for i in range(edges-1):
+#         ind1 = i*(pts_per_edge-1)
+#         ind2 = ind1 + pts_per_edge - 1
+#         faces[ind1:ind2,:] = np.array([range(cut_start_points[i],cut_start_points[i]+pts_per_edge-1), 
+#                                        range(cut_start_points[i+1],cut_start_points[i+1]+pts_per_edge-1), 
+#                                        range(cut_start_points[i+1]+1,cut_start_points[i+1]+pts_per_edge)]).T
+#         ind1 = (i+edges-1)*(pts_per_edge-1)
+#         ind2 = ind1 + pts_per_edge-1
+#         faces[ind1:ind2,:] = np.array([range(cut_start_points[i],cut_start_points[i]+pts_per_edge-1), 
+#                                        range(cut_start_points[i+1]+1,cut_start_points[i+1]+pts_per_edge),  
+#                                        range(cut_start_points[i]+1,cut_start_points[i]+pts_per_edge)]).T
+#     if plot:
+#         import mayavi.mlab as mlab
+#         mlab.triangular_mesh(vertices[:,0], vertices[:,1], vertices[:,2],faces)
+#         mlab.triangular_mesh(vertices[:,0], vertices[:,1], vertices[:,2],faces,representation='wireframe',color=(0,0,0))
+#     return vertices, faces
 
 def extract_VMEC_surface_data(filename, s_ind=-1):
     '''extracts x, y, z and B for the surface index s_ind

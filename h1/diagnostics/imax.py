@@ -1,18 +1,23 @@
 import scipy.signal
 import MDSplus as MDS
 import numpy as np
+
 import matplotlib.pyplot as pt
+import h1.diagnostics.winspec as winspec
 
 class ImaxData():
-    def __init__(self,shot_list, plot_data = 0, get_mirnov_triggers = 1, plot_mirnov_triggers = 0):
-        self.image_array = np.zeros((16,512,512),dtype=float)
+    def __init__(self,shot_list=None, calibration_file = None, plot_data = 0, get_mirnov_triggers = 1, plot_mirnov_triggers = 0):
         self.shot_list = shot_list
-        if plot_data: fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax = ax.flatten()
-        for i, shot in enumerate(self.shot_list):
-            self.image_array[i,:,:] = MDS.Tree('imax',shot).getNode('.images').data()[0,:,:]
-            if plot_data: 
-                im = ax[i].imshow(self.image_array[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower')
-                im.set_clim(247,65535)
+        if shot_list!=None:
+            self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
+            for i, shot in enumerate(self.shot_list):
+                self.image_array[i,:,:] = MDS.Tree('imax',shot).getNode('.images').data()[0,:,:]
+        elif calibration_file!=None:
+            self.image_array = np.zeros((1,512,512),dtype=float)
+            cal_file = winspec.SpeFile(calibration_file)
+            self.image_array[0,:,:] = np.rot90(cal_file.data[0,:,:])
+        else:
+            raise ValueError("either shot_list, or calibration_file must not be None")
         if get_mirnov_triggers:
             self.get_mirnov_triggers(plot_mirnov_triggers)
         else:
@@ -21,16 +26,43 @@ class ImaxData():
             self.amp_average = self.phase_average * 0 + 1
             self.amp_std = self.phase_average * 0
             self.electron_dens = self.phase_average * 0 + 1
-        if plot_data:
-            ax[-1].set_xlim([0,512])
-            ax[-1].set_ylim([0,512])
-            fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-            fig.suptitle('Raw Images')
-            fig.canvas.draw(); fig.show()
+        if plot_data: plot_images()
 
-        #self.get_john_analysis(plot_john_data = 0)
-        #self.calibrate_data(dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images = 1, cal_sum = 1, med_filt = 3, mode_amp_filt = self.amp_average, electron_density = self.electron_dens)
-        #self.fourier_decomp(plot_amps = 1, plot_phases = 1)
+    def plot_images(self,cal=0, clim=None):
+        if cal==0: 
+            print 'Uncalibrated images'
+            plot_array = self.image_array
+        else:
+            print 'Calibrated images'
+            plot_array = self.image_array_cal
+        n_subplots = plot_array.shape[0]
+        n_cols = int(np.ceil(n_subplots**0.5))
+        if n_subplots/float(n_cols)>n_subplots/n_cols:
+            n_rows = n_subplots/n_cols + 1
+        else:
+            n_rows = n_subplots/n_cols
+        fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = 1, sharey=1);
+        if n_rows == 1 and n_cols == 1: ax = np.array([ax])
+        ax = ax.flatten()
+        im_list = []
+        for i in range(n_subplots):
+            im_list.append(ax[i].imshow(plot_array[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower'))
+        if clim==None: 
+            print('Using fixed clim')
+            clim = [247,65535]
+        elif clim.__class__==int:
+            print('Using first image clim')
+            clim = im_list[clim].get_clim()
+        for i in im_list:i.set_clim(clim)
+        ax[-1].set_xlim([0,512])
+        ax[-1].set_ylim([0,512])
+        fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+        if cal==0:
+            title = 'Raw Images'
+        else:
+            title = 'Cal Images'
+        fig.suptitle(title)
+        fig.canvas.draw(); fig.show()
 
     def get_mirnov_triggers(self, plot_mirnov_triggers):
         if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax_trig = ax_trig.flatten()
@@ -133,6 +165,16 @@ class ImaxData():
             #fig2.savefig('imax_Fourier_phase.png')
             fig2.canvas.draw(); fig2.show()
 
+    def plot_fft_overlay(self,harmonic=1):
+        fig, ax = pt.subplots(ncols = 3)
+        base_im = ax[0].imshow(np.abs(self.fft_values[0,:,:])*2, cmap = 'bone', interpolation = 'nearest', aspect = 'auto',origin='lower')
+        top_im = ax[1].imshow(np.abs(self.fft_values[harmonic,:,:])*2, interpolation = 'nearest', aspect = 'auto',origin='lower', alpha = 0.5)
+
+        top_im = ax[2].imshow(np.abs(self.fft_values[harmonic,:,:])*2, interpolation = 'nearest', aspect = 'auto',origin='lower')
+        base_im = ax[2].imshow(np.abs(self.fft_values[0,:,:])*2, cmap = 'bone', interpolation = 'nearest', aspect = 'auto',origin='lower', alpha = 0.9)
+        fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+        fig.canvas.draw(); fig.show()
+
     def calibrate_data(self, dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images=0, cal_sum = 1, med_filt = 3, mode_amp_filt = None):
         '''Calibrate the imax image using a dark and white shot
 
@@ -155,10 +197,10 @@ class ImaxData():
             fig.canvas.draw(); fig.show()
         full_scale = (self.white_image - self.dark_image)
         max_value = np.max(full_scale)
-        if plot_cal_images: 
-            fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax = ax.flatten()
-            im_list = []
-        for i in range(16):
+        # if plot_cal_images: 
+        #     fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax = ax.flatten()
+        #     im_list = []
+        for i in range(self.image_array.shape[0]):
             self.image_array_cal[i,:,:] = (self.image_array[i,:,:] - self.dark_image)/np.clip(self.white_image - self.dark_image, max_value*clip,65000)
             print i,
             if cal_sum:
@@ -170,17 +212,18 @@ class ImaxData():
             if mode_amp_filt:
                 print 'mode_amp_filt',
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / self.amp_average[i]
-            if plot_cal_images:
-                im_list.append(ax[i].imshow(self.image_array_cal[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower'))
-            print ''
+            # if plot_cal_images:
+            #     im_list.append(ax[i].imshow(self.image_array_cal[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower'))
+            # print ''
         if plot_cal_images: 
-            for i in range(0,len(im_list)):im_list[i].set_clim(im_list[0].get_clim())
-            ax[-1].set_xlim([0,512])
-            ax[-1].set_ylim([0,512])
-            fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-            fig.suptitle('imax_corrected Images')
-            fig.canvas.draw(); fig.show()
-            fig.savefig('imax_corrected_images.png')
+            self.plot_images(cal=1, clim=0)
+            # for i in range(0,len(im_list)):im_list[i].set_clim(im_list[0].get_clim())
+            # ax[-1].set_xlim([0,512])
+            # ax[-1].set_ylim([0,512])
+            # fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+            # fig.suptitle('imax_corrected Images')
+            # fig.canvas.draw(); fig.show()
+            # fig.savefig('imax_corrected_images.png')
 
     def get_john_analysis(self, plot_john_data = 0):
         '''Extracts Johns results from the MDSplus tree
@@ -206,6 +249,7 @@ class ImaxData():
                 ax[0].plot(np.abs(self.fft_values[i,:,j]))
                 ax[1].plot(np.angle(self.fft_values[i,:,j]))
         fig.canvas.draw(); fig.show()
+
 
 def make_animation(start_shot_list, titles, harmonic = 1, base_directory = '', prefix = 'hello'):
     '''

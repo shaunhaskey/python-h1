@@ -1,9 +1,12 @@
 import MDSplus as MDS
 import h1.h1model.plot_functions as h1_plot
+import h1.diagnostics.imax as imax
+
 from scipy.interpolate import griddata as scipy_griddata
 import numpy as np
 import matplotlib.pyplot as pt
 import BOOZER
+import cPickle as pickle
 #Note mayavi.mlab is imported for certain functions
 
 '''
@@ -110,12 +113,16 @@ class GeneralSurface():
 
 
 class TFC(GeneralSurface):
-    def __init__(self,coil_num, **kwargs):
-        self.x_array, self.y_array, self.z_array = h1_plot.tfc_points(coil_num, **kwargs)
+    def __init__(self, **kwargs):
+        self.x_array, self.y_array, self.z_array = h1_plot.tfc_points(**kwargs)
         self.edges, self.pts_per_edge = self.x_array.shape
         self.create_triangular_mesh()
         self.describe_surfaces()
-        
+    def plot(self,):
+        import mayavi.mlab as mlab
+        mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces, color=(0.5,0.5,0.5))
+        mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces,representation='wireframe',color=(0,0,0))
+
 
 class BoozerSurfacePatch(GeneralSurface):
     def __init__(self, phi_min, phi_max, n_phi = 10, no_theta = 50, boozer_filename = None, boozer_object = None):
@@ -412,15 +419,16 @@ class LOS():
         return tmp1, R[tmp1]
 
 
-    def find_intersections_TFC(self,tfc_coil_number, plot_first_intersection = 0):
+    def find_intersections_TFC(self,tfc_kwargs, plot_first_intersection = 0, plot_tfc = 0):
         '''Find the intersection of the LOS with TFC's and remove the
         channels where this occurs tfc_coil_number : which TFC...
 
         SRH: 10July2013
         '''
+        if tfc_kwargs==None:tfc_kwargs = {'coil_num':tfc_coil_number}
         print('finding TFC intersections - V2')
         TFC_intersection = np.zeros((self.CCD_pixels_y,self.CCD_pixels_x),dtype=bool)
-        TFC_patch = TFC(tfc_coil_number)
+        TFC_patch = TFC(**tfc_kwargs)
         TFC_intersection1 = self.LOS_point * 0
         TFC_intersection2 = self.LOS_point * 0
         for pixel_y in range(self.CCD_pixels_y):
@@ -443,7 +451,8 @@ class LOS():
         if plot_first_intersection:
             import mayavi.mlab as mlab
             mlab.points3d(TFC_intersection1[TFC_intersection,0], TFC_intersection1[TFC_intersection,1], TFC_intersection1[TFC_intersection,2],scale_factor=0.02, color=(0,0,1))
-
+        if plot_tfc:
+            TFC_patch.plot()
         return tmp1, R[tmp1]
 
     def create_interpolation_points(self, n_interp_pts):
@@ -546,6 +555,79 @@ class LOS():
         self.interp_boozer[self.valid_channels,:,2] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,2]))))
 
+
+
+
+    def grid_for_wave(self, phi_value=120., z_min = -0.4, z_max = 0.4, r_min = 0.9, r_max = 1.45, n_pts = 100, plot_mask = 0):
+        ''' 
+
+        SRH: 22July2013
+        '''
+        points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
+        cross_sect_s = self.patch.grid_s
+        cross_sect_phi = self.patch.grid_phi
+        cross_sect_theta = self.patch.grid_theta
+        
+        z_values = np.linspace(z_min,z_max, n_pts)
+        r_values = np.linspace(r_min, r_max, n_pts)
+        self.r_grid, self.z_grid = np.meshgrid(r_values, z_values)
+        self.x_grid = self.r_grid * np.cos(np.deg2rad(phi_value))
+        self.y_grid = self.r_grid * np.sin(np.deg2rad(phi_value))
+        self.grid_mask = np.ones(self.y_grid.shape,dtype=bool)
+        self.edge_points_rz = []; self.edge_points_xyz = []
+        for i in range(self.r_grid.shape[0]):
+            dP = np.array([self.x_grid[i,1]-self.x_grid[i,0], self.y_grid[i,1]-self.y_grid[i,0], self.z_grid[i,1]-self.z_grid[i,0]])
+            dP = -dP/np.sqrt(np.sum(dP**2))
+            P0 = np.array([self.x_grid[i, 0], self.y_grid[i, 0], self.z_grid[i,0]])
+            t, R, tmp1 = self.patch.find_intersections(P0, dP)
+            if (np.sum(tmp1)) >= 2:# and ((np.sum(tmp1)%2)==0):
+                #mlab.points3d(intersect_pts[:,0], intersect_pts[:,1], intersect_pts[:,2],scale_factor=0.02)
+                intersection_order = np.argsort(t[tmp1])
+                int1_point = R[tmp1][intersection_order[0]]
+                int2_point = R[tmp1][intersection_order[1]]
+                tmp_points = np.array([self.x_grid[i,:],self.y_grid[i,:], self.z_grid[i,:]]).T
+                int1 = np.argmin(np.sum((tmp_points - int1_point)**2,axis=1))
+                int2 = np.argmin(np.sum((tmp_points - int2_point)**2,axis=1))
+                self.edge_points_rz.append([self.r_grid[i,int1], self.z_grid[i,int1]])
+                self.edge_points_rz.append([self.r_grid[i,int2], self.z_grid[i,int2]])
+                self.edge_points_xyz.append([self.x_grid[i,int1], self.y_grid[i,int1], self.z_grid[i,int1]])
+                self.edge_points_xyz.append([self.x_grid[i,int2], self.y_grid[i,int2], self.z_grid[i,int2]])
+                if int1>int2:
+                    self.grid_mask[i, int2:int1] = False
+                else:
+                    self.grid_mask[i, int1:int2] = False
+            if np.sum(tmp1)%2 == 1:
+                print('Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
+        self.edge_points_rz = np.array(self.edge_points_rz)
+        self.edge_points_xyz = np.array(self.edge_points_xyz)
+        
+        if plot_mask:
+            fig,ax = pt.subplots()
+            ax.imshow(np.ma.array(self.grid_mask, mask=self.grid_mask), extent=[r_min,r_max,z_min,z_max], origin='lower')
+            ax.plot(self.edge_points_rz[:,0], self.edge_points_rz[:,1], 'k.')
+            fig.canvas.draw(); fig.show()
+
+        self.valid_pts = self.grid_mask==False
+        interp_pts_x = self.x_grid[self.valid_pts].flatten()
+        interp_pts_y = self.y_grid[self.valid_pts].flatten()
+        interp_pts_z = self.z_grid[self.valid_pts].flatten()
+        print interp_pts_x.shape, n_pts**2
+        required_shape = self.z_grid[self.valid_pts].shape
+        self.s_cross_sect = self.x_grid *0
+        self.theta_cross_sect = self.x_grid *0
+        self.phi_cross_sect = self.x_grid *0
+        print 's'
+        #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        self.s_cross_sect[self.valid_pts] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        print('theta')
+        interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+        interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+        self.theta_cross_sect[self.valid_pts] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
+        print('phi')
+        interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
+
     def plot_boozer_LOS(self,y_vals = None, x_vals = None):
         mask = np.zeros(self.valid_channels.shape,dtype=bool)
         if y_vals == None and x_vals == None:
@@ -630,7 +712,7 @@ class LOS():
         if render:
             mayavi_fig.scene.render()
 
-def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None):
+def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None):
     '''Convenience function containing the required geometry for the
     imax camera
 
@@ -671,7 +753,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         v_hat = np.cross(w_hat,u_hat)
     else:
         print 'default'
-        CCD_phi = 120; CCD_R = 1.946
+        CCD_phi = 119; CCD_R = 1.946
         CCD_z = 5./100; CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
         CCD_position = np.array([CCD_x, CCD_y, CCD_z])
         v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
@@ -688,10 +770,13 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     CCD_x = CCD_L; CCD_y = CCD_L
     n_pixels = 512
     CCD_pixels_x = 512/decimate_pixel; CCD_pixels_y = 512/decimate_pixel
-    phi_min =CCD_phi - phi_range; phi_max = CCD_phi + phi_range;n_phi = 30;no_theta = 50;n_interp_pts = 100
+    phi_min =CCD_phi - phi_range; phi_max = CCD_phi + phi_range;no_theta = no_theta
     boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc'
     plot_length = 50
-    patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
+    if patch_pickle == None:
+        patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
+    else:
+        patch = pickle.load(file(patch_pickle,'r'))
     answer = LOS(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
@@ -734,11 +819,18 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     return answer
 
 
-def plot_imax_mask(LOS_object, shot_number = 71235):
+def plot_imax_mask(LOS_object, shot_number = 71235, cal_file=None):
     fig, ax = pt.subplots(ncols = 3, sharex =1 , sharey =1)
-    image_array = MDS.Tree('imax',shot_number).getNode('.images').data()[0,:,:]
+    if cal_file == None:
+        image_array = MDS.Tree('imax',shot_number).getNode('.images').data()[0,:,:]
+    else:
+        tmp2 = imax.ImaxData(calibration_file = cal_file, plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0)
+        tmp2.calibrate_data(dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images = 0, cal_sum = 1, med_filt = 3, mode_amp_filt = None)
+        image_array = tmp2.image_array_cal[0,:,:]
     img3 = ax[2].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=[0,512,0,512],aspect='auto')
+    img3.set_clim([0,1.5])
     img3 = ax[0].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=[0,512,0,512],aspect='auto')
+    img3.set_clim([0,1.5])
     #ax.imshow(np.fliplr(np.flipud(valid)), origin='lower',alpha=0.6,extent=[0,512,0,512])
     #ax[1].imshow(np.flipud(np.fliplr(LOS_object.valid_channels)),origin='lower',alpha=0.6,extent=[0,512,0,512])
     #ax[2].imshow(np.flipud(np.fliplr(LOS_object.valid_channels)),origin='lower',alpha=0.6,extent=[0,512,0,512])

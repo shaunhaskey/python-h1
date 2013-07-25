@@ -26,6 +26,296 @@ import heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
 
+
+class Tomography():
+    def __init__(self,):
+        pass
+
+    def plot_amp_angle(self,):
+        fig, ax = pt.subplots(nrows = 2)
+        ax[0].plot(np.abs(self.T))
+        ax[1].plot(np.angle(self.T))
+        fig.suptitle(self.method)
+        fig.canvas.draw(); fig.show()
+
+    def plot_reprojection(self, ):
+        fig, ax = pt.subplots(nrows = 2)
+        ax[0].plot(np.abs(self.all_measurements[self.valid_channels]), label='data')
+        ax[0].plot(np.abs(self.re_projection), label='reproj')
+        ax[0].legend(loc='best')
+        ax[1].plot(np.angle(self.all_measurements[self.valid_channels]))
+        ax[1].plot(np.angle(self.re_projection))
+        fig.suptitle(self.method)
+        fig.canvas.draw(); fig.show()
+
+    def plot_lots_of_things(self, n, m, LOS_object):
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        fig2, ax2 = pt.subplots(nrows = 2, ncols = 4)
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
+        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
+        im1_p.set_clim([-np.pi,np.pi])
+        q = self.all_measurements*0
+        q[self.valid_channels]= self.re_projection
+        im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
+        im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
+        im2_a.set_clim(im1_a.get_clim())
+        im2_p.set_clim(im1_p.get_clim())
+        start = 0; increment = len(self.T)/len(n)
+        if len(self.T)%len(n)!=0: raise ValueError('Something wrong')
+        for n_cur, m_cur in zip(n,m):
+            end = start + increment
+            cur_T = self.T[start:end]
+            start = +end
+
+            ax2[0,2].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='|{},{}|'.format(n_cur, m_cur))
+            ax2[1,2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
+        ax2[0,2].legend(loc='best')
+        ax2[0,2].set_xlim([0,1])
+        ax2[1,2].set_xlim([0,1])
+        ax2[1,2].legend(loc='best')
+        ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
+        ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+        ax2[0,3].legend(loc='best')
+        ax2[1,3].plot(np.angle(self.all_measurements[self.valid_channels]), label = 'Arg(data)')
+        ax2[1,3].plot(np.angle(self.re_projection), label = 'Arg(reproj)')
+        ax2[1,3].legend(loc='best')
+        fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.05,top=0.95, right=0.95)
+        fig2.suptitle('Tomo method: {} Top : Camera amp and phase, |eig func|, |reproj|, Bottom: Reprojection amp and phase, Arg(eig func), Arg(re proj)'.format(self.method))
+        fig2.canvas.draw(); fig2.show()
+
+    def plot_wave_field(self, n, m, LOS_object,s_values):
+        #Get the boozer locations to interpolate
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        fig, ax = pt.subplots(nrows = 2, ncols = 3)
+        im_s = ax[0,0].imshow(np.ma.array(LOS_object.s_cross_sect, mask=LOS_object.grid_mask))
+        im_s.set_clim([0,1])
+        im_theta = ax[0,1].imshow(np.ma.array(LOS_object.theta_cross_sect, mask=LOS_object.grid_mask))
+        im_theta.set_clim([-np.pi,np.pi])
+        im_phi = ax[0,2].imshow(np.ma.array(LOS_object.phi_cross_sect, mask=LOS_object.grid_mask))
+        im_phi.set_clim([-np.pi,np.pi])
+        s_vals = (s_values[1:]+s_values[0:-1])/2
+        wave_field = 0
+        start = 0; increment = len(self.T)/len(n)
+        if len(self.T)%len(n)!=0: raise ValueError('Something wrong')
+        for n_cur, m_cur in zip(n,m):
+            end = start + increment
+            wave_amp = np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.real(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape) + 1j* np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.imag(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape)
+            wave_field = wave_field + wave_amp * np.exp(1j*(n_cur*LOS_object.phi_cross_sect + m_cur * LOS_object.theta_cross_sect))
+            start = +end
+        im = ax[1,0].imshow(np.ma.array(np.abs(wave_field), mask = LOS_object.grid_mask), interpolation = 'nearest')
+        print im.get_clim()
+        print [0, np.mean(np.abs(wave_field))*3]
+        im.set_clim([0, np.mean(np.abs(wave_field))*3])
+        ax[1,2].imshow(np.ma.array(np.real(wave_field), mask = LOS_object.grid_mask), interpolation = 'nearest')
+        im = ax[1,1].imshow(np.ma.array(np.angle(wave_field), mask = LOS_object.grid_mask), interpolation = 'nearest')
+        im.set_clim([-np.pi,np.pi])
+        fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.05,top=0.95, right=0.95)
+        fig.suptitle('{} top row : s, theta, phi; bottom row : abs, phase, real'.format(self.method))
+        fig.canvas.draw(); fig.show()
+
+
+
+
+class DirectSolution(Tomography):
+    def __init__(self, geom_matrix, measurements, valid_channels = None):
+        n_measurements, n_regions = geom_matrix.shape
+        self.geom_matrix = geom_matrix
+        self.all_measurements = measurements
+        self.method = 'DirectSolution'
+        if valid_channels!=None:
+            self.measurements = measurements[valid_channels]
+            self.valid_channels = valid_channels
+        else:
+            self.measurements = measurements
+            self.valid_channels = np.ones(measurements.shape, dtyp=bool)
+
+    def run(self,):
+        self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix)
+        self.T = np.dot(self.geom_matrix_pinv, self.all_measurements[self.valid_channels])
+        self.re_projection = np.dot(self.geom_matrix, self.T)
+
+
+
+
+class ART(Tomography):
+    def __init__(self, geom_matrix, measurements, lamda, initial_guess = None, save_increment = 50, produce_plots = 0, random_ordering = 1, valid_channels = None):
+        '''This is an implementation of the algebraic reconstruction
+        technique It will accept real or complex inputs. If the inputs are
+        complex, the arrays are expanded out to twice the width and
+        length, to accomodate complex numbers, while leaving the arrays
+        real.
+
+        lamda is a mixing coefficient
+        SRH: 21July2013
+        '''
+        self.method = 'ART'
+        n_measurements, n_regions = geom_matrix.shape
+        self.random_ordering = random_ordering
+        self.lamda = lamda
+        self.geom_matrix = geom_matrix
+        self.all_measurements = measurements
+        if valid_channels!=None:
+            self.measurements = measurements[valid_channels]
+            self.valid_channels = valid_channels
+        else:
+            self.measurements = measurements
+            self.valid_channels = np.ones(measurements.shape, dtyp=bool)
+        self.initial_guess = initial_guess
+        self.save_increment = save_increment
+        self.produce_plots = produce_plots
+        #If the geometry matrix or measurement matrix complex
+        #Need to build a larger matrix that contains the linear system of equations
+        #in real numbers only
+        if geom_matrix.dtype == np.complex_ or measurements.dtype == np.complex:
+            print 'complex input'
+            self.P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+            #Build a real matrix 
+            self.P[0::2,0::2] = +np.real(self.geom_matrix)
+            self.P[0::2,1::2] = -np.imag(self.geom_matrix)
+            self.P[1::2,0::2] = +np.imag(self.geom_matrix)
+            self.P[1::2,1::2] = +np.real(self.geom_matrix)
+            self.S = np.zeros(n_measurements*2, dtype=float)
+            self.S[0::2] = +np.real(self.measurements)
+            self.S[1::2] = +np.imag(self.measurements)
+            self.input_type = 'complex'
+        else:
+            print 'real input'
+            self.P = self.geom_matrix
+            self.S = self.measurements
+            self.input_type = 'real'
+
+    def plot_convergence(self):
+        fig, ax = pt.subplots(nrows = 2)
+        for i, T in enumerate(self.T_list):
+            real_part = T
+            if self.input_type == 'complex':
+                real_part = T[0::2]
+                ax[1].plot(T[1::2])
+            ax[0].plot(real_part)
+            ax[0].text(np.argmax(real_part), np.max(real_part),str(i))
+        fig.canvas.draw(); fig.show()
+
+    def run(self, initial_guess = None, cycles = 1, skip_if_norm_below=0.0001):
+        self.initial_guess = initial_guess
+        self.T_list = []
+        if self.initial_guess == None:
+            self.T = np.zeros((self.P.shape[1]), dtype = float)
+        else:
+            print 'using the initial guess'
+            if self.initial_guess.dtype == np.complex_:
+                self.T = np.zeros((self.P.shape[1]), dtype = self.geom_matrix.dtype)
+                self.T[::2] = np.real(self.initial_guess)
+                self.T[1::2] = np.imag(self.initial_guess)
+            else:
+                self.T = self.initial_guess*1.
+        if self.random_ordering:
+            mixture = np.random.rand(self.P.shape[0]*cycles)
+            ordering = np.argsort(mixture)
+        else:
+            ordering = np.range(self.P.shape[0]*cycles)
+        for k in ordering:
+            i = k%self.P.shape[0]
+            a_i = self.P[i,:]
+            norm = np.sum(a_i**2)
+            if norm>skip_if_norm_below:
+                self.T = self.T + self.lamda* (self.S[i] - np.dot(a_i, self.T)) * a_i / norm
+                if (i%self.save_increment) == 0:
+                    if self.input_type == 'complex':
+                        self.T_list.append(self.T[0::2] + 1j*self.T[1::2])
+                    else:
+                        self.T_list.append(self.T)
+        if self.input_type == 'complex':
+            self.T = self.T[0::2] + self.T[1::2]*1j
+        self.re_projection = np.dot(self.geom_matrix, self.T)
+
+    def plot_convergence(self,scale_clim = 1):
+        fig2, ax2 = pt.subplots(nrows = 2, ncols = 2)
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
+        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
+        for i, T in enumerate(self.T_list):
+            re_projection = np.dot(self.geom_matrix, T)
+            im1_p.set_clim([-np.pi,np.pi])
+            q = self.all_measurements*0
+            q[self.valid_channels]= re_projection
+            im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
+            im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
+            if i == 0:
+                clim_lower = im1_a.get_clim()[0]
+                clim_upper = im1_a.get_clim()[1] * scale_clim
+                clim = [clim_lower, clim_upper]
+            im2_a.set_clim(clim)
+            im1_a.set_clim(clim)
+            im2_p.set_clim(im1_p.get_clim())
+            fig2.savefig('{:02d}.png'.format(i))
+
+def single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = None, scaling_factor_s = None):
+    mode_amps = np.exp(1j*n*boozer_pts[:,2] + 1j*m*boozer_pts[:,1])
+    dl_tmp = dl
+    s_tmp = boozer_pts[:,0]
+    if interp_fact != None:
+        l = np.arange(0,len(interp_pts[:,0]))*dl_tmp
+        dl_tmp = dl_tmp / interp_fact
+        l_new = np.arange(0,len(l)*interp_fact)*dl_tmp
+        mode_amps = np.interp(l_new, l, np.real(mode_amps)) + 1j* np.interp(l_new, l, np.imag(mode_amps))
+        s_tmp = np.interp(l_new, l, boozer_pts[:,0])
+    if scaling_factor != None:
+        print('hello')
+        scale_fact = np.interp(s_tmp, scaling_factor_s, scaling_factor)
+        mode_amps = mode_amps / scale_fact
+    bin_allocation = np.digitize(s_tmp, segments)
+    output_list = []
+    for i in range(1,len(segments)):
+        #output_list.append(np.sum(bin_allocation==i)*dl)
+        output_list.append(np.sum(mode_amps[bin_allocation==i])*dl)
+    return np.array(output_list)
+
+def calculate_inverse_matrix2(LOS_obj, n_segments, s_min =0., s_max = 1.,n_list=None, m_list=None, interp_fact = None, mode_amps_input=None, channel_mask=None, scaling_factor = None, scaling_factor_s = None):
+    '''Calculate the inverse matrix for the calculation on density profile
+    based on a fixed number of segments, and some mode numbers
+    SH: 2013
+    '''
+    print 'calculating geometric matrix and its pseudo inverse'
+    if n_list.__class__ == int:
+        n_list = [n_list]
+        m_list = [m_list]
+    segments = np.linspace(s_min, s_max, n_segments)
+    LOS_obj.segments = segments
+    LOS_obj.segment_midpoints = (segments[1:]+segments[0:-1])/2.
+    n_measurements = np.sum(LOS_obj.valid_channels)
+    geom_mat_list = []
+    for i in n_list:
+        geom_mat_list.append(np.zeros((n_measurements,n_segments-1), dtype=complex))
+    #geom_mat2[channel_count, :] = output_array*1.
+    #s=0, theta = 1, phi = 2
+    pixel_list = []
+    for geom_mat, n, m in zip(geom_mat_list, n_list, m_list):
+        channel_count = 0
+        for pixel_y in range(LOS_obj.CCD_pixels_y):
+            for pixel_x in range(LOS_obj.CCD_pixels_x):
+                if LOS_obj.valid_channels[pixel_y, pixel_x]:
+                    interp_pts = LOS_obj.interpolation_pts[pixel_y, pixel_x,:,:]
+                    boozer_pts = LOS_obj.interp_boozer[pixel_y, pixel_x,:,:]
+                    dl = LOS_obj.dl[pixel_y, pixel_x]
+                    output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
+                    geom_mat[channel_count, :] = output_array*1.
+                    channel_count += 1
+                    print channel_count
+                    pixel_list.append([pixel_y, pixel_x])
+    geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
+    start = 0
+    for geom_mat in geom_mat_list:
+        end = start + n_segments - 1
+        geom_mat_comb[:, start:end] = +geom_mat
+        start = +end
+    return geom_mat_comb, pixel_list, segments
+
+
+
+
 def intersection_points(R_values, Z_values, gradient, offset, plot = 0):
     '''Find the intersection of the line with gradient and offset
     and the surface defined by R_values, and Z_values
@@ -150,9 +440,8 @@ class interferometer:
         theta = np.arctan2(theta_sin,theta_cos)
 
         #find the mode amplitudes at the grid points
-        s_amps = np.interp(s,eig_func[0],np.real(eig_func[1])) + np.interp(s,eig_func[0],np.imag(eig_func[1]))*1j
-        
         #calc the wave field
+        s_amps = np.interp(s,eig_func[0],np.real(eig_func[1])) + np.interp(s,eig_func[0],np.imag(eig_func[1]))*1j
         wave = np.real(s_amps * np.exp(1j*n*phi + 1j*m*theta))
         wave = np.resize(wave,z_grid.shape)
 
@@ -927,73 +1216,6 @@ def fit_mode(self,measurements,n,m):
     ax[2].plot(np.angle(get_signals(tmp[0], coord_list,n,m)))
 
     fig.canvas.draw();fig.show()
-
-
-def calculate_inverse_matrix2(obj,n_segments, eig_func = None, n=None, m=None, interpolation = None, mode_amps_input=None, channel_mask=None):
-    '''Calculate the inverse matrix for the calculation on density profile
-    based on a fixed number of segments, and some mode numbers
-    SH: 2013
-    '''
-    print 'calculating geometric matrix and its pseudo inverse'
-    obj.segments = np.linspace(0,1,n_segments + 1)
-    #n_measurements = len(obj.LOS_coords)
-    n_measurements = np.sum(channel_mask)
-    geom_mat = np.zeros((n_measurements,n_segments), dtype=complex)
-    s_values = (obj.segments[1:]+obj.segments[0:-1])/2.
-    valid_channel_count = 0
-    #for i in range(0,len(obj.LOS_coords)):
-    start_pt = np.argmax(obj.valid_LOS)
-    for i in range(0,512):
-        if channel_mask[i]==True:
-            count_list = []
-            s_tmp = obj.LOS_coords[-start_pt+i][:,0]
-            theta_tmp = obj.LOS_coords[-start_pt+i][:,1]
-            phi_tmp = obj.LOS_coords[-start_pt+i][:,2]
-            dl_tmp = obj.dl_list[-start_pt+i]
-            cumul_points = 0
-            mode_amps = np.exp(1j*n*phi_tmp + 1j*m*theta_tmp)
-            #Increase the dl spacing by the factor interpolation
-            #Requires interpolating the mode output at these places
-            if interpolation != None:
-                l = np.arange(0,len(obj.LOS_coords[-start_pt+i][:,0]))*dl_tmp
-                dl_tmp = dl_tmp / interpolation
-                l_new = np.arange(0,len(l)*interpolation)*dl_tmp
-                mode_amps = np.interp(l_new, l, np.real(mode_amps)) + 1j* np.interp(l_new, l, np.imag(mode_amps))
-                s_tmp = np.interp(l_new, l, s_tmp)
-            #For each solution segment, add up the dl's in that segment
-            for j in range(0,n_segments):
-                rel_pts = (s_tmp>=obj.segments[j]) * (s_tmp<obj.segments[j+1])
-                points = np.sum(rel_pts)
-                cumul_points += points
-                #geom_mat[i,j]= points * dl_tmp/(dl_tmp*len(s_tmp))
-                geom_mat[valid_channel_count, j] = np.sum(mode_amps[rel_pts]  * dl_tmp)# / (dl_tmp*len(s_tmp))
-                #geom_mat[i,j] = np.sum(np.exp(1j*n*phi_tmp[rel_pts] + 1j*m*theta_tmp[rel_pts]) * dl_tmp)# / (dl_tmp*len(s_tmp))
-                count_list.append(points)
-            #print count_list
-            valid_channel_count += 1
-    obj.geom_mat = geom_mat
-    obj.geom_mat_pinv = np.linalg.pinv(geom_mat)
-    
-    if (eig_func != None) or (mode_amps!=None): 
-        if mode_amps==None:
-            profile = np.dot(obj.geom_mat_pinv, obj.mode_output)
-        else:
-            #profile = np.dot(obj.geom_mat_pinv, mode_amps_input[obj.valid_LOS])
-            profile = np.dot(obj.geom_mat_pinv, mode_amps_input[channel_mask])
-        #print 'hello', profile.shape, obj.segments.shape
-        xaxis = (obj.segments[0:-1] + obj.segments[1:])/2.
-        fig, ax = pt.subplots(nrows = 2)
-        ax[0].plot(xaxis, np.abs(profile), 'o', label='tomo inversion')
-        ax[1].plot(xaxis, np.angle(profile, deg = True), '-o')
-        if eig_func!=None:
-            ax[0].plot(eig_func[0], np.abs(eig_func[1]), '-x', label='Eig func')
-            ax[1].plot(eig_func[0], np.angle(eig_func[1],deg=True), '-x', label='Eig func')
-        ax[1].set_xlabel('s')
-        ax[0].set_ylabel('Amplitude')
-        ax[0].legend(loc='best')
-        ax[1].set_ylabel('Phase')
-        fig.canvas.draw(); fig.show()
-        return profile, s_values
 
 def intersection_gradient(focal_point, points_r, points_z):
     points1r = focal_point[0]
