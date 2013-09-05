@@ -5,7 +5,7 @@ import h1.diagnostics.imax as imax
 from scipy.interpolate import griddata as scipy_griddata
 import numpy as np
 import matplotlib.pyplot as pt
-import BOOZER
+import h1.mhd_eq.BOOZER as BOOZER
 import cPickle as pickle
 #Note mayavi.mlab is imported for certain functions
 
@@ -144,6 +144,7 @@ class BoozerSurfacePatch(GeneralSurface):
         self.n_phi = n_phi
         self.no_theta = no_theta
         if boozer_object==None and boozer_filename!=None:
+            print(boozer_filename)
             boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=0,load_spline=False,save_spline=False,load_grid=False)
         else:
             raise ValueError('Need to supply boozer_object or boozer_filename')
@@ -557,7 +558,6 @@ class LOS():
 
 
 
-
     def grid_for_wave(self, phi_value=120., z_min = -0.4, z_max = 0.4, r_min = 0.9, r_max = 1.45, n_pts = 100, plot_mask = 0):
         ''' 
 
@@ -712,14 +712,17 @@ class LOS():
         if render:
             mayavi_fig.scene.render()
 
-def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None):
+
+
+
+def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None):
     '''Convenience function containing the required geometry for the
     imax camera
 
     SRH: 12July2013
     '''
     # LOS(CCD, CCD_width, CCD_length)
-    u_hat = np.array([0,0,1])
+    u_hat = np.array([0.,0.,1.])
     CCD_focal_distance = 17.0/1000.
     if measurements == 'nandi_measurements':
         print 'nandi measurements'
@@ -753,10 +756,30 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         v_hat = np.cross(w_hat,u_hat)
     else:
         print 'default'
-        CCD_phi = 119; CCD_R = 1.946
+        CCD_phi = 119.; CCD_R = 1.946
         CCD_z = 5./100; CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
         CCD_position = np.array([CCD_x, CCD_y, CCD_z])
-        v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
+
+        l1 = 1./np.cos(np.deg2rad(elevation_angle))
+        l2 = np.tan(np.deg2rad(elevation_angle))
+        print np.sqrt(l1**2 - l2**2)
+        CCD_position = CCD_position + np.array([0,0,elevation])
+        z_component = -np.sin(np.deg2rad(elevation_angle))
+        w_hat = -np.array([CCD_x, CCD_y, 0])
+        w_hat = w_hat / np.sqrt(np.sum(w_hat**2))
+        w_hat = w_hat * np.cos(np.deg2rad(elevation_angle)) + np.array([0,0,-np.sin(np.deg2rad(elevation_angle))])
+        print 'w_hat', np.sum(w_hat**2)
+        #w_hat = -CCD_position/(np.sqrt(np.sum(CCD_position**2)))
+        #print np.sum(w_hat**2)
+        #print np.sqrt(np.sum((w_hat * l2)**2)), l2
+        u_hat = w_hat * l2 + np.array([0.,0.,l1])
+        print 'u hat', u_hat, np.sqrt(np.sum(u_hat**2))
+        #1/0
+        v_hat2 = np.cross(w_hat, u_hat)
+        #v_hat2 = v_hat2 / (np.sqrt(np.sum(v_hat**2)))
+        v_hat = np.array([-np.cos(np.deg2rad(90.-CCD_phi)), np.sin(np.deg2rad(90.-CCD_phi)),0])
+        print 'v comparisons', v_hat2, v_hat, np.sqrt(np.sum(v_hat2**2)), np.sqrt(np.sum(v_hat**2))
+
         CCD_focal_distance = 17.3/1000.
 
     # #Nandi tomo17
@@ -765,18 +788,23 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     # v_hat = np.cross(w_hat,u_hat)
     # f = 17./1000
     #phi_min =60; phi_max = 200;n_phi = 30;no_theta = 50
-    #boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc'
+
     CCD_L = 0.01575
     CCD_x = CCD_L; CCD_y = CCD_L
     n_pixels = 512
     CCD_pixels_x = 512/decimate_pixel; CCD_pixels_y = 512/decimate_pixel
     phi_min =CCD_phi - phi_range; phi_max = CCD_phi + phi_range;no_theta = no_theta
-    boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc'
     plot_length = 50
-    if patch_pickle == None:
+    if patch_object != None:
+        print('using the patch object...')
+        patch = patch_object
+    elif patch_pickle == None:
+        print('Generating patch surface...')
         patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
     else:
+        print('Loading patch surface from pickle file...')
         patch = pickle.load(file(patch_pickle,'r'))
+
     answer = LOS(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
@@ -787,6 +815,8 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         if plot_intersections : answer.plot_intersections()
         if plot_LOS : answer.plot_LOS(grad_mult = plot_length,plot_arguments={'color':(0,1,1), 'line_width':2.5})
     return answer
+
+
 
 def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0):
     '''Convenience function containing the required geometry for the
@@ -822,20 +852,37 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
 def plot_imax_mask(LOS_object, shot_number = 71235, cal_file=None):
     fig, ax = pt.subplots(ncols = 3, sharex =1 , sharey =1)
     if cal_file == None:
-        image_array = MDS.Tree('imax',shot_number).getNode('.images').data()[0,:,:]
+        if shot_number.__class__!=list: shot_number = [shot_number]
+        for i, shot in enumerate(shot_number):
+            image_array_tmp = MDS.Tree('imax',shot_number).getNode('.images').data()[0,:,:]
+            if i == 0:
+                len1, len2 = image_array_tmp.shape
+                image_array = np.zeros(len1*len(shot_number),len2,dtype=float)
+            image_array[len1*i:len1*(i+1),:] = +image_array_tmp
+
     else:
-        tmp2 = imax.ImaxData(calibration_file = cal_file, plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0)
-        tmp2.calibrate_data(dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images = 0, cal_sum = 1, med_filt = 3, mode_amp_filt = None)
-        image_array = tmp2.image_array_cal[0,:,:]
-    img3 = ax[2].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=[0,512,0,512],aspect='auto')
+        if cal_file.__class__!=list: cal_file = [cal_file]
+        for i, cal in enumerate(cal_file):
+            tmp2 = imax.ImaxData(SPE_file= cal, plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0)
+            tmp2.calibrate_data(dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images = 0, cal_sum = 1, med_filt = 3, mode_amp_filt = None)
+            image_array_tmp = tmp2.image_array_cal[0,:,:]
+            if i == 0:
+                print 'hello'
+                len1, len2 = image_array_tmp.shape
+                image_array = np.zeros((len1*len(cal_file),len2),dtype=float)
+            image_array[len1*i:len1*(i+1),:] = +image_array_tmp
+    extent = image_array.shape
+    extent = [0, extent[0], 0, extent[1]]
+
+    img3 = ax[2].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=extent,aspect='auto')
     img3.set_clim([0,1.5])
-    img3 = ax[0].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=[0,512,0,512],aspect='auto')
+    img3 = ax[0].imshow(image_array, interpolation='nearest', origin='lower', alpha=1.0,extent=extent,aspect='auto')
     img3.set_clim([0,1.5])
     #ax.imshow(np.fliplr(np.flipud(valid)), origin='lower',alpha=0.6,extent=[0,512,0,512])
     #ax[1].imshow(np.flipud(np.fliplr(LOS_object.valid_channels)),origin='lower',alpha=0.6,extent=[0,512,0,512])
     #ax[2].imshow(np.flipud(np.fliplr(LOS_object.valid_channels)),origin='lower',alpha=0.6,extent=[0,512,0,512])
-    ax[1].imshow(LOS_object.valid_channels,origin='lower',alpha=0.3,extent=[0,512,0,512],aspect='auto', cmap = pt.cm.bone)
-    ax[2].imshow(LOS_object.valid_channels,origin='lower',alpha=0.3,extent=[0,512,0,512],aspect='auto', cmap = pt.cm.bone)
+    ax[1].imshow(LOS_object.valid_channels,origin='lower',alpha=0.3,extent=extent,aspect='auto', cmap = pt.cm.bone)
+    ax[2].imshow(LOS_object.valid_channels,origin='lower',alpha=0.3,extent=extent,aspect='auto', cmap = pt.cm.bone)
     #ax[1].imshow(LOS_object.valid_channels, origin='lower',alpha=0.6,extent=[0,512,0,512])
     #ax[2].imshow(LOS_object.valid_channels, origin='lower',alpha=0.6,extent=[0,512,0,512])
     #img3 = plt.imshow(zvals2, interpolation='nearest', cmap=cmap2, origin='lower', alpha=0.6)

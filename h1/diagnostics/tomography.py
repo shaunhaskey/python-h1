@@ -17,20 +17,17 @@ SH: 5May2013
 
 import scipy.optimize as optimize
 from scipy.interpolate import griddata as scipy_griddata
-import heliac_vmec_utils as hv_utils
+#import h1.mhd_eq.heliac_vmec_utils as hv_utils
 import os,copy, time, scipy, pickle
 import matplotlib.pyplot as pt
 import numpy as np
 from StringIO import StringIO
-import heliac_worker_funcs as heliac
+import h1.mhd_eq.heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
 
 
 class Tomography():
-    def __init__(self,):
-        pass
-
     def plot_amp_angle(self,):
         fig, ax = pt.subplots(nrows = 2)
         ax[0].plot(np.abs(self.T))
@@ -68,7 +65,6 @@ class Tomography():
             end = start + increment
             cur_T = self.T[start:end]
             start = +end
-
             ax2[0,2].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='|{},{}|'.format(n_cur, m_cur))
             ax2[1,2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
         ax2[0,2].legend(loc='best')
@@ -118,6 +114,37 @@ class Tomography():
         fig.canvas.draw(); fig.show()
 
 
+    def plot_convergence(self):
+        fig, ax = pt.subplots(nrows = 2)
+        for i, T in enumerate(self.T_list):
+            real_part = T
+            if self.input_type == 'complex':
+                real_part = T[0::2]
+                ax[1].plot(T[1::2])
+            ax[0].plot(real_part)
+            ax[0].text(np.argmax(real_part), np.max(real_part),str(i))
+        fig.canvas.draw(); fig.show()
+
+    def plot_convergence(self,scale_clim = 1):
+        fig2, ax2 = pt.subplots(nrows = 2, ncols = 2)
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
+        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
+        for i, T in enumerate(self.T_list):
+            re_projection = np.dot(self.geom_matrix, T)
+            im1_p.set_clim([-np.pi,np.pi])
+            q = self.all_measurements*0
+            q[self.valid_channels]= re_projection
+            im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
+            im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
+            if i == 0:
+                clim_lower = im1_a.get_clim()[0]
+                clim_upper = im1_a.get_clim()[1] * scale_clim
+                clim = [clim_lower, clim_upper]
+            im2_a.set_clim(clim)
+            im1_a.set_clim(clim)
+            im2_p.set_clim(im1_p.get_clim())
+            fig2.savefig('{:02d}.png'.format(i))
+
 
 
 class DirectSolution(Tomography):
@@ -137,8 +164,6 @@ class DirectSolution(Tomography):
         self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix)
         self.T = np.dot(self.geom_matrix_pinv, self.all_measurements[self.valid_channels])
         self.re_projection = np.dot(self.geom_matrix, self.T)
-
-
 
 
 class ART(Tomography):
@@ -188,17 +213,6 @@ class ART(Tomography):
             self.S = self.measurements
             self.input_type = 'real'
 
-    def plot_convergence(self):
-        fig, ax = pt.subplots(nrows = 2)
-        for i, T in enumerate(self.T_list):
-            real_part = T
-            if self.input_type == 'complex':
-                real_part = T[0::2]
-                ax[1].plot(T[1::2])
-            ax[0].plot(real_part)
-            ax[0].text(np.argmax(real_part), np.max(real_part),str(i))
-        fig.canvas.draw(); fig.show()
-
     def run(self, initial_guess = None, cycles = 1, skip_if_norm_below=0.0001):
         self.initial_guess = initial_guess
         self.T_list = []
@@ -232,25 +246,93 @@ class ART(Tomography):
             self.T = self.T[0::2] + self.T[1::2]*1j
         self.re_projection = np.dot(self.geom_matrix, self.T)
 
-    def plot_convergence(self,scale_clim = 1):
-        fig2, ax2 = pt.subplots(nrows = 2, ncols = 2)
-        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
-        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
-        for i, T in enumerate(self.T_list):
-            re_projection = np.dot(self.geom_matrix, T)
-            im1_p.set_clim([-np.pi,np.pi])
-            q = self.all_measurements*0
-            q[self.valid_channels]= re_projection
-            im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
-            im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
-            if i == 0:
-                clim_lower = im1_a.get_clim()[0]
-                clim_upper = im1_a.get_clim()[1] * scale_clim
-                clim = [clim_lower, clim_upper]
-            im2_a.set_clim(clim)
-            im1_a.set_clim(clim)
-            im2_p.set_clim(im1_p.get_clim())
-            fig2.savefig('{:02d}.png'.format(i))
+
+
+
+class SIRT(Tomography):
+    def __init__(self, geom_matrix, measurements, lamda, initial_guess = None, save_increment = 50, produce_plots = 0, random_ordering = 1, valid_channels = None):
+        '''This is an implementation of the algebraic reconstruction
+        technique It will accept real or complex inputs. If the inputs are
+        complex, the arrays are expanded out to twice the width and
+        length, to accomodate complex numbers, while leaving the arrays
+        real.
+
+        lamda is a mixing coefficient
+        SRH: 21July2013
+        '''
+        self.method = 'SIRT'
+        n_measurements, n_regions = geom_matrix.shape
+        self.random_ordering = random_ordering
+        self.lamda = lamda
+        self.geom_matrix = geom_matrix
+        self.all_measurements = measurements
+        if valid_channels!=None:
+            self.measurements = measurements[valid_channels]
+            self.valid_channels = valid_channels
+        else:
+            self.measurements = measurements
+            self.valid_channels = np.ones(measurements.shape, dtyp=bool)
+        self.initial_guess = initial_guess
+        self.save_increment = save_increment
+        self.produce_plots = produce_plots
+        #If the geometry matrix or measurement matrix complex
+        #Need to build a larger matrix that contains the linear system of equations
+        #in real numbers only
+        if geom_matrix.dtype == np.complex_ or measurements.dtype == np.complex:
+            print 'complex input'
+            self.P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+            #Build a real matrix 
+            self.P[0::2,0::2] = +np.real(self.geom_matrix)
+            self.P[0::2,1::2] = -np.imag(self.geom_matrix)
+            self.P[1::2,0::2] = +np.imag(self.geom_matrix)
+            self.P[1::2,1::2] = +np.real(self.geom_matrix)
+            self.S = np.zeros(n_measurements*2, dtype=float)
+            self.S[0::2] = +np.real(self.measurements)
+            self.S[1::2] = +np.imag(self.measurements)
+            self.input_type = 'complex'
+        else:
+            print 'real input'
+            self.P = self.geom_matrix
+            self.S = self.measurements
+            self.input_type = 'real'
+
+    def run(self, initial_guess = None, cycles = 1, skip_if_norm_below=0.0001):
+        self.initial_guess = initial_guess
+        self.T_list = []
+        if self.initial_guess == None:
+            self.T = np.zeros((self.P.shape[1]), dtype = float)
+        else:
+            print 'using the initial guess'
+            if self.initial_guess.dtype == np.complex_:
+                self.T = np.zeros((self.P.shape[1]), dtype = self.geom_matrix.dtype)
+                self.T[::2] = np.real(self.initial_guess)
+                self.T[1::2] = np.imag(self.initial_guess)
+            else:
+                self.T = self.initial_guess*1.
+        if self.random_ordering:
+            mixture = np.random.rand(self.P.shape[0]*cycles)
+            ordering = np.argsort(mixture)
+        else:
+            ordering = np.range(self.P.shape[0]*cycles)
+        #for k in ordering:
+        for k in range(cycles):
+            current_modification = self.T*0
+            curr_count = 0
+            for i in range(self.P.shape[0]):
+                a_i = self.P[i,:]
+                norm = np.sum(a_i**2)
+                if norm>skip_if_norm_below:
+                    current_modification +=  self.lamda* (self.S[i] - np.dot(a_i, self.T)) * a_i / norm
+                    curr_count += 1
+            self.T = self.T + current_modification / curr_count
+            if (k%self.save_increment) == 0:
+                if self.input_type == 'complex':
+                    self.T_list.append(self.T[0::2] + 1j*self.T[1::2])
+                else:
+                    self.T_list.append(self.T)
+        if self.input_type == 'complex':
+            self.T = self.T[0::2] + self.T[1::2]*1j
+        self.re_projection = np.dot(self.geom_matrix, self.T)
 
 def single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = None, scaling_factor_s = None):
     mode_amps = np.exp(1j*n*boozer_pts[:,2] + 1j*m*boozer_pts[:,1])
@@ -555,7 +637,7 @@ class interferometer:
         SH:5May2013
         '''
         if method!='interpolate':
-            import BOOZER
+            import h1.mhd_eq.BOOZER as BOOZER
             self.boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=1,load_spline=False,save_spline=False,load_grid=False)
             output_data = []
             for i in range(len(self.r_list)):
@@ -575,7 +657,7 @@ class interferometer:
                 self.s_list, self.phi_booz_list, self.th_booz_list, self.r_list_trans, self.z_list_trans,self.cross_sect_booz, self.cross_sect_cyl = pickle.load(file(surface_data_filename,'r'))
             else:
                 print 'getting the realspace poloidal cross-section in Boozer coords for interpolation'
-                import BOOZER
+                import h1.mhd_eq.BOOZER as BOOZER
                 self.boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=1,load_spline=False,save_spline=False,load_grid=False)
                 n_surfaces = len(self.boozer_object.es_b)
                 start_time = time.time()

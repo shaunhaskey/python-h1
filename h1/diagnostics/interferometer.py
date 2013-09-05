@@ -266,7 +266,7 @@ class interferometer:
         SH:5May2013
         '''
         if method!='interpolate':
-            import BOOZER
+            import h1.mhd_eq.BOOZER as BOOZER
             self.boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=1,load_spline=False,save_spline=False,load_grid=False)
             output_data = []
             for i in range(len(self.r_list)):
@@ -286,7 +286,7 @@ class interferometer:
                 self.s_list, self.phi_booz_list, self.th_booz_list, self.r_list_trans, self.z_list_trans,self.cross_sect_booz, self.cross_sect_cyl = pickle.load(file(surface_data_filename,'r'))
             else:
                 print 'getting the realspace poloidal cross-section in Boozer coords for interpolation'
-                import BOOZER
+                import h1.mhd_eq.BOOZER as BOOZER
                 self.boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=1,load_spline=False,save_spline=False,load_grid=False)
                 n_surfaces = len(self.boozer_object.es_b)
                 start_time = time.time()
