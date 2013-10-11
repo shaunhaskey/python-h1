@@ -50,13 +50,13 @@ class Tomography():
             n = [n]
             m = [m]
         fig2, ax2 = pt.subplots(nrows = 2, ncols = 4)
-        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
-        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='upper', aspect = 'auto',interpolation='nearest')
+        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='upper', aspect='auto',interpolation='nearest')
         im1_p.set_clim([-np.pi,np.pi])
         q = self.all_measurements*0
         q[self.valid_channels]= self.re_projection
-        im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
-        im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
+        im2_a = ax2[1,0].imshow(np.abs(q),origin='upper', aspect='auto',interpolation='nearest')
+        im2_p = ax2[1,1].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest')
         im2_a.set_clim(im1_a.get_clim())
         im2_p.set_clim(im1_p.get_clim())
         start = 0; increment = len(self.T)/len(n)
@@ -113,6 +113,27 @@ class Tomography():
         fig.suptitle('{} top row : s, theta, phi; bottom row : abs, phase, real'.format(self.method))
         fig.canvas.draw(); fig.show()
 
+    def plot_wave_field_animation(self, n, m, LOS_object,s_values):
+        #Get the boozer locations to interpolate
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        fig, ax = pt.subplots()
+        s_vals = (s_values[1:]+s_values[0:-1])/2
+        wave_field = 0
+        start = 0; increment = len(self.T)/len(n)
+        if len(self.T)%len(n)!=0: raise ValueError('Something wrong')
+        for n_cur, m_cur in zip(n,m):
+            end = start + increment
+            wave_amp = np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.real(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape) + 1j* np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.imag(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape)
+            wave_field = wave_field + wave_amp * np.exp(1j*(n_cur*LOS_object.phi_cross_sect + m_cur * LOS_object.theta_cross_sect))
+            start = +end
+        t = np.linspace(0,2.*np.pi,10,endpoint=False)
+        for i, t_cur in enumerate(t):
+            wave_field_tmp = wave_field * np.exp(1j*t_cur)
+            ax.imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest')
+            fig.canvas.draw(); fig.show()
+            fig.savefig('{:02d}.png'.format(i))
 
     def plot_convergence(self):
         fig, ax = pt.subplots(nrows = 2)
@@ -127,15 +148,15 @@ class Tomography():
 
     def plot_convergence(self,scale_clim = 1):
         fig2, ax2 = pt.subplots(nrows = 2, ncols = 2)
-        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='lower', aspect = 'auto',interpolation='nearest')
-        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='lower', aspect='auto',interpolation='nearest')
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='upper', aspect = 'auto',interpolation='nearest')
+        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='upper', aspect='auto',interpolation='nearest')
         for i, T in enumerate(self.T_list):
             re_projection = np.dot(self.geom_matrix, T)
             im1_p.set_clim([-np.pi,np.pi])
             q = self.all_measurements*0
             q[self.valid_channels]= re_projection
-            im2_a = ax2[1,0].imshow(np.abs(q),origin='lower', aspect='auto',interpolation='nearest')
-            im2_p = ax2[1,1].imshow(np.angle(q),origin='lower', aspect='auto',interpolation='nearest')
+            im2_a = ax2[1,0].imshow(np.abs(q),origin='upper', aspect='auto',interpolation='nearest')
+            im2_p = ax2[1,1].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest')
             if i == 0:
                 clim_lower = im1_a.get_clim()[0]
                 clim_upper = im1_a.get_clim()[1] * scale_clim
@@ -385,7 +406,7 @@ def calculate_inverse_matrix2(LOS_obj, n_segments, s_min =0., s_max = 1.,n_list=
                     output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
                     geom_mat[channel_count, :] = output_array*1.
                     channel_count += 1
-                    print channel_count
+                    #print channel_count
                     pixel_list.append([pixel_y, pixel_x])
     geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
     start = 0

@@ -5,30 +5,45 @@ import matplotlib.pyplot as pt
 import h1.diagnostics.winspec as winspec
 import h1.diagnostics.SPE_reader as SPE_reader
 class ImaxData():
-    def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=0, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images'):
+    def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=0, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images', flipud=0, fliplr=0, rot90=0):
         self.shot_list = shot_list
         if single_mdsplus!=0:
             #self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
             self.image_array = MDS.Tree(mdsplus_tree,single_mdsplus).getNode(mdsplus_node).data()
+            if flipud: self.image_array = np.flipud(self.image_array)
+            if fliplr: self.image_array = np.fliplr(self.image_array)
+            if rot90: self.image_array = np.rot90(self.image_array)
             self.shot_list = [single_mdsplus]
         elif shot_list!=None:
             self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
             for i, shot in enumerate(self.shot_list):
-                self.image_array[i,:,:] = MDS.Tree('imax',shot).getNode('.images').data()[0,:,:]
+                tmp_data = MDS.Tree(mdsplus_tree,shot).getNode(mdsplus_node).data()[0,:,:]
+                if flipud: tmp_data = np.flipud(tmp_data)
+                if fliplr: tmp_data = np.fliplr(tmp_data)
+                if rot90: tmp_data = np.rot90(tmp_data)
+
+                if i==0: self.image_array = np.zeros((len(shot_list),tmp_data.shape[0],tmp_data.shape[1]),dtype=float)
+                self.image_array[i,:,:] = tmp_data.copy()
         elif SPE_file!=None:
             if SPE_file.__class__==list:
                 n_files = len(SPE_file)
                 self.image_array = np.zeros((n_files,512,512),dtype=float)
                 for i in range(n_files):
-                    cal_file = winspec.SpeFile(SPE_file[i])
-                    self.image_array[i,:,:] = np.rot90(cal_file.data[0,:,:])
+                    tmp_data = winspec.SpeFile(SPE_file[i]).data[0,:,:]
+                    if flipud: tmp_data = np.flipud(tmp_data)
+                    if fliplr: tmp_data = np.fliplr(tmp_data)
+                    if rot90: tmp_data = np.rot90(tmp_data)
+                    self.image_array[i,:,:] = tmp_data.copy()
             else:
                 self.image_array = np.zeros((1,512,512),dtype=float)
                 cal_file = winspec.SpeFile(SPE_file)
                 #self.image_array[0,:,:] = np.rot90(cal_file.data[0,:,:])
                 self.image_array = cal_file.data
                 for i in range(self.image_array.shape[0]):
-                    self.image_array[i,:,:] = np.rot90(self.image_array[i, :, :])
+                    if flipud: self.image_array = np.flipud(self.image_array)
+                    if fliplr: self.image_array = np.fliplr(self.image_array)
+                    if rot90: self.image_array = np.rot90(self.image_array)
+                    self.image_array[i,:,:] = self.image_array[i, :, :].copy()
         else:
             raise ValueError("either shot_list, or SPE_file must not be None")
         if get_mirnov_triggers:
@@ -200,7 +215,7 @@ class ImaxData():
         else:
             n_rows = n_subplots/n_cols
 
-        if plot_amps: 
+        if plot_amps:
             if amp_fig==None or amp_ax ==None:
                 fig, ax = pt.subplots(nrows=n_rows, ncols = n_cols,sharex = 1, sharey = 1); ax = ax.flatten()
             else:
@@ -400,13 +415,123 @@ def make_animation(start_shot_list, titles, harmonic = 1, base_directory = '', p
 
 def database_of_shots():
     dict_of_shots = {}
+
+    ##### Broadband, Nandi and John #########
+    ##This has a different orientation to the 514nm data..... ##
     dict_of_shots['broadband'] = {}
     dict_of_shots['broadband'] = {'0.33':{},'0.44':{},'0.63':{},'0.83':{}}
     for i in dict_of_shots['broadband']: i = {}
-    dict_of_shots['broadband']['0.33']['centre'] = {'shot_list': range(71235,71235+16), 'comment':'LHS', 'n':-5, 'm':4}
-    dict_of_shots['broadband']['0.44']['centre'] = {'shot_list': range(71651,71651+16), 'comment':'RHS', 'n':-5, 'm':4}
-    dict_of_shots['broadband']['0.63']['centre'] = {'shot_list': range(71102,71102+16), 'comment':'LHS', 'n':-4, 'm':3}
-    dict_of_shots['broadband']['0.83']['centre'] = {'shot_list': range(70912,70912+16), 'comment':'RHS', 'n':-4, 'm':3}
+    dict_of_shots['broadband']['0.33']['center'] = {'shot_list': range(71235,71235+16), 'comment':'LHS', 'n':-5, 'm':4}
+    dict_of_shots['broadband']['0.44']['center'] = {'shot_list': range(71651,71651+16), 'comment':'RHS', 'n':-5, 'm':4}
+    dict_of_shots['broadband']['0.63']['center'] = {'shot_list': range(71102,71102+16), 'comment':'LHS', 'n':-4, 'm':3}
+    dict_of_shots['broadband']['0.83']['center'] = {'shot_list': range(70912,70912+16), 'comment':'RHS', 'n':-4, 'm':3}
+    for i in dict_of_shots['broadband'].keys():
+        dict_of_shots['broadband'][i]['center']['mdsplus_tree'] = 'imax'
+        dict_of_shots['broadband'][i]['center']['mdsplus_node'] = '.images'
+        dict_of_shots['broadband'][i]['center']['mdsplus_tree_path'] = '/home/srh112/IMAX_DATA/'
+        
+        dict_of_shots['broadband'][i]['center']['dark_SPE'] = None
+        dict_of_shots['broadband'][i]['center']['white_SPE'] = None
+        dict_of_shots['broadband'][i]['center']['dark_shot'] = 1103
+        dict_of_shots['broadband'][i]['center']['white_shot'] = 1107
+        dict_of_shots['broadband'][i]['center']['CCD_side_length'] = 0.01575
+        dict_of_shots['broadband'][i]['center']['camera'] = 'pimax'
+        dict_of_shots['broadband'][i]['center']['fliplr'] = 0
+        dict_of_shots['broadband'][i]['center']['flipud'] = 1
+        dict_of_shots['broadband'][i]['center']['rot90'] = 0
+
+    ######## 514nm ############# 
+    dict_of_shots['514nm'] = {}
+    dict_of_shots['514nm']['0.83'] = {}
+    dict_of_shots['514nm']['0.44'] = {}
+    dict_of_shots['514nm']['0.33'] = {}
+    dict_of_shots['514nm']['0.63'] = {}
+    dict_of_shots['514nm']['0.56'] = {}
+    dict_of_shots['514nm']['0.69'] = {}
+    dict_of_shots['514nm']['0.58'] = {}
+    dict_of_shots['514nm']['0.37'] = {}
+    dict_of_shots['514nm']['0.28'] = {}
+
+    shot_list = [79887, 79888, 79880, 79889, 79881, 79890, 79882, 79891, 79883, 79892, 79884, 79893, 79885, 79894, 79886, 79895]
+    dict_of_shots['514nm']['0.44']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [79911, 79896, 79904, 79897, 79905, 79898, 79906, 79899, 79907, 79900, 79908, 79901, 79909, 79902, 79910, 79903]
+    dict_of_shots['514nm']['0.44']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [79927, 79912, 79920, 79913, 79921, 79914, 79922, 79915, 79923, 79916, 79924, 79917, 79925, 79918, 79926, 79919]
+    dict_of_shots['514nm']['0.44']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+
+    shot_list = [79680, 79712, 79681, 79713, 79682, 79714, 79683, 79715, 79684, 79716, 79685, 79717, 79686, 79718, 79687, 79719]
+    dict_of_shots['514nm']['0.83']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [79688, 79696, 79689, 79697, 79690, 79698, 79691, 79699, 79692, 79700, 79693, 79701, 79694, 79702, 79695, 79703]
+    dict_of_shots['514nm']['0.83']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [79677, 79704, 79678, 79705, 79671, 79706, 79672, 79707, 79673, 79708, 79674, 79709, 79675, 79710, 79676, 79711]
+    dict_of_shots['514nm']['0.83']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+
+    shot_list = [80028, 80036, 80029, 80037, 80030, 80038, 80031, 80039, 80032, 80040, 80033, 80041, 80034, 80042, 80035, 80043]
+    dict_of_shots['514nm']['0.33']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [80012, 80020, 80013, 80021, 80014, 80022, 80015, 80023, 80016, 80024, 80017, 80025, 80018, 80026, 80019, 80027]
+    dict_of_shots['514nm']['0.33']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [79996, 80004, 79997, 80005, 79998, 80006, 79999, 80007, 80000, 80008, 80001, 80009, 80002, 80010, 80003, 80011]
+    dict_of_shots['514nm']['0.33']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+
+    shot_list = [80056, 80064, 80057, 80065, 80058, 80066, 80059, 80067, 80060, 80068, 80061, 80069, 80062, 80070, 80063, 80071]
+    dict_of_shots['514nm']['0.63']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80072, 80080, 80073, 80081, 80074, 80082, 80075, 80083, 80076, 80084, 80077, 80085, 80078, 80086, 80079, 80087]
+    dict_of_shots['514nm']['0.63']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80088, 80096, 80089, 80097, 80090, 80098, 80091, 80099, 80092, 80100, 80093, 80101, 80094, 80102, 80095, 80103]
+    dict_of_shots['514nm']['0.63']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+
+    shot_list = [80134, 80118, 80135, 80119, 80136, 80120, 80137, 80121, 80138, 80122, 80139, 80123, 80140, 80133, 80141]
+    dict_of_shots['514nm']['0.56']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80150, 80158, 80143, 80151, 80144, 80152, 80145, 80153, 80146, 80154, 80147, 80155, 80148, 80156, 80149, 80157]
+    dict_of_shots['514nm']['0.56']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80166, 80176, 80159, 80167, 80160, 80168, 80161, 80169, 80162, 80170, 80163, 80171, 80164, 80172, 80165, 80173]
+    dict_of_shots['514nm']['0.56']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+
+    shot_list = [80444, 80437, 80445, 80438, 80446, 80439, 80447, 80440, 80448, 80441, 80449, 80442, 80450, 80435, 80443, 80436]
+    dict_of_shots['514nm']['0.69']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80428, 80421, 80429, 80422, 80430, 80423, 80431, 80424, 80432, 80425, 80433, 80426, 80434, 80419, 80427, 80420]
+    dict_of_shots['514nm']['0.69']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80461, 80454, 80462, 80455, 80463, 80456, 80464, 80457, 80465, 80458, 80466, 80459, 80467, 80452, 80460, 80453]
+    dict_of_shots['514nm']['0.69']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+
+    shot_list = [80522, 80507, 80515, 80508, 80516, 80509, 80517, 80510, 80518, 80511, 80523, 80512, 80520, 80513, 80521, 80514]
+    dict_of_shots['514nm']['0.58']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80491, 80499, 80492, 80500, 80493, 80501, 80494, 80502, 80495, 80503, 80496, 80504, 80497, 80505, 80498, 80506]
+    dict_of_shots['514nm']['0.58']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+    shot_list = [80490, 80475, 80483, 80476, 80484, 80477, 80485, 80478, 80486, 80479, 80487, 80480, 80488, 80481, 80489, 80482]
+    dict_of_shots['514nm']['0.58']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
+
+    shot_list = [80557, 80565, 80558, 80551, 80559, 80552, 80560, 80553, 80561, 80554, 80562, 80555, 80563, 80556, 80564, 80549]
+    dict_of_shots['514nm']['0.37']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [80574, 80567, 80575, 80568, 80576, 80569, 80577, 80570, 80578, 80571, 80579, 80572, 80580, 80573, 80581, 80566]
+    dict_of_shots['514nm']['0.37']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [80590, 80583, 80591, 80584, 80592, 80585, 80593, 80586, 80594, 80587, 80595, 80588, 80596, 80589, 80597, 80582]
+    dict_of_shots['514nm']['0.37']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+
+    shot_list = [80640, 80649, 80641, 80650, 80642, 80643, 80651, 80652, 80644, 80653, 80645, 80654, 80646, 80655, 80656, 80647]
+    dict_of_shots['514nm']['0.28']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [80637, 80622, 80630, 80623, 80631, 80624, 80632, 80625, 80633, 80626, 80634, 80627, 80635, 80628, 80636, 80629]
+    dict_of_shots['514nm']['0.28']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+    shot_list = [80620, 80612, 80605, 80621, 80613, 80614, 80607, 80608, 80615, 80616, 80609, 80617, 80610, 80618, 80611, 80619]
+    dict_of_shots['514nm']['0.28']['top'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-5,'m':4}
+
+    for i in dict_of_shots['514nm'].keys():
+        for j in dict_of_shots['514nm'][i].keys():
+            dict_of_shots['514nm'][i][j]['mdsplus_tree'] = 'h1data'
+            dict_of_shots['514nm'][i][j]['mdsplus_node'] = '.mirnov.pimax.pimax.images'
+            dict_of_shots['514nm'][i][j]['dark_SPE'] = '/home/srh112/code/python/imax/imax_calibrations/dark_514_x1_400.spe'
+            dict_of_shots['514nm'][i][j]['white_SPE'] = '/home/srh112/code/python/imax/imax_calibrations/white_514_1x.spe'
+            #dict_of_shots['514nm'][i][j]['dark_SPE'] = 'pimax4_1000.spe'
+            #dict_of_shots['514nm'][i][j]['white_SPE'] = 'pimax4_1004.spe'
+            dict_of_shots['514nm'][i][j]['dark_shot'] = None
+            dict_of_shots['514nm'][i][j]['white_shot'] = None
+            dict_of_shots['514nm'][i][j]['mdsplus_tree_path'] = r'h1data::/data/h1/recent;h1data::/data/h1/sorted/~f~e~d~c'
+            dict_of_shots['514nm'][i][j]['CCD_side_length'] = 0.0131
+            dict_of_shots['514nm'][i][j]['camera'] = 'pimax4'
+            dict_of_shots['514nm'][i][j]['fliplr'] = 0
+            dict_of_shots['514nm'][i][j]['flipud'] = 0
+            dict_of_shots['514nm'][i][j]['rot90'] = 0
+
 
     base_dir = '/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/'
     dict_of_shots['707nm'] = {}
@@ -414,7 +539,7 @@ def database_of_shots():
 
     #CENTRE VIEW 707nm
     file_list = ['{}/{}.SPE'.format(base_dir,i) for i in range(69009,69009+16)]
-    dict_of_shots['707nm']['0.83']['centre'] = {'shot_list': None, 'comment':'RHS', 'n':-4, 'm':3, 'SPE_files' : file_list}
+    dict_of_shots['707nm']['0.83']['center'] = {'shot_list': None, 'comment':'RHS', 'n':-4, 'm':3, 'SPE_files' : file_list}
 
     #TOP VIEW
     shot_list = range(69026, 69043); shot_list.remove(69039)
