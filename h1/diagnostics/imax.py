@@ -70,7 +70,7 @@ class ImaxData():
         else:
             n_rows = n_subplots/n_cols
         if fig==None or ax==None:
-            fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = 1, sharey=1);
+            fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey=True);
         if n_rows == 1 and n_cols == 1: ax = np.array([ax])
         ax = ax.flatten()
         im_list = []
@@ -105,17 +105,17 @@ class ImaxData():
             fig.canvas.draw(); fig.show()
 
     def get_mirnov_triggers_new(self,):
-        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax_trig = ax_trig.flatten()
+        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
         if plot_mirnov_triggers: fig_phase, ax_phase = pt.subplots(nrows = 2); 
-        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax_hilb = ax_hilb.flatten()
+        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
         #PLL_node = MDS.Tree('imax',shot).getNode('.PLL
         mirnov_node = MDS.Tree('imax',shot).getNode('.operations.mirnov:a14_15:input_1')
 
         
     def get_mirnov_triggers(self, plot_mirnov_triggers, old_way = 1):
-        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax_trig = ax_trig.flatten()
+        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
         if plot_mirnov_triggers: fig_phase, ax_phase = pt.subplots(nrows = 2); 
-        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax_hilb = ax_hilb.flatten()
+        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
         phase_average_list = []; phase_std_list = []
         amp_average_list = []; amp_std_list = []
         density_list = []
@@ -203,6 +203,18 @@ class ImaxData():
         maxima[1:-1] = (PLL_data>4.5)[1:-1] * (PLL_data[1:-1]>PLL_data[0:-2])* (PLL_data[1:-1]>PLL_data[2:])
         return mirnov_data, mirnov_time, PLL_data, PLL_time, electr_data, hilb_sig, maxima
 
+    def decimate_data(self,decimate_pixel=1):
+        tmp_count = 0
+        for tmp1 in range(decimate_pixel):
+            for tmp2 in range(decimate_pixel):
+                if tmp_count==0:
+                    tmp_decimate = self.image_array_cal[:,tmp1::decimate_pixel, tmp2::decimate_pixel]
+                else:
+                    tmp_decimate += self.image_array_cal[:,tmp1::decimate_pixel, tmp2::decimate_pixel]
+                tmp_count += 1
+        self.image_array_cal = tmp_decimate/tmp_count
+        
+
     def fourier_decomp(self,plot_amps = 0, plot_phases = 0, amp_fig=None, amp_ax = None, phase_fig = None, phase_ax = None, draw = 1, amp_clims = None, fliplr = 1):
         '''Perform an FFT on the image and plot the results if asked to
         '''
@@ -217,14 +229,14 @@ class ImaxData():
 
         if plot_amps:
             if amp_fig==None or amp_ax ==None:
-                fig, ax = pt.subplots(nrows=n_rows, ncols = n_cols,sharex = 1, sharey = 1); ax = ax.flatten()
+                fig, ax = pt.subplots(nrows=n_rows, ncols = n_cols,sharex = True, sharey = True); ax = ax.flatten()
             else:
                 fig = amp_fig
                 ax = amp_ax
 
         if plot_phases: 
             if phase_fig==None or phase_ax ==None:
-                fig2, ax2 = pt.subplots(nrows=n_rows, ncols = n_cols,sharex = 1, sharey = 1); ax2 = ax2.flatten()
+                fig2, ax2 = pt.subplots(nrows=n_rows, ncols = n_cols,sharex = True, sharey = True); ax2 = ax2.flatten()
             else:
                 fig2 = phase_fig
                 ax2 = phase_ax
@@ -297,7 +309,7 @@ class ImaxData():
             self.white_image = +tmp0[0,:,:]
 
         if plot_calibration_im:
-            fig, ax = pt.subplots(nrows= 2,sharex = 1, sharey = 1); ax = ax.flatten()
+            fig, ax = pt.subplots(nrows= 2,sharex = True, sharey = True); ax = ax.flatten()
             im = ax[0].imshow(self.white_image, interpolation = 'none', aspect = 'auto',origin='lower')
             pt.colorbar(im,ax=ax[0])
             im = ax[1].imshow(self.dark_image, interpolation = 'none', aspect = 'auto', origin='lower')
@@ -307,7 +319,7 @@ class ImaxData():
         max_value = np.max(full_scale)
         print 'max value : ', max_value
         # if plot_cal_images: 
-        #     fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = 1, sharey = 1); ax = ax.flatten()
+        #     fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax = ax.flatten()
         #     im_list = []
 
         if med_filt!=0:
@@ -361,7 +373,7 @@ class ImaxData():
         self.john_amp_data = imax_tree.getNode('.processed.amplitude').data()
         self.john_phase_data = imax_tree.getNode('.processed.phase').data()
         if plot_john_data:
-            fig, ax = pt.subplots(nrows = 3,ncols = 2, sharex = 1, sharey = 1)
+            fig, ax = pt.subplots(nrows = 3,ncols = 2, sharex = True, sharey = True)
             im_list = []
             for i in range(john_amp_data.shape[0]):
                 im_list.append(ax[i,0].imshow(self.john_amp_data[i,:,:],interpolation = 'nearest', aspect = 'auto',origin='lower'))
@@ -393,7 +405,7 @@ def make_animation(start_shot_list, titles, harmonic = 1, base_directory = '', p
         tmp1.calibrate_data(dark_shot=1103, white_shot=1107, plot_calibration_im = 0, clip = 0.2, plot_cal_images = 0, cal_sum = 1, med_filt = 3, mode_amp_filt = None)
         tmp1.fourier_decomp(plot_amps = 0, plot_phases = 0)
         fft_list.append(tmp1.fft_values)
-    fig, ax = pt.subplots(nrows = 2, ncols = 2,sharex = 1, sharey = 1); ax = ax.flatten()
+    fig, ax = pt.subplots(nrows = 2, ncols = 2,sharex = True, sharey = True); ax = ax.flatten()
     clim_list = []
     for i, phase in enumerate(phases):
         for j, fft_values in enumerate(fft_list):
@@ -480,7 +492,7 @@ def database_of_shots():
     shot_list = [80088, 80096, 80089, 80097, 80090, 80098, 80091, 80099, 80092, 80100, 80093, 80101, 80094, 80102, 80095, 80103]
     dict_of_shots['514nm']['0.63']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
 
-    shot_list = [80134, 80118, 80135, 80119, 80136, 80120, 80137, 80121, 80138, 80122, 80139, 80123, 80140, 80133, 80141]
+    shot_list = [80134, 80142, 80118, 80135, 80119, 80136, 80120, 80137, 80121, 80138, 80122, 80139, 80123, 80140, 80133, 80141]
     dict_of_shots['514nm']['0.56']['bottom'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}
     shot_list = [80150, 80158, 80143, 80151, 80144, 80152, 80145, 80153, 80146, 80154, 80147, 80155, 80148, 80156, 80149, 80157]
     dict_of_shots['514nm']['0.56']['center'] = {'shot_list':shot_list, 'comment':'RHS 514nm', 'n':-4,'m':3}

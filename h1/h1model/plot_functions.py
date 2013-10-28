@@ -183,13 +183,13 @@ def tfc_points(coil_num = None, tfc_thickness=0.075, tfc_width=0.15, tfc_radius 
 #         mlab.triangular_mesh(vertices[:,0], vertices[:,1], vertices[:,2],faces,representation='wireframe',color=(0,0,0))
 #     return vertices, faces
 
-def extract_VMEC_surface_data(filename, s_ind=-1):
+def extract_VMEC_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.pi):
     '''extracts x, y, z and B for the surface index s_ind
     using Berhnard's VMEC utilities
     '''
-    import VMEC
+    import h1.mhd_eq.VMEC as VMEC
     theta_vmec = np.linspace(0,2.*np.pi,100)
-    phi_real = np.linspace(0,2.*np.pi,100)
+    phi_real = np.linspace(phi_min, phi_max,100)
     theta_grid, phi_grid = np.meshgrid(theta_vmec, phi_real)
     vmec_tmp = VMEC.VMEC(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
     Rmn_vmec = vmec_tmp.rmnc[s_ind,:]
@@ -290,7 +290,46 @@ def mirnov_locations():
     return HMA_x, HMA_y, HMA_z, pol_array1_x, pol_array1_y, pol_array1_z, pol_array2_x, pol_array2_y, pol_array2_z
 
 
-def make_plot():
+def make_plot(phi_min = 0, phi_max = 2.*np.pi):
+    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+    vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
+    x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1, phi_min = phi_min, phi_max = phi_max)
+    pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+
+    #plot the TFC's 
+    include_coils = range(5,27,2)
+    tfc_thickness=0.075;tfc_width=0.15; tfc_radius = 0.383
+    #tfc_mesh_props = {'opacity':0.3,'color':(1,0.,0.)}
+    tfc_mesh_props = {'opacity':1.0,'color':(0.5,0.5,0.5)}
+    plot_tfc(include_coils, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, tfc_mesh_props = None)
+
+    pfc_mesh_props = {'opacity':1.,'color':(0.5,0.5,0.5)}
+    plot_pfc(pfc_thickness = 0.11, pfc_width = 0.11, pfc_radius = 1.0, pfc_mesh_props=pfc_mesh_props)
+
+    ovc_mesh_props = {'opacity':1,'color':(255/255., 255/255., 51/255.)}
+    #plot_ovc(ovc_mesh_props=ovc_mesh_props)
+
+    ivc_mesh_props = {'opacity':1,'color':(0.5,0.5,0.5)}
+    #plot_ivc(ivc_mesh_props=ivc_mesh_props)
+
+    #Plot the HMA and poloidal Mirnov arrays as cubes joined by a line
+    show_hma = 1; show_pol_array1 = 1; show_pol_array2 = 1
+    HMA_x, HMA_y, HMA_z, pol_array1_x, pol_array1_y, pol_array1_z, pol_array2_x, pol_array2_y, pol_array2_z = mirnov_locations()
+    if show_hma:
+        mlab.plot3d(HMA_x, HMA_y, HMA_z,line_width=1,tube_radius=0.01)
+        #mlab.points3d(HMA_x, HMA_y, HMA_z, scale_mode='none', scale_factor = 0.04, color=(0.5,0.5,0.5),mode='cube')
+        mlab.points3d(HMA_x, HMA_y, HMA_z, scale_mode='none', scale_factor = 0.04, color=(0,0.,1),mode='cube')
+    if show_pol_array1:
+        mlab.plot3d(pol_array1_x, pol_array1_y, pol_array1_z,line_width=1,tube_radius=0.02)
+        mlab.points3d(pol_array1_x, pol_array1_y, pol_array1_z, scale_mode='none', scale_factor = 0.04, color=(0,1,0),mode='cube')
+    if show_pol_array2:
+        mlab.plot3d(pol_array2_x, pol_array2_y, pol_array2_z,line_width=1,tube_radius=0.02)
+        mlab.points3d(pol_array2_x, pol_array2_y, pol_array2_z, scale_mode='none', scale_factor = 0.04, color=(0.,1.,0.),mode='cube')
+    return x, y, z
+    #mlab.show()
+
+
+def make_plot2():
     mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
     vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
     x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1)

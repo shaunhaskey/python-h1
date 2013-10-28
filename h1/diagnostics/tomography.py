@@ -45,17 +45,20 @@ class Tomography():
         fig.suptitle(self.method)
         fig.canvas.draw(); fig.show()
 
-    def plot_lots_of_things(self, n, m, LOS_object):
+    def plot_lots_of_things(self, n, m, LOS_object, cut_values = None, multiplier = 1.):
+        if cut_values == None:
+            cut_values = [33]
         if n.__class__ == int:
             n = [n]
             m = [m]
         fig2, ax2 = pt.subplots(nrows = 2, ncols = 4)
         im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='upper', aspect = 'auto',interpolation='nearest')
-        im1_p = ax2[0,1].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='upper', aspect='auto',interpolation='nearest')
+        im1_p = ax2[1,0].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='upper', aspect='auto',interpolation='nearest')
         im1_p.set_clim([-np.pi,np.pi])
         q = self.all_measurements*0
         q[self.valid_channels]= self.re_projection
-        im2_a = ax2[1,0].imshow(np.abs(q),origin='upper', aspect='auto',interpolation='nearest')
+        q[-self.valid_channels]= 0
+        im2_a = ax2[0,1].imshow(multiplier*np.abs(q),origin='upper', aspect='auto',interpolation='nearest')
         im2_p = ax2[1,1].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest')
         im2_a.set_clim(im1_a.get_clim())
         im2_p.set_clim(im1_p.get_clim())
@@ -65,20 +68,44 @@ class Tomography():
             end = start + increment
             cur_T = self.T[start:end]
             start = +end
-            ax2[0,2].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='|{},{}|'.format(n_cur, m_cur))
-            ax2[1,2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
-        ax2[0,2].legend(loc='best')
-        ax2[0,2].set_xlim([0,1])
-        ax2[1,2].set_xlim([0,1])
-        ax2[1,2].legend(loc='best')
-        ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
-        ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+            ax2[0,3].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='|{},{}|'.format(n_cur, m_cur))
+            ax2[1,3].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
         ax2[0,3].legend(loc='best')
-        ax2[1,3].plot(np.angle(self.all_measurements[self.valid_channels]), label = 'Arg(data)')
-        ax2[1,3].plot(np.angle(self.re_projection), label = 'Arg(reproj)')
+        ax2[0,3].set_xlim([0,1])
+        ax2[1,3].set_xlim([0,1])
+        ax2[1,3].set_ylim([-np.pi,np.pi])
+
         ax2[1,3].legend(loc='best')
+
+        #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
+        #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+        #ax2[0,3].legend(loc='best')
+        tmp_y_axis = np.arange(len(self.all_measurements[:,0]))
+        tmp_y_axis = np.max(tmp_y_axis)- tmp_y_axis
+        tmp_reproj = self.all_measurements*0.
+        tmp_reproj[self.valid_channels] = self.re_projection
+
+        for i in cut_values:
+            ax2[0,2].plot(np.abs(self.all_measurements[:,i]*self.valid_channels[:,i]), tmp_y_axis, '-')
+            ax2[0,2].plot(multiplier*np.abs(tmp_reproj[:,i]), tmp_y_axis)
+            ax2[1,2].plot(np.angle(self.all_measurements[:,i])*self.valid_channels[:,i], tmp_y_axis, '-')
+            ax2[1,2].plot(np.angle(tmp_reproj[:,i])*self.valid_channels[:,i], tmp_y_axis,'-')
+            for j in [0,1]:
+                for k in [0,1]:
+                    tmp = ax2[j,k].get_ylim()
+                    ax2[j,k].vlines(i,tmp[0], tmp[1])
+        ax2[1,2].set_ylim([0,self.valid_channels.shape[0]])
+        ax2[1,2].set_xlim([-np.pi,np.pi])
+        ax2[0,2].set_ylim([0,self.valid_channels.shape[0]])
+        #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
+        #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+
+
+        #ax2[1,3].plot(np.angle(self.all_measurements[self.valid_channels]), label = 'Arg(data)')
+        #ax2[1,3].plot(np.angle(self.re_projection), label = 'Arg(reproj)')
+        #ax2[1,3].legend(loc='best')
         fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.05,top=0.95, right=0.95)
-        fig2.suptitle('Tomo method: {} Top : Camera amp and phase, |eig func|, |reproj|, Bottom: Reprojection amp and phase, Arg(eig func), Arg(re proj)'.format(self.method))
+        fig2.suptitle('Tomo method: {} Top : (Meas amp, reproj amp, amp slice, amp vs norm flux), Bot:(Meas Phase, reproj Phase, phase slice, phase vs norm flux)'.format(self.method))
         fig2.canvas.draw(); fig2.show()
 
     def plot_wave_field(self, n, m, LOS_object,s_values):
@@ -113,7 +140,7 @@ class Tomography():
         fig.suptitle('{} top row : s, theta, phi; bottom row : abs, phase, real'.format(self.method))
         fig.canvas.draw(); fig.show()
 
-    def plot_wave_field_animation(self, n, m, LOS_object,s_values):
+    def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10):
         #Get the boozer locations to interpolate
         if n.__class__ == int:
             n = [n]
@@ -128,12 +155,22 @@ class Tomography():
             wave_amp = np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.real(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape) + 1j* np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.imag(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape)
             wave_field = wave_field + wave_amp * np.exp(1j*(n_cur*LOS_object.phi_cross_sect + m_cur * LOS_object.theta_cross_sect))
             start = +end
-        t = np.linspace(0,2.*np.pi,10,endpoint=False)
+        t = np.linspace(0,2.*np.pi,n_images,endpoint=False)
+        image_list = []
         for i, t_cur in enumerate(t):
             wave_field_tmp = wave_field * np.exp(1j*t_cur)
             ax.imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest')
             fig.canvas.draw(); fig.show()
             fig.savefig('{:02d}.png'.format(i))
+            image_list.append('{:02d}.png'.format(i))
+        if save_name!=None:
+            image_string = ''
+            for i in image_list: image_string+=i + ' '
+            print image_string
+            os.system('convert -delay {} -loop 0 {} {}'.format(delay, image_string, save_name))
+
+
+
 
     def plot_convergence(self):
         fig, ax = pt.subplots(nrows = 2)
@@ -307,6 +344,11 @@ class SIRT(Tomography):
             self.P[0::2,1::2] = -np.imag(self.geom_matrix)
             self.P[1::2,0::2] = +np.imag(self.geom_matrix)
             self.P[1::2,1::2] = +np.real(self.geom_matrix)
+
+            #self.P[0::2,0::2] = +np.real(self.geom_matrix)
+            #self.P[0::2,1::2] = +np.imag(self.geom_matrix)
+            #self.P[1::2,0::2] = +np.imag(self.geom_matrix)
+            #self.P[1::2,1::2] = -np.real(self.geom_matrix)
             self.S = np.zeros(n_measurements*2, dtype=float)
             self.S[0::2] = +np.real(self.measurements)
             self.S[1::2] = +np.imag(self.measurements)
@@ -352,8 +394,12 @@ class SIRT(Tomography):
                 else:
                     self.T_list.append(self.T)
         if self.input_type == 'complex':
-            self.T = self.T[0::2] + self.T[1::2]*1j
-        self.re_projection = np.dot(self.geom_matrix, self.T)
+            tmp = np.dot(self.P,self.T)
+            self.re_projection = tmp[0::2]+1j*tmp[1::2]
+            self.T = (self.T[0::2] + self.T[1::2]*1j)
+            print 'hello'
+        else:
+            self.re_projection = np.dot(self.geom_matrix, self.T)
 
 def single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = None, scaling_factor_s = None):
     mode_amps = np.exp(1j*n*boozer_pts[:,2] + 1j*m*boozer_pts[:,1])
