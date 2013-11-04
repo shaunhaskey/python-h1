@@ -297,7 +297,7 @@ def make_plot(phi_min = 0, phi_max = 2.*np.pi):
     pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
 
     #plot the TFC's 
-    include_coils = range(5,27,2)
+    include_coils = range(5,27,1)
     tfc_thickness=0.075;tfc_width=0.15; tfc_radius = 0.383
     #tfc_mesh_props = {'opacity':0.3,'color':(1,0.,0.)}
     tfc_mesh_props = {'opacity':1.0,'color':(0.5,0.5,0.5)}
