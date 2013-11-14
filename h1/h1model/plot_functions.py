@@ -290,11 +290,18 @@ def mirnov_locations():
     return HMA_x, HMA_y, HMA_z, pol_array1_x, pol_array1_y, pol_array1_z, pol_array2_x, pol_array2_y, pol_array2_z
 
 
-def make_plot(phi_min = 0, phi_max = 2.*np.pi):
-    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+def plot_vmec(vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi):
     vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
     x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1, phi_min = phi_min, phi_max = phi_max)
     pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+    return x, y, z, B
+
+def make_plot(phi_min = 0, phi_max = 2.*np.pi):
+    vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
+    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+    x, y, z, B = plot_vmec(vmec_filename=vmec_filename, phi_min = phi_min, phi_max = phi_max)
+    #x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1, phi_min = phi_min, phi_max = phi_max)
+    #pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
 
     #plot the TFC's 
     include_coils = range(5,27,1)
@@ -330,10 +337,12 @@ def make_plot(phi_min = 0, phi_max = 2.*np.pi):
 
 
 def make_plot2():
-    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
     vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
-    x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1)
-    pts = mlab.mesh(x, y, z, opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+    x, y, z, B = plot_vmec(vmec_filename=vmec_filename, phi_min = phi_min, phi_max = phi_max)
+    # vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
+    # x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1)
+    # pts = mlab.mesh(x, y, z, opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
 
     #plot the TFC's 
     include_coils = range(5,27)

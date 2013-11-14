@@ -7,7 +7,7 @@ import scipy.optimize as opt
 
 
 class interf_demod(object):
-    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1):
+    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1):
         '''Class for demodulating the sinusoidally modulated interferometer
         SRH : 5Nov2013
         '''
@@ -15,16 +15,19 @@ class interf_demod(object):
         self.f_m = f_m
         self.dig_mult = dig_mult
         self.start_samples = start_samples
+        print self.start_samples,
+        self.start_samples = self.start_samples - self.start_samples%(dig_mult)
+        print self.start_samples
         self.f_s = self.f_m * self.dig_mult
-        self.get_up_to_carriers()
+        self.get_up_to_carriers(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc, eps_method = eps_method, tophat_width_prop = tophat_width_prop)
 
-    def get_up_to_carriers(self,force_symmetric = 1, individual_eps_calc = 1):
+    def get_up_to_carriers(self,force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1):
         '''Convenience function to do several things at once - it gets you the carriers as a function of time
         SRH: 7Nov2013
         '''
         self.extract_mdsplus_data()
-        self.calc_carriers_time(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc)
-        self.calc_carriers_time_rfft()
+        self.calc_carriers_time(force_symmetric = force_symmetric, eps_method = eps_method, tophat_width_prop = tophat_width_prop)
+        self.calc_carriers_time_rfft(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc, tophat_width_prop = tophat_width_prop)
 
     def extract_mdsplus_data(self,):
         '''Get the data out of MDSplus
@@ -50,15 +53,64 @@ class interf_demod(object):
             dc, ac_rms = self.calculate_ac_dc(signal, full = 1)
             self.rms_full_shot.append(ac_rms)
             self.dc_full_shot.append(dc)
-
             #self.rms_pre_shot.append(np.sqrt(1./self.start_samples*np.sum((signal[:self.start_samples]-np.mean(signal[:self.start_samples]))**2)))
             count += 1
         self.t = np.arange(-self.start_samples, keep_length - self.start_samples) * 1./self.f_s
 
+    def extract_epsilon_sync_signal(self,):
+        T = MDS.Tree('h1data',self.shot_number)
+        n = T.getNode('.electr_dens.camac.A14_24.input_4')
+        sync_signal = n.data()[:self.raw_signals.shape[1]]
+        sync_signal_fft = np.fft.fft(sync_signal)
+        fft_ax = np.fft.fftfreq(len(sync_signal_fft),1./self.f_s)
+        f_m_loc = np.argmin(np.abs(fft_ax - self.f_m))
+        self.sync_epsilon = np.angle(sync_signal_fft[f_m_loc])
+        return self.sync_epsilon
+
+    def epsilon_analysis(self,ch = 7, use_full = 0):
+        self.extract_epsilon_sync_signal()
+        if use_full:
+            signal = self.signal_fft
+            fm_loc = self.f_m_loc
+        else:
+            signal = self.signal_start_fft
+            fft_ax_tmp = np.fft.fftfreq(len(signal),1./self.f_s)
+            fm_loc = np.argmin(np.abs(fft_ax_tmp - self.f_m))
+        self.e_recon = np.angle(signal[:,fm_loc]/1j)
+        self.e_reconb = np.angle(-signal[:,fm_loc]/1j)
+        self.e_overall = self.e_reconb * 0
+        self.e_overall2 = np.angle(signal[:,fm_loc]/signal[:,3*fm_loc])/(-2.)
+
+        self.e_overall[self.e_recon>0] = self.e_recon[self.e_recon>0]
+        self.e_overall[self.e_reconb>0] = self.e_reconb[self.e_reconb>0]
+        self.e_recon2 = np.angle(signal[:,fm_loc*2])/2
+        self.e_recon3 = np.angle(signal[:,fm_loc*3]/1j)/3
+        self.e_recon2b = np.angle(-signal[:,fm_loc*2])/2
+        self.e_recon3b = np.angle(-signal[:,fm_loc*3]/1j)/3
+        print('sync:{:.2f}, -1sync:{:.2f}, overall:{:.2f},e_recon1:{:.2f}, e_recon1b:{:.2f}, e_recon2:{:.2f}, e_recon2b:{:.2f}'.format(self.sync_epsilon, self.sync_epsilon - np.pi, self.e_overall[ch], self.e_recon[ch], self.e_reconb[ch],self.e_recon2[ch], self.e_recon2b[ch]))
+        print('{},{}'.format((self.sync_epsilon - self.e_recon[ch])/np.pi, (self.sync_epsilon - self.e_reconb[ch])/np.pi))
+
+    def plot_raw_signals(self, subtract_dc = 1):
+        '''Plot the raw digitised signals
+        SRH: 5Nov2013
+        '''
+        n_chans = self.raw_signals.shape[0]
+        fig, ax = pt.subplots(nrows = 5, ncols = 5,sharex =True, sharey=False); ax = ax.flatten()
+        for i in range(self.raw_signals.shape[0]):
+            if subtract_dc:
+                ax[i].plot(self.t, self.raw_signals[i,:] - self.dc_pre_shot[i])
+            else:
+                ax[i].plot(self.t, self.raw_signals[i,:])
+        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        ax[0].set_ylim([-0.4,0.4])
+        ax[0].set_xlim([-0.005,0.005])
+        ax[-1].set_xlabel('Sample Number')
+        fig.canvas.draw(); fig.show()
+
     def calculate_ac_dc(self,signal, full=1):
         '''Calculate the ac (rms) and dc components of the raw
-        interferometer channels 
-        SRH: 5Nov2013 
+        interferometer channels
+        SRH: 5Nov2013
         '''
         if full:
             stop_loc = len(signal)
@@ -67,22 +119,6 @@ class interf_demod(object):
         ac_rms = np.sqrt(1./self.start_samples*np.sum((signal[:stop_loc]-np.mean(signal[:stop_loc]))**2))
         dc = np.mean(signal[:stop_loc])
         return dc, ac_rms
-
-    def plot_raw_signals(self, subtract_dc = 1):
-        '''Plot the raw digitised signals
-        SRH: 5Nov2013
-        '''
-        n_chans = self.raw_signals.shape[0]
-        fig, ax = pt.subplots(nrows = n_chans,sharex =True, sharey=True)
-        for i in range(self.raw_signals.shape[0]):
-            if subtract_dc:
-                ax[i].plot(self.t, self.raw_signals[i,:] - self.dc_pre_shot[i])
-            else:
-                ax[i].plot(self.t, self.raw_signals[i,:])
-        fig.subplots_adjust(hspace=0, wspace=0,left=0.05, bottom=0.05,top=0.95, right=0.95)
-        ax[0].set_ylim([-0.4,0.4])
-        ax[-1].set_xlabel('Sample Number')
-        fig.canvas.draw(); fig.show()
 
     def chan_num_to_digi(self,chan_num):
         '''Maps the logical channel number with 0 being plasma top and
@@ -104,57 +140,150 @@ class interf_demod(object):
         SRH: 5Nov2013
         '''
         self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/1j)
-        self.e_recon2 = np.angle(self.signal_fft[:,self.f_m_loc*2]/1j)
-        self.e_recon3 = np.angle(self.signal_fft[:,self.f_m_loc*3]/1j)
+        self.e_reconb = np.angle(-self.signal_fft[:,self.f_m_loc]/1j)
+        self.e_overall = self.e_reconb * 0
+        self.e_overall2 = np.angle(self.signal_fft[:,self.f_m_loc]/self.signal_fft[:,3*self.f_m_loc])/(-2.)
 
-    def calc_carriers_time(self, n_carriers = 6, force_symmetric = 0, individual_eps_calc = 0, tophat_width_prop = 1):
+        self.e_overall[self.e_recon>0] = self.e_recon[self.e_recon>0]
+        self.e_overall[self.e_reconb>0] = self.e_reconb[self.e_reconb>0]
+        self.e_recon2 = np.angle(self.signal_fft[:,self.f_m_loc*2])
+        self.e_recon3 = np.angle(self.signal_fft[:,self.f_m_loc*3]/1j)
+        self.e_recon2b = np.angle(-self.signal_fft[:,self.f_m_loc*2])
+        self.e_recon3b = np.angle(-self.signal_fft[:,self.f_m_loc*3]/1j)
+
+
+    def get_e_recon_matrix(self,n_carriers):
+        '''Calculate the epsilon values for each of the carriers
+        SRH: 11Nov2013
+        '''
+        self.e_recon_matrix = np.zeros((self.signal_fft.shape[0], n_carriers),dtype = float)
+        self.e_recon_matrix_start = np.zeros((self.signal_fft.shape[0], n_carriers),dtype = float)
+        for n in range(1,n_carriers):
+            mult = 1
+            if (n%2)!=0: mult = 1j
+            self.e_recon_matrix[:,n] = np.angle(self.signal_fft[:,n*self.f_m_loc]/mult)/n
+            self.e_recon_matrix_start[:,n] = np.angle(self.signal_start_fft[:,n*self.f_m_loc_start]/mult)/n
+        harmonic_strength = np.abs(self.signal_fft[:,self.f_m_loc])
+        harmonic_strength_sort = np.argsort(harmonic_strength)
+        important_harms = self.e_recon_matrix[harmonic_strength_sort[-3:],1]
+        important_harms[important_harms<0]+=np.pi
+        print '########################'
+        print important_harms, np.mean(important_harms), np.std(important_harms)
+
+        harmonic_strength = np.abs(self.signal_start_fft[:,self.f_m_loc_start])
+        harmonic_strength_sort = np.argsort(harmonic_strength)
+        important_harms = self.e_recon_matrix_start[harmonic_strength_sort[-3:],1]
+        important_harms[important_harms<0]+=np.pi
+        print('##### Epsilon ########')
+        print('3 values {}, mean:{:.3f}, std:{:.3f}, std/mean:{:.3f}%'.format(important_harms, np.mean(important_harms), np.std(important_harms),np.std(important_harms)/np.mean(important_harms)*100))
+        self.e_ave = np.mean(important_harms)
+
+    def calc_carriers_time(self, n_carriers = 6, force_symmetric = 0, tophat_width_prop = 1, eps_method = 'using_1st_carrier'):
         '''Calculate the carriers as a function of time
         SRH: 5Nov2013
         '''
+        #FFT's
         self.signal_fft = np.fft.fft(self.raw_signals)
+        self.signal_start_fft = np.fft.fft(self.raw_signals[:,:self.start_samples])
+
+        #FFT frequencies
         self.fft_ax = np.fft.fftfreq(self.signal_fft.shape[1], 1./self.f_s)
-
-        #Find the modulation frequency
-        self.f_m_loc = np.argmin(np.abs(self.fft_ax - self.f_m))
-        self.f_m2_loc = np.argmin(np.abs(self.fft_ax - 2*self.f_m))
-
-        #Get epsilon for the first harmonic
-        self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/1j)
+        self.fft_ax_start = np.fft.fftfreq(self.signal_start_fft.shape[1], 1./self.f_s)
 
         self.carriers = np.zeros((n_carriers,self.signal_fft.shape[0], self.signal_fft.shape[1]),dtype = complex)
-        #Width of the tophat
-        self.width = int(self.f_m_loc) * tophat_width_prop
+
+        # Find the modulation frequency
+        self.f_m_loc = self.signal_fft.shape[1]/self.dig_mult
+        self.f_m_loc_start = self.signal_start_fft.shape[1]/self.dig_mult
+        print('check f_m loc is right :', (float(self.signal_fft.shape[1])/self.dig_mult) == self.f_m_loc, (float(self.signal_start_fft.shape[1])/self.dig_mult) == self.f_m_loc_start)
+        #np.argmin(np.abs(self.fft_ax - self.f_m))
+        
+        # Get epsilon for the first harmonic
+        self.get_e_recon_matrix(n_carriers)
+        if eps_method == 'best_channels_fixed':
+            print('using best_channels_fixed')
+            self.use_eps = self.e_recon_matrix_start * 0 + self.e_ave
+        elif eps_method == 'individual':
+            print('using individual')
+            self.use_eps = +self.e_recon_matrix_start
+            self.use_eps = +self.e_recon_matrix
+        elif eps_method == 'using_1st_carrier':
+            print('using 1st carrier')
+            tmp = self.e_recon_matrix_start[:,1]
+            self.use_eps = self.e_recon_matrix_start * 0 + tmp[:,np.newaxis]
+
+        #self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/1j)
+
+        # self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/self.signal_fft[:,3*self.f_m_loc])/(-2.)
+        # enforce the use of a single epsilon...
+        
+        #self.e_recon = self.e_recon *0 + self.e_recon[10]
+
+        #Width of the tophat and make it an odd number
+        self.width = int(self.f_m_loc * tophat_width_prop)
         if (self.width%2)!=0: self.width = self.width - 1
+
         for n in range(n_carriers):
-            if (n%2)==0: 
-                mult = 1
-            else:
-                mult = -1j
-            n_freq_loc = np.argmin(np.abs(self.fft_ax - n*self.f_m))
-            tmp = self.signal_fft *0
+            mult = 1
+            if (n%2)!=0: mult = -1j
+
+            #n_freq_loc = np.argmin(np.abs(self.fft_ax - n*self.f_m))
+            n_freq_loc = self.f_m_loc * n
+            fft_shifted = self.signal_fft *0
+
+            #Shift the frequencies
             if n==0:
-                tmp[:,0:self.width/2] = self.signal_fft[:, n_freq_loc:n_freq_loc+self.width/2]
-                #print len(np.conj(signal_fft[n_freq_loc:n_freq_loc+self.width/2]))
-                tmp[:,-self.width/2+1:] = self.signal_fft[:,-self.width/2+1:]
+                fft_shifted[:,0:self.width/2] = self.signal_fft[:, n_freq_loc:n_freq_loc+self.width/2]
+                fft_shifted[:,-self.width/2+1:] = self.signal_fft[:,-self.width/2+1:]
             else:
-                tmp[:,0:self.width/2] = self.signal_fft[:,n_freq_loc:n_freq_loc+self.width/2]
-                #tmp[0]= signal_fft[n_freq_loc]
-                #tmp[1:self.width/2] = signal_fft[n_freq_loc+1:n_freq_loc+self.width/2]
-                #tmp[-self.width/2+1:] = signal_fft[n_freq_loc-self.width/2+1:n_freq_loc]
-                tmp[:,-self.width/2+1:] = self.signal_fft[:,n_freq_loc-self.width/2+1:n_freq_loc]
-            if n==0:
-                e_recon_tmp = self.e_recon
-            elif (n%2)==0:
-                e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n])/n
-            else:
-                e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n]/-1j)/n
-            #e_recon_tmp = e_recon
-            a = tmp* np.exp(-1j*n*e_recon_tmp[:,np.newaxis])*mult
-            #print n, a[0,:]
+                fft_shifted[:,0:self.width/2] = self.signal_fft[:,n_freq_loc:n_freq_loc+self.width/2]
+                fft_shifted[:,-self.width/2+1:] = self.signal_fft[:,n_freq_loc-self.width/2+1:n_freq_loc]
+
+            #Apply the timing correction
+            #Need to check the best epsilon for each case.... 
+            e_recon_tmp = self.use_eps[:,n]
+            # if n==0:
+            #     e_recon_tmp = self.e_recon
+            # elif (n%2)==0:
+            #     if individual_eps_calc:
+            #         e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n])/n
+            #     else:
+            #         e_recon_tmp = +self.e_recon
+            # else:
+            #     if individual_eps_calc:
+            #         e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n]/-1j)/n
+            #         print 'using individual carrier epsilon calc'
+            #     else:
+            #         print 'using same epsilon for each carrier'
+            #         e_recon_tmp = +self.e_recon
+            self.carriers_epsilon_used = +e_recon_tmp
+            fft_shifted_corrected = fft_shifted * np.exp(-1j*n*e_recon_tmp[:,np.newaxis])*mult
             if force_symmetric:
-                a[:,-self.width/2+1:] = np.conj(a[:,1:self.width/2])[:,::-1]
-            #h_n.append(np.fft.ifft(a))
-            self.carriers[n,:,:] = np.fft.ifft(a)
+                fft_shifted_corrected[:, -self.width/2+1:] = np.conj(fft_shifted_corrected[:, 1:self.width/2])[:,::-1]
+            self.carriers[n,:,:] = np.fft.ifft(fft_shifted_corrected)
+
+    def access_carriers(self,):
+        fig, ax = pt.subplots(nrows = 5, ncols = 5, sharex = True, sharey = True); ax = ax.flatten()
+        for i in range(self.carriers.shape[1]):
+            real_part = np.sum(np.abs(np.real(self.carriers[:,i,:])), axis = 1)
+            imag_part = np.sum(np.abs(np.imag(self.carriers[:,i,:])), axis = 1)
+            ax[i].bar(range(self.carriers.shape[0]), imag_part*0+1, color='b')
+            ax[i].bar(range(self.carriers.shape[0]), real_part/(real_part + imag_part), color='r')
+        ax[0].set_xlim([0,self.carriers.shape[0]])
+        ax[0].set_ylim([0,1])
+        fig.canvas.draw(); fig.show()
+
+    def compare_all_epsilons(self,):
+        fig, ax = pt.subplots(nrows = 5, ncols = 5, sharex = True, sharey = True); ax = ax.flatten()
+        for i in range(self.carriers.shape[1]):
+            real_part = np.sum(np.abs(np.real(self.carriers[:,i,:])), axis = 1)
+            imag_part = np.sum(np.abs(np.imag(self.carriers[:,i,:])), axis = 1)
+            ax[i].bar(range(self.carriers.shape[0]), imag_part*0+1, color='b')
+            ax[i].bar(range(self.carriers.shape[0]), real_part/(real_part + imag_part), color='r')
+        ax[0].set_xlim([0,self.carriers.shape[0]])
+        ax[0].set_ylim([0,1])
+        fig.canvas.draw(); fig.show()
+
 
     def calc_carriers_time_rfft(self, n_carriers = 6, force_symmetric = 0, individual_eps_calc = 0, tophat_width_prop = 1):
         '''Same as calc_carriers_time except using the real fft and
@@ -163,6 +292,8 @@ class interf_demod(object):
         SRH:5Nov2013
         '''
         self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/1j)
+        #self.e_recon = np.angle(self.signal_fft[:,self.f_m_loc]/self.signal_fft[:,3*self.f_m_loc])/(-2.)
+        self.e_recon = self.e_recon *0 + self.e_recon[10]
         self.carriers_rfft = np.zeros((n_carriers,self.signal_fft.shape[0], self.signal_fft.shape[1]),dtype = complex)
         self.signal_rfft = np.fft.rfft(self.raw_signals)
         #Width of the tophat
@@ -177,17 +308,29 @@ class interf_demod(object):
             tmp = self.signal_rfft *0
             tmp[:,0:self.width/2] = self.signal_fft[:, n_freq_loc:n_freq_loc+self.width/2]
             if n==0:
-                e_recon_tmp = self.e_recon
+                e_recon_tmp = +self.e_recon
             elif (n%2)==0:
-                e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n])/n
+                if individual_eps_calc:
+                    e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n])/n
+                else:
+                    e_recon_tmp = +self.e_recon
             else:
-                e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n]/-1j)/n
+                if individual_eps_calc:
+                    e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n]/-1j)/n
+                    print 'using individual carrier epsilon calc'
+                else:
+                    print 'using same epsilon for each carrier'
+                    e_recon_tmp = +self.e_recon
+            self.carriers_rfft_epsilon_used = +e_recon_tmp
+            #if n==0:
+            #    e_recon_tmp = self.e_recon
+            #elif (n%2)==0:
+            #    e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n])/n
+            #else:
+            #    e_recon_tmp = np.angle(self.signal_fft[:,self.f_m_loc*n]/-1j)/n
             a = tmp* np.exp(-1j*n*self.e_recon[:,np.newaxis])*mult
             #h_n.append(np.fft.ifft(a))
             self.carriers_rfft[n,:,:] = np.fft.irfft(a)
-
-    def plot_carriers(self,):
-        pass
 
     def phi1_min(self,phi_1_test,ratio, bessel_numerator, bessel_denomenator):
         '''Minimisation function for optimizer to calculate phi1
@@ -231,7 +374,7 @@ class interf_demod(object):
         SRH: 5Nov2013 
         '''
         if end_point == None: end_point = self.start_samples
-        end_point += (start_point - end_point)%self.dig_mult
+        end_point -= (start_point - end_point)%self.dig_mult
         tmp_fft = np.fft.fft(self.raw_signals[:,start_point:end_point])
         tmp_fft_ax = np.fft.fftfreq(tmp_fft.shape[1], 1./self.f_s)
         f_m_loc_tmp = np.argmin(np.abs(tmp_fft_ax-self.f_m))
@@ -257,26 +400,47 @@ class interf_demod(object):
         SRH: 5Nov2013
         '''
         chans, max_harmonic = self.harmonics.shape
-        if phi1==None: 
+        if phi1 == None: 
             phi1 = np.array(self.phi1_mean)
+            title_text = 'Using individual modulation depths for each channel'
         else:
             phi1 = np.array([phi1] * chans)
+            title_text = 'Using fixed modulation depth for all channels'
         bessel_amps = []
         for i in phi1:
             bessel_amps.append(spec.jn(range(max_harmonic), i))
         bessel_amps = np.array(bessel_amps)
         print bessel_amps.shape, self.harmonics.shape
-
+        
+        #eps_to_use = np.angle(self.harmonics[:,1]/1j)[8]
+        eps_to_use = self.e_ave
         if show_fig:
             fig, ax = pt.subplots(nrows=5, ncols = 5, sharex = True, sharey = True); ax = ax.flatten()
             for i in range(chans):
-                ax[i].plot(range(1,max_harmonic),np.abs(self.harmonics[i,1:])*np.abs(bessel_amps[i,1])/ np.abs(self.harmonics[i,1]),'o-')
+                strengths = self.harmonics[0,:]*0.
+
+                Q_0 = self.harmonics[i,1]/bessel_amps[i,1]/1j/np.exp(1j*eps_to_use)
+                C_0 = self.harmonics[i,2]/bessel_amps[i,2]/np.exp(1j*2*eps_to_use)
+                Q_0_prop_real = np.abs(np.real(Q_0)/np.abs(Q_0))*100
+                C_0_prop_real = np.abs(np.real(C_0)/np.abs(C_0))*100
+                print('ch:{}, Q_O_prop:{:.2f}%, C_0_prop:{:.2f}%, Initial Phase:{:.2f}deg'.format(i, Q_0_prop_real, C_0_prop_real, np.rad2deg(np.angle(1j*np.real(Q_0) + np.real(C_0)))))
+                #strengths[1::2] = self.harmonics[i,1::2]*bessel_amps[i,1]/ self.harmonics[i,1]
+                n_vals = np.arange(self.harmonics.shape[1])
+                strengths[1::2] = self.harmonics[i,1::2]/np.exp(1j*n_vals[1::2]*eps_to_use)/np.real(Q_0)/1j
+                #strengths[2::2] = self.harmonics[i,2::2]*bessel_amps[i,2]/ self.harmonics[i,2]
+                strengths[2::2] = self.harmonics[i,2::2]/np.exp(1j*n_vals[2::2]*eps_to_use)/np.real(C_0)
+                strengths = 1*strengths[1:]
+                print np.real(strengths)/np.abs(strengths)*100
+                #ax[i].plot(range(1,max_harmonic),np.abs(self.harmonics[i,1:])*np.abs(bessel_amps[i,1])/ np.abs(self.harmonics[i,1]),'o-')
+                ax[i].plot(range(1,max_harmonic),strengths,'o-')
                 #ax[i].plot(range(1,max_harmonic),np.sign(np.real(self.harmonics[i,1:]))*np.abs(self.harmonics[i,1:])*np.abs(bessel_amps[i,1])/ np.abs(self.harmonics[i,1]),'o-')
                 ax[i].plot(range(1,max_harmonic), bessel_amps[i,1:],'x-')
             ax[-1].set_xlim([0,max_harmonic])
             ax[-1].set_ylim([0,np.max(bessel_amps)])
         
             fig.subplots_adjust(hspace=0.015, wspace=0.015,left=0.10, bottom=0.10,top=0.95, right=0.95)
+            
+            fig.suptitle('predicted harmonic amps from bessel funcs (x), measured (o) - dividing by Q i exp(i n eps) for odd and C exp(i n eps)for even\nNote first 2 harmonics must agree perfectly because they are used to calc Q(0) and C(0). {}'.format(title_text))
             fig.canvas.draw(); fig.show()
 
     def calculate_phase(self, phi1, odd, even, use_rfft = 0, clim = [0,5], show_fig = True, save_fig_name = None):
@@ -285,25 +449,39 @@ class interf_demod(object):
         '''
         if use_rfft: 
             carriers = self.carriers_rfft
+            epsilon_used = +self.carriers_rfft_epsilon_used
         else:
             carriers = self.carriers
+            epsilon_used = +self.carriers_epsilon_used
         odd_part = np.real(carriers[odd,:,:]/spec.jn(odd,phi1))
         even_part = np.real(carriers[even,:,:]/spec.jn(even,phi1))
         output = np.unwrap(np.arctan2(odd_part, even_part), axis = -1)
         self.initial_phase = np.mean(output[:,30:1000], axis = -1)
         output = (output - self.initial_phase[:,np.newaxis])
+
         #if np.mean(output, axis = -1)<0: output*=-1
         self.output = +output
         if show_fig:
             self.im_fig, self.im_ax = pt.subplots(ncols = 2, sharey=True)
             self.im =self.im_ax[0].imshow(np.abs(self.output),interpolation = 'nearest', aspect='auto',cmap = 'hot', extent=[self.t[0],self.t[-1],self.output.shape[0],0], origin = 'upper')
-        times = [0.02,0.04,0.06]
-        for t in times:
+            self.im_ax[0].set_xlabel('time (s)')
+            self.im_ax[0].set_ylabel('Interferometer Channel')
+            fig, ax = pt.subplots(ncols = 2); 
+            for i in range(self.output.shape[0]):
+                ax[0].plot(self.t, self.output[i,:])
+            ax[0].set_ylim([-2.*np.pi, 2.*np.pi])
+            ax[1].plot(epsilon_used, np.mean(self.output,axis = -1), 'o')
+            for i in range(len(epsilon_used)):
+                ax[1].text(epsilon_used[i], np.mean(self.output,axis = -1)[i], str(i))
+            fig.canvas.draw(); fig.show()
+        times = [0.02,0.04,0.063]
+        colours = ['b','g','k']
+        for col, t in zip(colours, times):
             t_loc = np.argmin(np.abs(self.t - t))
             plot_vals = np.abs(self.output[:,t_loc])<10
             if show_fig:
-                self.im_ax[1].plot(np.abs(self.output[:,t_loc][plot_vals]),np.arange(self.output.shape[0])[plot_vals],'x-')
-                self.im_ax[0].vlines(t, self.output.shape[0],0, colors = 'b')
+                self.im_ax[1].plot(np.abs(self.output[:,t_loc][plot_vals]),np.arange(self.output.shape[0])[plot_vals],'{}x-'.format(col))
+                self.im_ax[0].vlines(t, self.output.shape[0],0, colors = col)
         if show_fig:
             self.im_ax[1].grid()
             self.im_ax[1].set_xlim(clim)
@@ -311,7 +489,8 @@ class interf_demod(object):
             self.im.set_clim(clim)
             self.im_ax[0].set_xlim([-0.005,0.12])
             self.im_ax[1].set_ylim([0.,self.output.shape[0]])
-            pt.colorbar(self.im,ax = self.im_ax[0])
+            cbar = pt.colorbar(self.im,ax = self.im_ax[0])
+            cbar.set_label('plasma phase shift (rad)')
             if save_fig_name!=None:
                 self.im_fig.suptitle(save_fig_name.rstrip('.png'))
                 self.im_fig.savefig(save_fig_name)
@@ -324,8 +503,10 @@ class interf_demod(object):
         '''
         if use_rfft: 
             carriers = self.carriers_rfft
+            epsilon_used = +self.carriers_rfft_epsilon_used
         else:
             carriers = self.carriers
+            epsilon_used = +self.carriers_epsilon_used
 
         harms, chans, Ns = carriers.shape
         self.J = np.zeros((harms, 3), dtype = float)
@@ -336,23 +517,27 @@ class interf_demod(object):
         self.h = np.zeros((harms, Ns),dtype = float)
         self.result_list = []
         if show_fig:
-            fig, ax = pt.subplots(nrows = 1); ax = [ax]
+            fig, ax = pt.subplots(ncols = 2); 
         self.output_phase_simul = np.zeros((chans, Ns), dtype = float)
         for i in range(chans):
             tmp = np.dot(self.J_inv, np.real(carriers[:,i,:]))
             self.result_list.append(tmp)
             output = np.unwrap(np.arctan2(tmp[2,:], tmp[1,:]))
             initial_phase = np.mean(output[30:1000])
-            print initial_phase,
+            #print initial_phase,
             self.output_phase_simul[i,:] = (output - initial_phase)
             tmp_mean = np.mean(self.output_phase_simul[i,:])
-            print np.cos(tmp_mean)*np.sin(tmp_mean), tmp_mean, np.sign(np.cos(tmp_mean)*np.sin(tmp_mean)) == np.sign(tmp_mean)
+            #print np.cos(tmp_mean)*np.sin(tmp_mean), tmp_mean, np.sign(np.cos(tmp_mean)*np.sin(tmp_mean)) == np.sign(tmp_mean)
             
             if show_fig:
-                ax[0].plot(self.t, np.abs(self.output_phase_simul[i,:]))
+                ax[0].plot(self.t, self.output_phase_simul[i,:])
+
+        
         print ''
 
         if show_fig:
+            ax[0].set_ylim([-2.*np.pi, 2.*np.pi])
+            ax[1].plot(epsilon_used, np.mean(self.output_phase_simul,axis = -1), 'o')
             self.im_fig2, self.im_ax2 = pt.subplots(ncols = 2, sharey=True)
             self.im2 =self.im_ax2[0].imshow(np.abs(self.output_phase_simul),interpolation = 'nearest', aspect='auto',cmap = 'hot', extent=[self.t[0],self.t[-1],self.output.shape[0],0], origin = 'upper')
             self.im2.set_clim(clim)
@@ -390,7 +575,7 @@ class interf_demod(object):
         return np.sum((np.dot(J_tile, S) - h)**2)
 
 
-    def calculate_phase_phi_simul(self, phi1, use_rfft = 0, clim = [0,5], show_fig = True, channel_mask = None):
+    def calculate_phase_phi_simul(self, use_rfft = 0, clim = [0,5], show_fig = True, channel_mask = None):
         '''Calculate phi1 (modulation depth) simulatneously using all interferometer channels
 
         SRH: 5Nov2013
@@ -420,9 +605,9 @@ class interf_demod(object):
             tmp = np.dot(self.J_tile, self.S)
             error_list.append(np.sum((tmp - self.h)**2))
             print phi1, error_list[-1]
-        phi_useful = phi1_list[np.argmin(error_list)]
-        self.J[::2,2] = spec.jn(np.arange(0, harms,2), phi_useful)
-        self.J[1::2,1] = spec.jn(np.arange(1, harms,2), phi_useful)
+        self.phi1_min_simul = phi1_list[np.argmin(error_list)]
+        self.J[::2,2] = spec.jn(np.arange(0, harms,2), self.phi1_min_simul)
+        self.J[1::2,1] = spec.jn(np.arange(1, harms,2), self.phi1_min_simul)
         self.J[0,0] = 1
         self.J_tile = np.tile(self.J,(chans,1))
         self.J_inv = np.linalg.pinv(self.J_tile)
@@ -430,8 +615,8 @@ class interf_demod(object):
         tmp = np.dot(self.J_tile, self.S)
         
         a = opt.fmin(self.min_func_phi1_simul, np.deg2rad(135), args=(harms, chans, self.h),disp=1, xtol=0.00001)
-        a2 = opt.minimize(self.min_func_phi1_simul, np.deg2rad(135), args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,np.pi)])
-        a3 = opt.minimize(self.phase_phi1_phi2_error, [np.deg2rad(135), np.deg2rad(140),0.5,0.5], args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,np.pi), (0.05,np.pi),(0.001,20),(0.001,20)])
+        a2 = opt.minimize(self.min_func_phi1_simul, np.deg2rad(135), args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,1.3*np.pi)])
+        a3 = opt.minimize(self.phase_phi1_phi2_error, [np.deg2rad(135), np.deg2rad(140),0.5,0.5], args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,1.3*np.pi), (0.05,1.3*np.pi),(0.001,20),(0.001,20)])
         print a
         print a2
         print a3
@@ -501,6 +686,7 @@ class interf_demod(object):
 
     def get_C_Q_initial_vals(self,):
         pass
+
 def compare_linear_sinusoidal(sinusoidal_shot, sinusoidal_freq, sinusoidal_mult, linear_shot):
     inter_obj = interf_demod(sinusoidal_shot, sinusoidal_freq, sinusoidal_mult)
     inter_obj.extract_mdsplus_data()

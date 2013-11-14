@@ -660,7 +660,7 @@ class LOS():
         mlab.points3d(self.intersection2[self.valid_channels,0], self.intersection2[self.valid_channels,1], self.intersection2[self.valid_channels,2],scale_factor=0.02,color=(1,0,0))
 
 
-    def plot_LOS(self, to_focal_point = 0, grad_mult = 50, plot_arguments = None):
+    def plot_LOS(self, to_focal_point = 0, grad_mult = 50, plot_arguments = None, plot_lines = 1):
         '''
         Plot the line of sights on an mlab figure
         Can either plot from CCD - to focal point or give grad_mult value
@@ -671,6 +671,13 @@ class LOS():
         x = []; y = []; z = []; connections = []
         index = 0
         count = 0
+        corner_values_x = [self.focal_point[0]]
+        corner_values_y = [self.focal_point[1]]
+        corner_values_z = [self.focal_point[2]]
+        points_corner = [self.focal_point[0], self.focal_point[1], self.focal_point[2]]
+        points_corner = [self.focal_point]
+        a, b, dum = self.LOS_point.shape
+        imp_values = [0, a-1, a*b-b, a*b-1]
         for x_tmp, y_tmp, z_tmp, x_grad, y_grad, z_grad in zip(self.LOS_point[:,:,0].flatten(), 
                                                                self.LOS_point[:,:,1].flatten(), 
                                                                self.LOS_point[:,:,2].flatten(),
@@ -688,15 +695,30 @@ class LOS():
                 connections.append([index,index+1])
             index+=2
             if count in [0,1, np.prod(self.LOS_point.shape[0:2])-1]:#,np.prod(self.LOS_point.shape[0:2])):
-                mlab.plot3d([x[-1],x[-2]],[y[-1],y[-2]],[z[-1],z[-2]],color=(0,0,0),line_width=1.5, tube_radius = None)
+                if plot_lines:
+                    mlab.plot3d([x[-1],x[-2]],[y[-1],y[-2]],[z[-1],z[-2]],color=(0,0,0),line_width=1.5, tube_radius = None)
+            if count in imp_values:
+                print count
+                points_corner.append([x[-1],y[-1],z[-1]])
             count+=1
-        src = mlab.pipeline.scalar_scatter(np.array(x), np.array(y), np.array(z))
-        src.mlab_source.dataset.lines = np.array(connections)
-        lines = mlab.pipeline.stripper(src)
-        line_args = {'line_width':1.5,'opacity':0.5}
-        if plot_arguments!=None:
-            line_args.update(plot_arguments)
-        mlab.pipeline.surface(lines,**line_args)#line_width=1.5, opacity=.1)
+        if plot_lines:
+            src = mlab.pipeline.scalar_scatter(np.array(x), np.array(y), np.array(z))
+            src.mlab_source.dataset.lines = np.array(connections)
+            lines = mlab.pipeline.stripper(src)
+            line_args = {'line_width':1.5,'opacity':0.5}
+            if plot_arguments!=None:
+                line_args.update(plot_arguments)
+            mlab.pipeline.surface(lines,**line_args)#line_width=1.5, opacity=.1)
+        triangles = np.array([[0,1,2],[0,1,3],[0,3,4],[0,2,4],[0,1,3],[2,3,4],[1,2,3]])
+        points_corner = np.array(points_corner)
+        #mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces)
+        #from tvtk.api import tvtk
+        #mesh = tvtk.PolyData(points=np.array(points_corner), polys=np.array(triangles))
+        #from mayavi.sources.vtk_data_source import VTKDataSource
+        #mlab.add_source(src)
+        #return mesh
+        mlab.triangular_mesh(points_corner[:,0], points_corner[:,1], points_corner[:,2],triangles, representation='wireframe',color=(0,0,0))
+        mlab.triangular_mesh(points_corner[:,0], points_corner[:,1], points_corner[:,2],triangles, color=(0.0,0.0,1), opacity=0.2)
 
     def orient_camera(self,mayavi_fig,render=1):
         '''

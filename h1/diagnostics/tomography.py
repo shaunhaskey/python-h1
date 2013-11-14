@@ -45,6 +45,90 @@ class Tomography():
         fig.suptitle(self.method)
         fig.canvas.draw(); fig.show()
 
+
+    def plot_reprojection_comparison(self, n, m, LOS_object, cut_values = None, multiplier = 1., pub_fig = 1):
+        if cut_values == None:
+            cut_values = [33]
+            cut_values = [130]
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        print cut_values
+        fig2, ax2 = pt.subplots(nrows = 2, ncols = 3, sharey=True)
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig2.set_figwidth(8.48*2.*cm_to_inch)
+            fig2.set_figheight(8.48*1.35*cm_to_inch)
+
+        im1_a = ax2[0,0].imshow(np.abs(self.all_measurements)*self.valid_channels,origin='upper',aspect='auto',interpolation='nearest')
+        im1_p = ax2[1,0].imshow(np.angle(self.all_measurements)*self.valid_channels,origin='upper',aspect='auto',interpolation='nearest')
+        im1_p.set_clim([-np.pi,np.pi])
+        q = self.all_measurements*0
+        q[self.valid_channels]= self.re_projection
+        q[-self.valid_channels]= 0
+        im2_a = ax2[0,1].imshow(multiplier*np.abs(q),origin='upper', aspect='auto',interpolation='nearest')
+        im2_p = ax2[1,1].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest')
+        im2_a.set_clim(im1_a.get_clim())
+        im2_p.set_clim(im1_p.get_clim())
+        start = 0; increment = len(self.T)/len(n)
+
+        #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
+        #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+        #ax2[0,3].legend(loc='best')
+        tmp_y_axis = np.arange(len(self.all_measurements[:,0]))
+        tmp_y_axis = np.max(tmp_y_axis)- tmp_y_axis
+        tmp_reproj = self.all_measurements*0.
+        tmp_reproj[self.valid_channels] = self.re_projection
+
+        for i in cut_values:
+            ax2[0,2].plot((np.abs(self.all_measurements[:,i]*self.valid_channels[:,i]))[::-1], tmp_y_axis, '-', label='Measurement')
+            ax2[0,2].plot((multiplier*np.abs(tmp_reproj[:,i]))[::-1], tmp_y_axis,'-',label = 'Reprojection')
+            ax2[1,2].plot((np.angle(self.all_measurements[:,i])*self.valid_channels[:,i])[::-1], tmp_y_axis, '-')
+            ax2[1,2].plot((np.angle(tmp_reproj[:,i])*self.valid_channels[:,i])[::-1], tmp_y_axis,'-', label = '')
+            for j in [0,1]:
+                for k in [0,1]:
+                    tmp = ax2[j,k].get_ylim()
+                    ax2[j,k].vlines(i,tmp[0], tmp[1])
+        ax2[1,2].set_xlabel('Phase (rad)')
+        ax2[1,0].set_xlabel('Pixel')
+        ax2[1,1].set_xlabel('Pixel')
+        ax2[1,0].set_ylabel('Pixel')
+        ax2[0,0].set_ylabel('Pixel')
+        ax2[0,2].set_xlabel('Amplitude (a.u)')
+        ax2[0,2].legend(prop={'size':5}, loc = 'best')
+        ax2[1,2].set_ylim([0,self.valid_channels.shape[0]])
+        ax2[1,2].set_xlim([-np.pi,np.pi])
+        center = self.valid_channels.shape[1]/2
+        edge = center/2.
+        ax2[0,0].set_xlim([center-edge,center+edge])
+        ax2[0,1].set_xlim([center-edge,center+edge])
+        ax2[1,0].set_xlim([center-edge,center+edge])
+        ax2[1,1].set_xlim([center-edge,center+edge])
+        ax2[0,2].set_ylim([0,self.valid_channels.shape[0]])
+        #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
+        #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
+
+
+        #ax2[1,3].plot(np.angle(self.all_measurements[self.valid_channels]), label = 'Arg(data)')
+        #ax2[1,3].plot(np.angle(self.re_projection), label = 'Arg(reproj)')
+        #ax2[1,3].legend(loc='best')
+        fig2.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig2.tight_layout()
+        #fig2.suptitle('Tomo method: {} Top : (Meas amp, reproj amp, amp slice, amp vs norm flux), Bot:(Meas Phase, reproj Phase, phase slice, phase vs norm flux)'.format(self.method))
+        fig2.savefig('reprojection.pdf')
+        fig2.savefig('reprojection.eps')
+        fig2.canvas.draw(); fig2.show()
+
+
+
     def plot_lots_of_things(self, n, m, LOS_object, cut_values = None, multiplier = 1.):
         if cut_values == None:
             cut_values = [33]
@@ -379,6 +463,7 @@ class SIRT(Tomography):
             ordering = np.range(self.P.shape[0]*cycles)
         #for k in ordering:
         for k in range(cycles):
+            if (k%20)==0:print('cycle {} of {}, printout every 20'.format(k,cycles))
             current_modification = self.T*0
             curr_count = 0
             for i in range(self.P.shape[0]):
