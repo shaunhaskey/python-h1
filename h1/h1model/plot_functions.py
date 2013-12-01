@@ -18,15 +18,17 @@ def _plot_coil_horizontal(centre, thickness, width, r, phi_samples=50,**kw):
         circle_z[i,:] = np.cos(phi)*0+heights[i]+centre[2]
     mlab.mesh(circle_x, circle_y, circle_z,**kw)#color=color,opacity=opacity)
 
-def _plot_coil_vertical(center, radius, thickness, width, phi, phi_samples = 50,**kw):
+def _plot_coil_vertical(center, radius, thickness, width, phi,  phi_samples = 50, ID_OD_offset=0, **kw):
     '''Plot a horizontal coil like hte PFC or OVC
     '''
-    circle_x1, circle_y1, circle_z1 = _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = phi_samples)
+    print('ID_OD_offset plot_tfc: {}'.format(ID_OD_offset))
+    circle_x1, circle_y1, circle_z1 = _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = phi_samples, ID_OD_offset = ID_OD_offset)
     mlab.mesh(circle_x1, circle_y1, circle_z1,**kw)#color=(1,0,0),opacity=opacity)
 
-def _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = 50):
+def _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = 50, ID_OD_offset = 0):
     '''Plot a horizontal coil like hte PFC or OVC
     '''
+    print('ID_OD_offset plot_tfc: {}'.format(ID_OD_offset))
     print('center {}, radius {}, thickness {}, width {}, phi {}, phi_samples {}'.format(center, radius, thickness, width, phi, phi_samples))
     rmin = radius - width/2
     rmax = radius + width/2
@@ -37,6 +39,7 @@ def _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = 5
     centre_x = center[0]
     centre_y = center[1]
     centre_z = center[2]
+    centre_z_values = np.array([-ID_OD_offset/2, -ID_OD_offset/2, +ID_OD_offset/2, +ID_OD_offset/2, -ID_OD_offset/2])+center[2]
     phi_tmp = np.linspace(0,2.*np.pi,phi_samples)
     circle_x1 = np.zeros((len(heights),len(phi_tmp)),dtype = float)
     circle_y1 = np.zeros((len(heights),len(phi_tmp)),dtype = float)
@@ -48,10 +51,11 @@ def _coil_vertical_points(center, radius, thickness, width, phi, phi_samples = 5
         circle_y = circle_r*np.sin(phi)#+centre_y
         circle_x1[i,:] = circle_x + heights[i]*np.cos(phi+np.pi/2.) #r_values[i]*np.sin(phi)+centre[0]
         circle_y1[i,:] = circle_y + heights[i]*np.sin(phi+np.pi/2.)#r_values[i]*np.cos(phi)+centre[1]
-        circle_z1[i,:] = circle_z #np.cos(phi)*0+heights[i]+centre[2]
+        print('Using r:{}, Using z:{}, ID_OD_offset:{}'.format(r_values[i], centre_z_values[i], ID_OD_offset))
+        circle_z1[i,:] = circle_z + centre_z_values[i] #np.cos(phi)*0+heights[i]+centre[2]
     circle_x1 = circle_x1 + centre_x
     circle_y1 = circle_y1 + centre_y
-    circle_z1 = circle_z1 + centre_z
+    #circle_z1 = circle_z1 + centre_z
     return circle_x1, circle_y1, circle_z1
 
 
@@ -90,13 +94,17 @@ def plot_ivc(ivc_mesh_props=None):
 
 
 
-def plot_tfc(include_coils, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, tfc_mesh_props = None):
+def plot_tfc(include_coils, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, ID_OD_offset = 0, tfc_mesh_props = None, use_real = False):
     '''plot the tfc coils in the include_coils list
 
     SRH: 12July2013
     '''
     #TFC details
-    tfc = tfc_details()
+    print('ID_OD_offset plot_tfc: {}'.format(ID_OD_offset))
+    if use_real:
+        tfc = tfc_details_real()
+    else:
+        tfc = tfc_details()
     #plot the TFC's 
     #tfc_mesh_props = {'opacity':0.3,'color':(1,0.,0.)}
     if tfc_mesh_props==None:
@@ -105,7 +113,7 @@ def plot_tfc(include_coils, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.
     #include_coils.extend(range(26,36,4))
     #for i in range(1,36,4):
     for i in include_coils:
-         _plot_coil_vertical([tfc.x[i],tfc.y[i],tfc.z[i]], tfc_radius, tfc_thickness, tfc_width, np.arctan2(tfc.y[i],tfc.x[i])*180./np.pi, **tfc_mesh_props)
+         _plot_coil_vertical([tfc.x[i],tfc.y[i],tfc.z[i]], tfc_radius, tfc_thickness, tfc_width, np.arctan2(tfc.y[i],tfc.x[i])*180./np.pi, ID_OD_offset=ID_OD_offset, **tfc_mesh_props)
 
 class tfc_details():
     def __init__(self,):
@@ -138,16 +146,80 @@ class tfc_details():
         0.039000, 0.115500, 0.175500, 0.204500, 0.163500, 0.067500,
         -0.074000, -0.173500, -0.207500, -0.177000, -0.115500, -0.043000];
 
-def tfc_points(coil_num = None, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50,coords=None):
+
+class tfc_details_real():
+    def __init__(self,):
+
+        self.phi = np.array([3.517, 10.949, 19.466, 29.466, 41.449, 53.517,
+        66.483, 79.051, 90.534,100.534,109.051,115.743, 123.517,
+        130.449, 139.466, 149.466, 161.449, 173.517, 186.483, 199.051,
+        210.534, 220.534, 229.051, 236.195, 243.517, 250.949, 259.466,
+        269.466, 281.449, 293.577, 306.483, 319.051, 330.534, 340.534,
+        349.051, 356.483])
+
+        #self.phi_correction = np.array([0, 0, 0, 0, 0.5, 0, 0, 0, 0,
+        #0, 0, -0.7, 0, -0.5, 0, 0, 0.5, 0, 0, 0, 0, 0, -0.288, 0, 0,
+        #0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 0])
+        self.phi_correction = self.phi*0
+        self.phi = self.phi+self.phi_correction
+
+        self.r = np.array([1212.9, 1181.4, 1113.9, 1007.4, 888.9, 800.4, 800.9,
+        882.9, 1007.4, 1113.9, 1183.4, 1210.4, 1212.4, 1186.6, 1112.4,
+        1009.6, 887.9, 800.4, 803.6, 884.4, 1004.9, 1113.4, 1180.9,
+        1211.9, 1212.6, 1181.4, 1113.9, 1007.6, 888.4, 800.4, 799.4,
+        886.4, 1006.6, 1118.9, 1181.6, 1213.4])/1000.
+
+        self.z = np.array([39.7, 111.5, 174.0, 204.5, 166.5, 67.2,
+        -74.0, -176.0, -206.5, -177.0, -115.0, -47.0, 38.5, 109.5,
+        174.5, 203.5, 164.5, 69.0, -71.5, -175.0, -208.0, -177.0,
+        -115.0, -43.0, 39.0, 115.5, 175.5, 204.5, 163.5, 67.5, -74.0,
+        -173.5, -207.5, -177.0, -115.5, -43.0])/1000.
+
+        self.x = self.r*np.cos(np.deg2rad(self.phi))
+        self.y = self.r*np.sin(np.deg2rad(self.phi))
+        self.e2 = self.phi-90
+        # self.e2 = [-86.482994, -79.050995, -70.533997, -60.533997, -48.550999,
+        # -36.482998, -23.517000, -10.948996, 0.533993, 10.533997,
+        # 19.050997, 25.742990, 33.516987, 40.449001, 49.466000, 59.465992,
+        # 71.448997, 83.516991, 83.516991, 70.949013, 59.466000, 49.466000,
+        # 40.949005, 33.804981, 26.482990, 19.051008, 10.534008, 0.534011,
+        # -11.449009, -23.576992, -36.482990, -49.051003, -60.533997,
+        # -70.533997, -79.050995, -86.483002];
+
+        # self.x = [1.210616, 1.159895, 1.050229, 0.877091, 0.666271, 0.475905,
+        # 0.319576, 0.167694, -0.009389, -0.203642, -0.386273, -0.525719,
+        # -0.669468, -0.769832, -0.845447, -0.869596, -0.841766, -0.795282,
+        # -0.798461, -0.835960, -0.865548, -0.846207, -0.773947, -0.674262,
+        # -0.540737, -0.385621, -0.203642, -0.009391, 0.176344, 0.320145,
+        # 0.475311, 0.669492, 0.876394, 1.054943, 1.160091, 1.21115];
+
+        # self.y = [0.074405, 0.224389, 0.371204, 0.495547, 0.588410, 0.643548,
+        # 0.734379, 0.866828, 1.007356, 1.095127, 1.118583, 1.090269,
+        # 1.010805, 0.902983, 0.722948, 0.512927, 0.282484, 0.090372,
+        # -0.090733, -0.288677, -0.510539, -0.723598, -0.891926, -1.007011,
+        # -1.085358, -1.116693, -1.095127, -1.007556, -0.870722, -0.733585,
+        # -0.642744, -0.580935, -0.495154, -0.372871, -0.224427, -0.074435];
+
+        # self.z = [0.039700, 0.111500, 0.174000, 0.204500, 0.166500, 0.067200,
+        # -0.074000, -0.176000, -0.206500, -0.177000, -0.115000, -0.047000,
+        # 0.038500, 0.109500, 0.174500, 0.203500, 0.164500, 0.069000,
+        # -0.071500, -0.175000, -0.208000, -0.177000, -0.115000, -0.043000,
+        # 0.039000, 0.115500, 0.175500, 0.204500, 0.163500, 0.067500,
+        # -0.074000, -0.173500, -0.207500, -0.177000, -0.115500, -0.043000];
+
+def tfc_points(coil_num = None, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, ID_OD_offset = 0,phi_samples = 50,coords=None, use_real=False):
     '''return the points describing a tfc
 
     SRH: 12July2013
     '''
     #TFC details
-    tfc = tfc_details()
+    if use_real:
+        tfc = tfc_details_real()
+    else:
+        tfc = tfc_details()
     if coords==None:
         coords = [tfc.x[coil_num],tfc.y[coil_num],tfc.z[coil_num]]
-    return _coil_vertical_points(coords, tfc_radius, tfc_thickness, tfc_width, np.arctan2(coords[1], coords[0])*180./np.pi, phi_samples = phi_samples)
+    return _coil_vertical_points(coords, tfc_radius, tfc_thickness, tfc_width, np.arctan2(coords[1], coords[0])*180./np.pi, phi_samples = phi_samples, ID_OD_offset = ID_OD_offset)
 
 # def tfc_points_triangular_mesh(coil, tfc_thickness=0.075, tfc_width=0.15, tfc_radius = 0.383, phi_samples = 50, plot=0):
 #     '''return the points describing a tfc
@@ -211,6 +283,84 @@ def extract_VMEC_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.p
     y_vmec = R_vmec * np.sin(phi_vmec_cyl)
     z_vmec = np.array(Z_vmec)
     return x_vmec, y_vmec, z_vmec, B_vmec
+
+
+
+
+def extract_BOOZER_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.pi):
+    '''extracts x, y, z and B for the surface index s_ind
+    using Berhnard's VMEC utilities
+    '''
+    import h1.mhd_eq.BOOZER as BOOZER
+    theta_boozer = np.linspace(0,2.*np.pi,100)
+    phi_b = np.linspace(phi_min, phi_max,100)
+    theta_grid, phi_b_grid = np.meshgrid(theta_boozer, phi_b)
+    boozer_tmp = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
+    print s_ind
+    Rmn_boozer = boozer_tmp.rmnc_b[s_ind,:]
+    Zmn_boozer = boozer_tmp.zmns_b[s_ind,:]
+    Bmn_boozer = boozer_tmp.bmnc_b[s_ind,:]
+    Pmn_boozer = boozer_tmp.pmns_b[s_ind,:]
+    m_boozer = boozer_tmp.ixm_b
+    n_boozer = boozer_tmp.ixn_b
+    R = theta_grid *0; Z = theta_grid * 0
+    Phi = theta_grid *0+phi_b_grid
+    B = theta_grid *0; 
+    for i in range(0,len(n_boozer)):
+        argv = (m_boozer[i]*theta_grid - n_boozer[i]*phi_b_grid) 
+        sinv = np.sin(argv)
+        cosv = np.cos(argv)
+        R+= Rmn_boozer[i] * cosv
+        Z+= Zmn_boozer[i] * sinv
+        Phi += Pmn_boozer[i]*sinv
+        B += Bmn_boozer[i] * cosv
+    x = R * np.cos(Phi)
+    y = R * np.sin(Phi)
+    z = +Z
+    return x, y, z, B
+
+
+def extract_BOOZER_fieldline(filename, s_ind=-1, theta_b_start = 0, no_cycles=1, pts_per_cycle=1000, phi_b_start = 0, s_is_ind=True):
+    '''extracts x, y, z and B for the surface index s_ind
+    using Berhnard's VMEC utilities
+    '''
+    import h1.mhd_eq.BOOZER as BOOZER
+    boozer_tmp = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
+    if not s_is_ind:
+        print s_ind
+        s_ind = np.argmin(np.abs(boozer_tmp.es-s_ind))
+        print s_ind, boozer_tmp.es[s_ind]
+        print('iota at this surface: {:.2f}'.format(boozer_tmp.iota_b[s_ind]))
+    print s_ind, boozer_tmp.es[s_ind], boozer_tmp.rmnc_b.shape
+
+    phi_b = np.linspace(phi_b_start, 2.*np.pi*no_cycles+phi_b_start,pts_per_cycle*np.abs(no_cycles))
+    print len(phi_b)
+    theta_boozer = phi_b * boozer_tmp.iota_b[s_ind]+theta_b_start
+    theta_boozer = np.mod(theta_boozer, 2.*np.pi)
+    phi_boozer = np.mod(phi_b, 2.*np.pi)
+    theta_grid = theta_boozer
+    phi_b_grid = phi_boozer
+    Rmn_boozer = boozer_tmp.rmnc_b[s_ind,:]
+    Zmn_boozer = boozer_tmp.zmns_b[s_ind,:]
+    Bmn_boozer = boozer_tmp.bmnc_b[s_ind,:]
+    Pmn_boozer = boozer_tmp.pmns_b[s_ind,:]
+    m_boozer = boozer_tmp.ixm_b
+    n_boozer = boozer_tmp.ixn_b
+    R = theta_grid *0; Z = theta_grid * 0
+    Phi = theta_grid *0+phi_b_grid
+    B = theta_grid *0; 
+    for i in range(0,len(n_boozer)):
+        argv = (m_boozer[i]*theta_grid - n_boozer[i]*phi_b_grid) 
+        sinv = np.sin(argv)
+        cosv = np.cos(argv)
+        R+= Rmn_boozer[i] * cosv
+        Z+= Zmn_boozer[i] * sinv
+        Phi += Pmn_boozer[i]*sinv
+        B += Bmn_boozer[i] * cosv
+    x = R * np.cos(Phi)
+    y = R * np.sin(Phi)
+    z = +Z
+    return x, y, z, B, Phi
 
 
 def mirnov_locations():
@@ -290,10 +440,26 @@ def mirnov_locations():
     return HMA_x, HMA_y, HMA_z, pol_array1_x, pol_array1_y, pol_array1_z, pol_array2_x, pol_array2_y, pol_array2_z
 
 
-def plot_vmec(vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi):
-    vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
-    x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1, phi_min = phi_min, phi_max = phi_max)
-    pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+def plot_vmec(vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, vmec_args=None):
+    #vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
+    x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=s_ind, phi_min = phi_min, phi_max = phi_max)
+    vmec_kwargs={'opacity':1.0,'scalars':B,'colormap':'hot','representation':'surface' }
+    if vmec_args!=None: 
+        for i in vmec_args.keys(): vmec_kwargs[i] = vmec_args[i]
+
+    #pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+    pts = mlab.mesh(x[:,:], y[:,:], z[:,:], **vmec_kwargs)
+    return x, y, z, B
+
+def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/boozmn_wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, boozer_args=None):
+    #vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
+    x, y, z, B = extract_BOOZER_surface_data(boozer_filename, s_ind=s_ind, phi_min = phi_min, phi_max = phi_max)
+    boozer_kwargs={'opacity':1.0,'scalars':B,'colormap':'hot','representation':'surface' }
+    if boozer_args!=None: 
+        for i in boozer_args.keys(): boozer_kwargs[i] = boozer_args[i]
+
+    #pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
+    pts = mlab.mesh(x[:,:], y[:,:], z[:,:], **boozer_kwargs)
     return x, y, z, B
 
 def make_plot(phi_min = 0, phi_max = 2.*np.pi):

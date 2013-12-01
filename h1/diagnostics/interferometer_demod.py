@@ -7,7 +7,7 @@ import scipy.optimize as opt
 
 
 class interf_demod(object):
-    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1):
+    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1, chan_list_dig = None, ch_z = None):
         '''Class for demodulating the sinusoidally modulated interferometer
         SRH : 5Nov2013
         '''
@@ -19,6 +19,21 @@ class interf_demod(object):
         self.start_samples = self.start_samples - self.start_samples%(dig_mult)
         print self.start_samples
         self.f_s = self.f_m * self.dig_mult
+
+        tr = MDS.Tree('electr_dens',shot_number)
+        if chan_list_dig==None:
+            self.chan_list_dig = tr.getNode('\electr_dens::top.ne_het:chan_list').data().tolist()
+        else:
+            self.chan_list_dig = chan_list_dig
+        if chan_list_dig==None:
+            self.ch_z = tr.getNode('\electr_dens::top.ne_het:chan_z').data()
+        else:
+            self.ch_z = ch_z
+        if len(self.chan_list_dig)!=len(self.ch_z):
+            raise Exception("chan_list_dig and ch_z are different lengths, each channel needs a z coordinate")
+        top_down_order = (np.argsort(self.ch_z)[::-1]).tolist()
+        self.chan_list_dig_top_down = np.array(self.chan_list_dig)[top_down_order]
+
         self.get_up_to_carriers(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc, eps_method = eps_method, tophat_width_prop = tophat_width_prop)
 
     def get_up_to_carriers(self,force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1):
@@ -35,18 +50,20 @@ class interf_demod(object):
         '''
         T = MDS.Tree('h1data',self.shot_number)
         count = 0
-        self.chan_list = range(21)
+        #self.chan_list = range(21)
         self.rms_pre_shot = []; self.dc_pre_shot = []
         self.rms_full_shot = []; self.dc_full_shot = []
-        for i, chan_num in enumerate(self.chan_list):
-            digi, chan = self.chan_num_to_digi(chan_num)
-            n = T.getNode('.electr_dens.camac.A14_{}.input_{}'.format(digi,chan))
+        for i, chan_loc in enumerate(self.chan_list_dig_top_down):
+            n = T.getNode('.electr_dens.camac.{}'.format(chan_loc))
+            #digi, chan = self.chan_num_to_digi(chan_num)
+            #n = T.getNode('.electr_dens.camac.A14_{}.input_{}'.format(digi,chan))
             signal = n.data()
+            self.orig_signal_length = len(signal)
             if count == 0:
-                keep_length = len(signal) - (len(signal)%self.dig_mult)
-                self.raw_signals = np.zeros((len(self.chan_list), keep_length),dtype = float)
-            self.raw_signals[i,:] = +signal[:keep_length]
-            #signal = signal[:keep_length]
+                self.keep_length = self.orig_signal_length - (self.orig_signal_length%self.dig_mult)
+                self.raw_signals = np.zeros((len(self.chan_list_dig_top_down), self.keep_length),dtype = float)
+            self.raw_signals[i,:] = +signal[:self.keep_length]
+            #signal = signal[:self.keep_length]
             dc, ac_rms = self.calculate_ac_dc(signal, full = 0)
             self.rms_pre_shot.append(ac_rms)
             self.dc_pre_shot.append(dc)
@@ -55,7 +72,7 @@ class interf_demod(object):
             self.dc_full_shot.append(dc)
             #self.rms_pre_shot.append(np.sqrt(1./self.start_samples*np.sum((signal[:self.start_samples]-np.mean(signal[:self.start_samples]))**2)))
             count += 1
-        self.t = np.arange(-self.start_samples, keep_length - self.start_samples) * 1./self.f_s
+        self.t = np.arange(-self.start_samples, self.keep_length - self.start_samples) * 1./self.f_s
 
     def extract_epsilon_sync_signal(self,):
         T = MDS.Tree('h1data',self.shot_number)
@@ -604,7 +621,7 @@ class interf_demod(object):
             self.S = np.dot(self.J_inv, self.h)
             tmp = np.dot(self.J_tile, self.S)
             error_list.append(np.sum((tmp - self.h)**2))
-            print phi1, error_list[-1]
+            #print phi1, error_list[-1]
         self.phi1_min_simul = phi1_list[np.argmin(error_list)]
         self.J[::2,2] = spec.jn(np.arange(0, harms,2), self.phi1_min_simul)
         self.J[1::2,1] = spec.jn(np.arange(1, harms,2), self.phi1_min_simul)
@@ -692,7 +709,7 @@ def compare_linear_sinusoidal(sinusoidal_shot, sinusoidal_freq, sinusoidal_mult,
     inter_obj.extract_mdsplus_data()
     #inter_obj.fft_signal()
     inter_obj.calc_epsilon()
-    inter_obj.calc_carriers_time(force_symmetric = 1, individual_eps_calc = 1)
+    inter_obj.calc_carriers_time(force_symmetric = 1, eps_method = 'using_1st_carrier')
     inter_obj.calc_carriers_time_rfft()
     inter_obj.calc_phi1_means_std(3, 1, plot_fig = False)
 
@@ -753,7 +770,7 @@ def compare_sinusoidal_sinusoidal(sinusoidal1_shot, sinusoidal1_freq, sinusoidal
     inter_obj.extract_mdsplus_data()
     #inter_obj.fft_signal()
     #inter_obj.calc_epsilon()
-    inter_obj.calc_carriers_time(force_symmetric = 1, individual_eps_calc = 1)
+    inter_obj.calc_carriers_time(force_symmetric = 1, eps_method = 'using_1st_carrier')
     inter_obj.calc_carriers_time_rfft()
 
     inter_obj.calc_phi1_means_std(3, 1, plot_fig = False)
@@ -766,7 +783,7 @@ def compare_sinusoidal_sinusoidal(sinusoidal1_shot, sinusoidal1_freq, sinusoidal
     inter_obj2.extract_mdsplus_data()
     #inter_obj2.fft_signal()
     #inter_obj2.calc_epsilon()
-    inter_obj2.calc_carriers_time(force_symmetric = 1, individual_eps_calc = 1)
+    inter_obj2.calc_carriers_time(force_symmetric = 1, eps_method = 'using_1st_carrier')
     inter_obj2.calc_carriers_time_rfft()
     inter_obj2.calc_phi1_means_std(3, 1, plot_fig = False)
 
@@ -792,3 +809,101 @@ def compare_sinusoidal_sinusoidal(sinusoidal1_shot, sinusoidal1_freq, sinusoidal
     ax_big[-1].set_xlim([0,0.1])
     fig_big.subplots_adjust(hspace=0.015, wspace=0.015,left=0.10, bottom=0.10,top=0.95, right=0.95)
     fig_big.canvas.draw(); fig_big.show()
+
+
+def plot_from_MDSplus(shot):
+    fig,ax = pt.subplots()
+    #fig2,ax2 = pt.subplots()
+    #for ch in range(1,22):
+    #colors = ['b','k','r','y','m']
+    #colors.extend(colors)
+    #colors.extend(colors)
+
+    fig_big, ax_big = pt.subplots(nrows=5, ncols = 5, sharex = True, sharey = True); ax_big = ax_big.flatten()
+    tr = MDS.Tree('electr_dens',shot)
+    chan_list_dig = tr.getNode('\electr_dens::top.ne_het:chan_list').data().tolist()
+    ch_z = tr.getNode('\electr_dens::top.ne_het:chan_z').data()
+    top_down_order = (np.argsort(ch_z)[::-1]).tolist()
+    #for i, ch in enumerate(range(12,22,1)):
+    for i, ch in enumerate(top_down_order):
+        print i,ch
+        n = tr.getNode('\electr_dens::top.ne_het:ne_{}'.format(ch+1))
+        sig = n.data()
+        if i==0:
+            output_data = np.zeros((len(top_down_order),len(sig)),dtype=float)
+            t = n.dim_of().data()
+            #t = np.arange(len(sig))
+        output_data[i,:] = +sig
+    im =ax.imshow(output_data,interpolation = 'nearest', aspect='auto',cmap = 'hot', extent=[t[0],t[-1],output_data.shape[0],0], origin = 'upper')
+    im.set_clim([0,2.5])
+    fig.canvas.draw(); fig.show()
+    #fig_big.subplots_adjust(hspace=0.015, wspace=0.015,left=0.10, bottom=0.10,top=0.95, right=0.95)
+    #fig_big.canvas.draw(); fig.show()
+
+
+def put_data_MDSplus(shot, f_m, dig_mult):
+    count = 0
+    plots=0  # number of plots shown at beginning
+    try:
+        tr = MDS.Tree('electr_dens',shot)
+        chnd = tr.getNode('\electr_dens::top.ne_het:chan_list')
+        chan_list = chnd.data()
+        ch_z_nd = tr.getNode('\electr_dens::top.ne_het:chan_z')
+        ch_z = ch_z_nd.data()
+
+        #Get the data
+        inter_obj = interf_demod(shot, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 0, eps_method = 'using_1st_carrier', tophat_width_prop = 1)
+
+        clim = [0,5]
+        inter_obj.calculate_phase_phi_simul(use_rfft = 0, clim = [0,5], show_fig = 0)
+        inter_obj.calculate_phase(inter_obj.phi1_min_simul, 1, 2, clim=clim, show_fig = 0)
+        #inter_obj.calculate_phase_simul(inter_obj.phi1_min_simul, clim=clim, show_fig = 0)
+        chan_list = inter_obj.chan_list_dig
+        chan_list_dig_top_down = inter_obj.chan_list_dig_top_down.tolist()
+        for (n,ch) in enumerate(chan_list): 
+            nd=tr.getNode('\electr_dens::top.camac:'+ch);
+            phs = np.zeros((inter_obj.orig_signal_length,), dtype=float)
+            #sig=nd.data() 
+            #t_raw=nd.dim_of().data()
+            #(sgn, bw) = (1, .8)
+            #acrms = np.sqrt(sig.var())
+            #if acrms<0.02: 
+            #    continue
+            #elif acrms<0.03: 
+            #    bw = .1
+
+            #phs = sgn*extract_phase(None, sig=sig,t_raw=t_raw,
+            #                        f=5e3,bw=bw,plot=0)
+            index = chan_list_dig_top_down.index(ch)
+            #print n, ch, index, chan_list_dig_top_down[index]
+            
+            phs[:inter_obj.keep_length] = inter_obj.output[index,:]
+            if np.mean(phs)<0: 
+                print 'correcting sign'
+                phs = -1.*phs
+            #dim = Dimension(Window(startIdx[chan], endIdx[chan], trigTime), Range(None, None, clockPeriod))
+            startIdx=tr.getNode('\electr_dens::top.camac:{}:startidx'.format(ch)).data()
+            trigTime = tr.getNode('\electr_dens::top.camac:{}:stop_trig'.format(ch.split(':')[0])).data()
+            try:
+                endIdx = tr.getNode('\electr_dens::top.camac:{}:endidx'.format(ch)).data()
+            except MDS.TdiException, e:
+                #print e
+                pts = tr.getNode('\electr_dens::top.camac:{}:pts'.format(ch.split(':')[0])).data()
+                endIdx = pts - startIdx - 1
+            Range = tr.getNode('\electr_dens::top.camac:{}:ext_clock_in'.format(ch.split(':')[0])).evaluate()
+            win = MDS.Window(startIdx, endIdx, trigTime)
+            dim = MDS.Dimension(win, Range)
+            convExpr = MDS.Data.compile("0.35*$VALUE")
+            convExpr.setUnits("1e18/m-3")
+            pnode = tr.getNode('\electr_dens::top.ne_het:ne_'+str(n+1))
+            rawMdsData = MDS.Float32Array(phs)
+            rawMdsData.setUnits("rad")
+            signal = MDS.Signal(convExpr, rawMdsData, dim)
+            pnode.putData(signal)
+            if n==0:
+                centrenode = tr.getNode('\electr_dens::top.ne_het:ne_centre')
+                centrenode.putData(signal)
+    except Exception, reason:
+        print('Exception on shot {s}, "{r}"'.format(s=shot,r=reason))
+
+

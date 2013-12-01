@@ -114,6 +114,7 @@ class GeneralSurface():
 
 class TFC(GeneralSurface):
     def __init__(self, **kwargs):
+        print kwargs
         self.x_array, self.y_array, self.z_array = h1_plot.tfc_points(**kwargs)
         self.edges, self.pts_per_edge = self.x_array.shape
         self.create_triangular_mesh()
@@ -121,11 +122,11 @@ class TFC(GeneralSurface):
     def plot(self,):
         import mayavi.mlab as mlab
         mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces, color=(0.5,0.5,0.5))
-        mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces,representation='wireframe',color=(0,0,0))
+        mlab.triangular_mesh(self.vertices[:,0], self.vertices[:,1], self.vertices[:,2],self.faces,representation='wireframe',color=(1,0,0))
 
 
 class BoozerSurfacePatch(GeneralSurface):
-    def __init__(self, phi_min, phi_max, n_phi = 10, no_theta = 50, boozer_filename = None, boozer_object = None):
+    def __init__(self, phi_min, phi_max, n_phi = 10, no_theta = 50, boozer_filename = None, boozer_object = None, s_ind=-1):
         '''
         This creates a last closed surface mesh between phi_min and
         phi_max. It performs some calculations to make the LOS
@@ -143,6 +144,7 @@ class BoozerSurfacePatch(GeneralSurface):
         self.phi_max = phi_max
         self.n_phi = n_phi
         self.no_theta = no_theta
+        self.s_ind = [s_ind]
         if boozer_object==None and boozer_filename!=None:
             print(boozer_filename)
             boozer_object = BOOZER.BOOZER(boozer_filename,import_all=True,compute_spline_type=0,load_spline=False,save_spline=False,load_grid=False)
@@ -170,7 +172,7 @@ class BoozerSurfacePatch(GeneralSurface):
         self.z_array= +self.x_array
         for i, phi_val in enumerate(self.phi_vals):
             phi_val = phi_val / 180.*np.pi
-            cross_sect_cyl2, cross_sect_booz2 = self.boozer_object.getCrossSectData(phi_val, s_b=None, s_ind=[-1],no_theta=self.no_theta, phi_is_cyl=False, coordsys='cart', return_booz_also=1)
+            cross_sect_cyl2, cross_sect_booz2 = self.boozer_object.getCrossSectData(phi_val, s_b=None, s_ind=self.s_ind,no_theta=self.no_theta, phi_is_cyl=False, coordsys='cart', return_booz_also=1)
             self.x_array[i,:] = cross_sect_cyl2[:,0,:].flatten()
             self.y_array[i,:] = cross_sect_cyl2[:,1,:].flatten()
             self.z_array[i,:] = cross_sect_cyl2[:,2,:].flatten()
@@ -349,7 +351,7 @@ class LOS():
     def __init__(self,):
         pass
 
-    def input_data(self, CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = None, w_hat = None, CCD_focal_point = None):
+    def input_data(self, CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = None, w_hat = None, CCD_focal_point = None, get_intersections = True):
         '''
         CCD_position : location of the centre of the CCD in cart coords (m)
         CCD_x, CCD_y : length and width of the CCD in (m)
@@ -381,8 +383,9 @@ class LOS():
             self.v_hat = np.cross(self.w_hat, self.u_hat)
         self.focal_point = self.f*self.w_hat + self.CCD_position
         self.calc_point1_gradient()
-        self.patch = patch
-        self.find_intersections()
+        if get_intersections:
+            self.patch = patch
+            self.find_intersections()
 
     def calc_point1_gradient(self,):
         self.LOS_point = np.zeros((self.CCD_pixels_y, self.CCD_pixels_x, 3),dtype=float)
@@ -390,7 +393,7 @@ class LOS():
         for pixel_y in range(self.CCD_pixels_y):
             for pixel_x in range(self.CCD_pixels_x):
                 #print pixel_y,pixel_x
-                self.LOS_point[pixel_y, pixel_x, :] = (float(pixel_x)/self.CCD_pixels_x - 0.5) * self.CCD_width * self.v_hat + (-float(pixel_y)/self.CCD_pixels_y + 0.5) * self.CCD_length * self.u_hat + self.CCD_position
+                self.LOS_point[pixel_y, pixel_x, :] = ((float(pixel_x)+0.5)/self.CCD_pixels_x - 0.5) * self.CCD_width * self.v_hat + (-((float(pixel_y)+0.5)/self.CCD_pixels_y) + 0.5) * self.CCD_length * self.u_hat + self.CCD_position
                 self.LOS_gradient[pixel_y, pixel_x, :] = self.focal_point - self.LOS_point[pixel_y, pixel_x, :]
 
     def find_intersections(self,):
@@ -423,7 +426,7 @@ class LOS():
         return tmp1, R[tmp1]
 
 
-    def find_intersections_TFC(self,tfc_kwargs, plot_first_intersection = 0, plot_tfc = 0):
+    def find_intersections_TFC(self, tfc_kwargs, plot_first_intersection = 0, plot_tfc = 0):
         '''Find the intersection of the LOS with TFC's and remove the
         channels where this occurs tfc_coil_number : which TFC...
 
@@ -631,7 +634,8 @@ class LOS():
         interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
         self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
 
-    def plot_boozer_LOS(self,y_vals = None, x_vals = None):
+    def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1):
+
         mask = np.zeros(self.valid_channels.shape,dtype=bool)
         if y_vals == None and x_vals == None:
             mask = self.valid_channels
@@ -643,11 +647,41 @@ class LOS():
             mask[:,x_vals] = True
         else:
             raise ValueError('some problem! y_vals and x_vals must an integer or None')
+        print np.sum(mask)
         mask *= self.valid_channels
-        fig, ax = pt.subplots(ncols = 3)
-        ax[0].plot(self.interp_boozer[mask,:,0].T)
-        ax[1].plot(self.interp_boozer[mask,:,1].T)
-        ax[2].plot(self.interp_boozer[mask,:,2].T)
+        print np.sum(mask)
+        fig, ax = pt.subplots(nrows = 3, sharex=True)
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig.set_figwidth(8.48*cm_to_inch)
+            fig.set_figheight(8.48*1.5*cm_to_inch)
+        #for i in range(len(mask))
+        x_axis = np.arange(self.interp_boozer.shape[2],dtype=float)/self.interp_boozer.shape[2] * 100.
+        colour_list = ['b-','k-.','r--']
+        for i,style in zip(range(n_ims), colour_list):
+            mask2 = np.zeros(mask.shape, dtype=bool)
+            print i, style, i*self.CCD_pixels_y, (i+1)*self.CCD_pixels_y, n_ims
+            mask2[i*self.CCD_pixels_y/n_ims:(i+1)*self.CCD_pixels_y/n_ims,:] = True
+            print np.sum(mask2)
+            ax[0].plot(x_axis, self.interp_boozer[mask*mask2,:,0].T, style, linewidth=0.6)
+            ax[1].plot(x_axis, self.interp_boozer[mask*mask2,:,1].T, style, linewidth=0.6)
+            ax[2].plot(x_axis, self.interp_boozer[mask*mask2,:,2].T, style, linewidth=0.6)
+        ax[2].set_xlabel('Prop of Distance along line of sight (%)')
+        ax[0].set_ylabel('s')
+        ax[1].set_ylabel(r'$\theta_b$ (rad)')
+        ax[2].set_ylabel(r'$\phi_b$ (rad)')
+        ax[2].set_xlabel('Prop of Distance along line of sight (%)')
+        if save_fig!=None:
+            fig.tight_layout()
+            fig.savefig(save_fig)
         fig.canvas.draw(); fig.show()
 
 
@@ -719,19 +753,46 @@ class LOS():
         #return mesh
         mlab.triangular_mesh(points_corner[:,0], points_corner[:,1], points_corner[:,2],triangles, representation='wireframe',color=(0,0,0))
         mlab.triangular_mesh(points_corner[:,0], points_corner[:,1], points_corner[:,2],triangles, color=(0.0,0.0,1), opacity=0.2)
+        print points_corner
 
-    def orient_camera(self,mayavi_fig,render=1):
+    def orient_camera(self,mayavi_fig,render=1, manual = False, CCD_phi = None, CCD_z = None, CCD_R = None, elevation_angle=None, f=None, elevation = 0):
         '''
         Orient the mayavi camera to the location of the actual camera
         Pass the mayavi figure
 
         SRH: 12July2013
         '''
+        from mayavi import mlab
+        #mlab.points3d([self.focal_point[0]],[self.focal_point[1]], [self.focal_point[2]],scale_factor = 0.02, mode='2dcross')
+        #mlab.points3d([0],[0], [self.focal_point[2]],scale_factor = 0.02, mode='2dcross')
+        if manual:
+            CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
+            CCD_position = np.array([CCD_x, CCD_y, CCD_z])
+            CCD_position = CCD_position + np.array([0,0,elevation])
+            w_hat = -np.array([CCD_x, CCD_y, 0])
+            w_hat = w_hat / np.sqrt(np.sum(w_hat**2))
+            print w_hat
+            w_hat = w_hat * np.cos(np.deg2rad(elevation_angle)) + np.array([0,0,-np.sin(np.deg2rad(elevation_angle))])
+            focal_point = f*w_hat + CCD_position
+            print CCD_position
+            print self.CCD_position
+            print focal_point
+            print self.focal_point
+        else:
+            CCD_position = self.CCD_position
+            focal_point = self.focal_point
+            f = self.f
         cam = mayavi_fig.scene.camera
         ren = mayavi_fig.scene.renderer
-        cam.view_angle=np.rad2deg(np.arctan2(self.CCD_width/2,self.f))*2
-        cam.position = self.CCD_position
-        cam.focal_point = self.focal_point
+        mayavi_fig.scene.set_size((1024,1024))
+        cam.view_angle=np.rad2deg(np.arctan2(self.CCD_width/2,f))*2
+        tmp_position = np.array([CCD_position[0], CCD_position[1], CCD_position[2]])
+
+        tmp_focal = np.array([focal_point[0], focal_point[1], focal_point[2]])
+        cam.position = tmp_position#self.CCD_position
+        cam.focal_point = tmp_focal#self.focal_point
+        #mlab.roll(90)
+        #cam.view_angle = 0.
         cam.compute_view_plane_normal()
         ren.reset_camera_clipping_range()
         if render:
@@ -740,7 +801,7 @@ class LOS():
 
 
 
-def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575):
+def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True):
     '''Convenience function containing the required geometry for the
     imax camera
 
@@ -783,9 +844,12 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     elif measurements=='pimax4':
         print 'pimax4'
         CCD_phi = 120.; CCD_R = 1.946
-        CCD_R = 1.1475+0.963+0.0175 
+        CCD_R = 1.99
+        CCD_phi = 119.95; CCD_R=1.97
+        #CCD_R = 1.1475+0.963+0.0175 #2.128m
         CCD_z = 7.0/100; 
         CCD_z = 8.0/100;
+        CCD_z = 5.0/100;
         CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
         CCD_position = np.array([CCD_x, CCD_y, CCD_z])
 
@@ -811,6 +875,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
         #CCD_focal_distance = 13/1000.
         CCD_focal_distance = 17.3/1000.
+        CCD_focal_distance = 17.0/1000.
 
     else:
         print 'default'
@@ -851,21 +916,23 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     CCD_pixels_x = n_pixels_x/decimate_pixel; CCD_pixels_y = n_pixels_y/decimate_pixel
     phi_min =CCD_phi - phi_range; phi_max = CCD_phi + phi_range;no_theta = no_theta
     plot_length = 50
-    if patch_object != None:
-        print('using the patch object...')
-        patch = patch_object
-    elif patch_pickle == None:
-        print('Generating patch surface...')
-        patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
+    if get_intersections:
+        if patch_object != None:
+            print('using the patch object...')
+            patch = patch_object
+        elif patch_pickle == None:
+            print('Generating patch surface...')
+            patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=s_ind)
+        else:
+            print('Loading patch surface from pickle file...')
+            patch = pickle.load(file(patch_pickle,'r'))
     else:
-        print('Loading patch surface from pickle file...')
-        patch = pickle.load(file(patch_pickle,'r'))
-
+        patch = None
     print CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y
 
 
     answer = LOS()
-    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
+    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None, get_intersections = get_intersections)
 
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
@@ -914,7 +981,7 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
 
 def plot_imax_mask(LOS_object, shot_number = 71235, cal_file=None, image_array=None, cut_values = None):
     if cut_values==None:
-        cut_values=[32]
+        cut_values=[LOS_object.valid_channels.shape[1]/2]
     fig, ax = pt.subplots(ncols = 4)
     #fig, ax = pt.subplots(ncols = 4, sharex = True , sharey = True)
     if image_array != None:

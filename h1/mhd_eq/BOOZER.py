@@ -2393,6 +2393,62 @@ array([[ 1.        ,  0.73919827,  6.28318531],
 
         return(numpy.array(points))
 
+
+
+
+
+    def getFieldLine(self, s_ind, theta_b_start = 0, no_cycles=1, pts_per_cycle=1000): 
+        """
+        Calculate field line coordinates in realspace
+        Currently does not work!!! Need to figure out why
+        SRH: 21Nov2013
+
+        
+        INPUT:
+          phi_ ...... Boozer toroidal angle in rad
+          s_ind ...... int for surface index
+          theta_b_start ... starting theta_boozer value of the field line at phi_b=0
+          no_cycles .... number of revolutions around H1
+          pts_per_cycle .... number of points in each cycle
+
+        RETURN:
+          X, Y, Z ... coordinates
+
+        """
+        # s_ind should be an array (or array like)
+        #phi_b = numpy.mod(phi_b,PI2)
+        #theta = numpy.linspace(0, PI2, no_theta, endpoint=True)
+        phi_b = numpy.linspace(0,2.*numpy.pi*no_cycles,pts_per_cycle*no_cycles)
+        print len(phi_b), numpy.max(phi_b)
+
+        #theta = phi_b
+        #theta = numpy.linspace(theta_s, theta_e, no_theta, endpoint=True)
+        a = self.phi_b_fact
+        theta_b = phi_b * self.iota_b[s_ind]+theta_b_start
+        theta_b = numpy.mod(theta_b, PI2)
+        phi_b = numpy.mod(phi_b, PI2)
+        no_theta = len(theta_b)
+        i=s_ind
+        rmnc = self.rmnc_b[s_ind]
+        zmns = self.zmns_b[s_ind]
+        pmns = self.pmns_b[s_ind]
+
+        r_c = numpy.zeros(no_theta)
+        p_c = numpy.zeros(no_theta)
+        z_c = numpy.zeros(no_theta)
+        for (i,thet, phi) in zip(range(no_theta),theta_b,phi_b):
+            argv = self.ixm_b*thet + self.kernelSign*self.ixn_b*phi
+            cosv = numpy.cos(argv)
+            sinv = numpy.sin(argv)
+            r_c[i] = numpy.sum(rmnc*cosv)
+            p_c[i] = phi + a*numpy.sum(pmns*sinv)
+            z_c[i] = numpy.sum(zmns*sinv)
+
+        X = r_c * numpy.cos(p_c)
+        Y = r_c * numpy.sin(p_c)
+        Z = z_c
+        return X, Y, Z
+
     ##### plotting end #####
 
 

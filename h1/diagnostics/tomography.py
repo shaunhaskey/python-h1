@@ -47,9 +47,15 @@ class Tomography():
 
 
     def plot_reprojection_comparison(self, n, m, LOS_object, cut_values = None, multiplier = 1., pub_fig = 1):
+        '''This function is for making publication images comparing
+        the reprojection
+
+        SRH:29Nov2013 
+        '''
         if cut_values == None:
             cut_values = [33]
             cut_values = [130]
+            cut_values=[LOS_object.valid_channels.shape[1]/2]
         if n.__class__ == int:
             n = [n]
             m = [m]
@@ -108,10 +114,10 @@ class Tomography():
         ax2[1,2].set_xlim([-np.pi,np.pi])
         center = self.valid_channels.shape[1]/2
         edge = center/2.
-        ax2[0,0].set_xlim([center-edge,center+edge])
-        ax2[0,1].set_xlim([center-edge,center+edge])
-        ax2[1,0].set_xlim([center-edge,center+edge])
-        ax2[1,1].set_xlim([center-edge,center+edge])
+        ax2[0,0].set_xlim([center+edge, center-edge])
+        ax2[0,1].set_xlim([center+edge,center-edge])
+        ax2[1,0].set_xlim([center+edge, center-edge])
+        ax2[1,1].set_xlim([center+edge, center-edge])
         ax2[0,2].set_ylim([0,self.valid_channels.shape[0]])
         #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
         #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
@@ -131,7 +137,7 @@ class Tomography():
 
     def plot_lots_of_things(self, n, m, LOS_object, cut_values = None, multiplier = 1.):
         if cut_values == None:
-            cut_values = [33]
+            cut_values=[LOS_object.valid_channels.shape[1]/2]
         if n.__class__ == int:
             n = [n]
             m = [m]
@@ -224,12 +230,32 @@ class Tomography():
         fig.suptitle('{} top row : s, theta, phi; bottom row : abs, phase, real'.format(self.method))
         fig.canvas.draw(); fig.show()
 
-    def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10):
+    def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10, inc_cbar=0, pub_fig = False, save_fig = None, inc_profile=False):
         #Get the boozer locations to interpolate
         if n.__class__ == int:
             n = [n]
             m = [m]
-        fig, ax = pt.subplots()
+        if inc_profile:
+            fig = pt.figure()
+            ax = []
+            ax.append(pt.subplot2grid((4,1), (0,0), rowspan=2))
+            ax.append(pt.subplot2grid((4,1), (2,0)))
+            ax.append(pt.subplot2grid((4,1), (3,0)))
+        else:
+            fig, ax = pt.subplots()
+            ax = [ax]
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig.set_figwidth(8.48*cm_to_inch)
+            fig.set_figheight(8.48*1.6*cm_to_inch)
         s_vals = (s_values[1:]+s_values[0:-1])/2
         wave_field = 0
         start = 0; increment = len(self.T)/len(n)
@@ -241,11 +267,48 @@ class Tomography():
             start = +end
         t = np.linspace(0,2.*np.pi,n_images,endpoint=False)
         image_list = []
+        image_extent = [LOS_object.r_grid[0,0], LOS_object.r_grid[0,-1], LOS_object.z_grid[0,0], LOS_object.z_grid[-1,0]]
         for i, t_cur in enumerate(t):
             wave_field_tmp = wave_field * np.exp(1j*t_cur)
-            ax.imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest')
+            im = ax[0].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto')
+            tmp = im.get_clim()
+            max_val = np.max(np.abs(tmp))
+            im.set_clim([-max_val, max_val])
+            if inc_cbar and i==0:
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+                divider = make_axes_locatable(ax[0])
+                cax = divider.append_axes("right", size="10%", pad=0.05)
+                cbar = pt.colorbar(im, cax=cax)
+                cbar.set_label('Wave Amplitude (a.u)')
+            if i==0:
+                ax[0].set_xlabel('R (m)')
+                ax[0].set_ylabel('Z (m)')
+                if inc_profile:
+                    start = 0
+                    for n_cur, m_cur in zip(n,m):
+                        end = start + increment
+                        cur_T = self.T[start:end]
+                        start = +end
+                        ax[1].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='{},{}'.format(n_cur, m_cur))
+                        ax[2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
+                    ax[1].legend(loc='best')
+                    ax[1].set_xlim([0,1])
+                    ax[2].set_xlim([0,1])
+                    ax[2].set_ylabel('Phase (rad)')
+                    ax[1].set_ylabel('Amplitude (a.u)')
+                    ax[2].set_xlabel('s')
+                    ax[2].set_ylim([-np.pi,np.pi])
+                if save_fig!=None:
+                    xticks = ax[0].xaxis.get_major_ticks()
+                    print xticks, len(xticks), range(0,len(xticks),3)
+                    for tmp_tick in range(0,len(xticks),2):
+                        print tmp_tick
+                        xticks[tmp_tick].label1.set_visible(False)
+                    fig.tight_layout()
+                    fig.savefig(save_fig)
             fig.canvas.draw(); fig.show()
             fig.savefig('{:02d}.png'.format(i))
+
             image_list.append('{:02d}.png'.format(i))
         if save_name!=None:
             image_string = ''
