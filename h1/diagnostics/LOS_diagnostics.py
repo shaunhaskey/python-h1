@@ -351,7 +351,7 @@ class LOS():
     def __init__(self,):
         pass
 
-    def input_data(self, CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = None, w_hat = None, CCD_focal_point = None, get_intersections = True):
+    def input_data(self, CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = None, w_hat = None, CCD_focal_point = None, get_intersections = True, min_pixel=None, max_pixel=None):
         '''
         CCD_position : location of the centre of the CCD in cart coords (m)
         CCD_x, CCD_y : length and width of the CCD in (m)
@@ -375,6 +375,15 @@ class LOS():
         self.u_hat = u_hat
         self.CCD_pixels_x = CCD_pixels_x
         self.CCD_pixels_y = CCD_pixels_y
+        if min_pixel==None: 
+            self.min_pixel = 0
+        else:
+            self.min_pixel = min_pixel
+        
+        if max_pixel==None: 
+            self.max_pixel = CCD_pixels_x
+        else:
+            self.max_pixel = max_pixel
         #u hat - verical direction on CCD
         if w_hat == None:
             self.v_hat = v_hat
@@ -405,7 +414,8 @@ class LOS():
         self.intersection1 = self.LOS_point * 0
         self.intersection2 = self.LOS_point * 0
         for pixel_y in range(self.CCD_pixels_y):
-            for pixel_x in range(self.CCD_pixels_x):
+            #for pixel_x in range(self.CCD_pixels_x):
+            for pixel_x in range(self.min_pixel, self.max_pixel):
                 P0 = self.LOS_point[pixel_y, pixel_x, :]
                 dP = self.LOS_gradient[pixel_y, pixel_x, :]
                 t, R, tmp1 = self.patch.find_intersections(P0, dP)
@@ -799,9 +809,7 @@ class LOS():
             mayavi_fig.scene.render()
 
 
-
-
-def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True):
+def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True, min_pixel=None, max_pixel=None, plot_LOS_lines = False):
     '''Convenience function containing the required geometry for the
     imax camera
 
@@ -915,7 +923,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     CCD_x = CCD_L; CCD_y = CCD_L
     CCD_pixels_x = n_pixels_x/decimate_pixel; CCD_pixels_y = n_pixels_y/decimate_pixel
     phi_min =CCD_phi - phi_range; phi_max = CCD_phi + phi_range;no_theta = no_theta
-    plot_length = 50
+    plot_length = 75
     if get_intersections:
         if patch_object != None:
             print('using the patch object...')
@@ -932,7 +940,9 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
 
     answer = LOS()
-    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None, get_intersections = get_intersections)
+    if min_pixel==None: min_pixel=0
+    if max_pixel==None: max_pixel=CCD_pixels_x
+    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None, get_intersections = get_intersections, min_pixel = min_pixel, max_pixel=max_pixel)
 
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
@@ -941,7 +951,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         if plot_pfc : h1_plot.plot_pfc()
         if plot_tfc : h1_plot.plot_tfc([11,12,13])
         if plot_intersections : answer.plot_intersections()
-        if plot_LOS : answer.plot_LOS(grad_mult = plot_length,plot_arguments={'color':(0,1,1), 'line_width':2.5})
+        if plot_LOS : answer.plot_LOS(grad_mult = plot_length,plot_arguments={'color':(0,1,1), 'line_width':2.5}, plot_lines = plot_LOS_lines)
     return answer
 
 

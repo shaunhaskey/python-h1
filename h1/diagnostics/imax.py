@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as pt
 import h1.diagnostics.winspec as winspec
 import h1.diagnostics.SPE_reader as SPE_reader
+import copy
 class ImaxData():
     def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=0, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images', flipud=0, fliplr=0, rot90=0):
         self.shot_list = shot_list
@@ -55,6 +56,216 @@ class ImaxData():
             self.amp_std = self.phase_average * 0
             self.electron_dens = self.phase_average * 0 + 1
         if plot_data: self.plot_images()
+
+    def plot_fourier_harmonics_pub(self,pub_fig = 0, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None,n_harmonics =3):
+        fig,ax = pt.subplots(nrows=n_harmonics,ncols=2)
+        if n_harmonics == 1: ax = ax[np.newaxis,:]
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=300
+            fig.set_figwidth(8.48*cm_to_inch)
+            fig.set_figheight((8.48*(0.5*n_harmonics)+0.1)*cm_to_inch)
+        amp_im_list = []
+        phase_im_list = []
+        for i in range(n_harmonics):
+            if fliplr:
+                tmp = np.fliplr(self.fft_values[i+1,:,:])
+            else:
+                tmp = self.fft_values[i,:,:]
+            amp_im_list.append(ax[i,0].imshow(np.abs(tmp)*2, interpolation = 'nearest', aspect = 'auto',origin='lower',cmap='spectral'))  
+            ax[i,0].set_ylabel('harmonic {}'.format(i+1))
+            phase_im_list.append(ax[i,1].imshow(np.angle(tmp), interpolation = 'nearest', aspect = 'auto',origin='lower',cmap='RdBu'))
+            phase_im_list[-1].set_clim([-np.pi,np.pi])
+            if i==0:
+                clim = np.array(amp_im_list[-1].get_clim())
+            else:
+                tmp_clim = np.array(amp_im_list[-1].get_clim())
+                if tmp_clim[0]<clim[0]: clim[0]=tmp_clim[0]
+                if tmp_clim[1]>clim[1]: clim[1]=tmp_clim[1]
+
+        for i in amp_im_list:i.set_clim(clim)
+        fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        tmp1 = [ax[i,0] for i in range(n_harmonics)]
+        tmp2 = [ax[i,1] for i in range(n_harmonics)]
+        amp_cbar = pt.colorbar(amp_im_list[-1],ax = tmp1, orientation='horizontal',pad=0.01)
+        phase_cbar = pt.colorbar(phase_im_list[-1],ax = tmp2, orientation='horizontal',pad=0.01)
+        amp_cbar.set_label('Amplitude (a.u)')
+        phase_cbar.set_label('Phase (rad)')
+        clim_cur = amp_im_list[-1].get_clim()
+        amp_cbar.set_ticks(np.round(np.linspace(clim_cur[0],clim_cur[1],5),1)[0:-1])
+        clim_cur = [-np.pi,np.pi]
+        phase_cbar.set_ticks(np.round(np.linspace(clim_cur[0],clim_cur[1],5),1)[0:])
+        phase_cbar.ax.tick_params(labelsize=7) 
+        amp_cbar.ax.tick_params(labelsize=7) 
+        for j in ax.flatten():
+            xticks = j.xaxis.get_major_ticks()
+            yticks = j.yaxis.get_major_ticks()
+            for jj in xticks: jj.label1.set_visible(False)
+            for jj in yticks: jj.label1.set_visible(False)
+        # if plot_amps:
+        #     for i in range(2,len(im_list)):im_list[i].set_clim(im_list[1].get_clim())
+        #     ax[-1].set_xlim([0,self.fft_values.shape[1]])
+        #     ax[-1].set_ylim([0,self.fft_values.shape[2]])
+        #     fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+        #     if draw:
+        #         fig.suptitle('Fourier amplitude (color range 0, 0.5)')
+        #         fig.canvas.draw(); fig.show()
+        #     #fig.savefig('imax_Fourier_amplitude.png')
+        # if plot_phases:
+        #     fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+        #     if draw:
+        #         fig2.suptitle('Fourier phase (color range -pi,pi)')
+        #         fig2.canvas.draw(); fig2.show()
+
+        if save_fig!=None:
+            fig.savefig(save_fig, bbox_inches='tight',pad_inches=0.05)
+        fig.canvas.draw(); fig.show()
+
+
+    def plot_images_subset(self,cal=0, pub_fig = 0, image_indices = None, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None):
+        fig = pt.figure()
+        if image_indices==None:
+            image_indices = [0,2,4,6,8,10,12,14]
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=300
+            fig.set_figwidth(8.48*cm_to_inch)
+            fig.set_figheight(8.48*1.7*cm_to_inch)
+
+        if cal==0: 
+            print 'Uncalibrated images'
+            plot_array = self.image_array
+        else:
+            print 'Calibrated images'
+            plot_array = self.image_array_cal
+        ax = []; im_list = []
+        rows = len(image_indices)/2+1
+        row = 0; col = 0
+        for i,index in enumerate(image_indices):
+            print row, col
+            if i==0:
+                ax.append(pt.subplot2grid((rows,2), (row,col)))
+            else:
+                ax.append(pt.subplot2grid((rows,2), (row,col), sharex=ax[0],sharey=ax[0]))
+            if col==0:
+                col+=1
+            else:
+                col = 0
+                row += 1
+        #ax.append(pt.subplot2grid((rows,2), (0,1), sharex=ax[0],sharey=ax[0]))
+        #ax.append(pt.subplot2grid((rows,2), (1,0), sharex=ax[0],sharey=ax[0]))
+        #ax.append(pt.subplot2grid((rows,2), (1,1), sharex=ax[0],sharey=ax[0]))
+        ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=2)
+        #ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=1)
+        
+        for i, index in enumerate(image_indices):
+            if fliplr:
+                tmp = np.fliplr(plot_array[index,:,:])
+            else:
+                tmp = plot_array[index,:,:]
+            im_list.append(ax[i].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower', cmap = 'spectral'))
+            if i==0:
+                clim = np.array(im_list[-1].get_clim())
+            else:
+                tmp_clim = np.array(im_list[-1].get_clim())
+                if tmp_clim[0]<clim[0]: clim[0]=tmp_clim[0]
+                if tmp_clim[1]>clim[1]: clim[1]=tmp_clim[1]
+            ax[i].set_ylabel('frame {}'.format(index))
+        for i in im_list: i.set_clim(clim)
+        #for i in im_list: i.set_clim([3.7,4.4])
+        plot_locs = [[120,150], [140,70]]
+        periods = 5
+        for i in plot_locs:
+            single_line = []
+            for j in range(plot_array.shape[0]):
+                if fliplr:
+                    single_line.append(np.fliplr(plot_array[j,:,:])[i[1],i[0]])
+                else:
+                    single_line.append(plot_array[j,i[1],i[0]])
+            orig_single_line = copy.deepcopy(single_line)
+            for jjj in range(periods-1):
+                single_line.extend(orig_single_line)
+            ax2.plot(range(16*periods),single_line,'.-')
+            #ax2.plot(np.arange(16)+16,single_line,'b.-')
+            #ax2.plot(range(16),plot_array[:,i[0],i[1]],'o-')
+            #ax2.plot(np.arange(16)+16,plot_array[:,i[0],i[1]],'o-')
+            for j in ax:
+                j.plot(i[0],i[1], 'kx')
+        ax2.set_xlim([0,16*periods-1])
+        ymin, ymax = ax2.get_ylim()
+        ax2.vlines(np.arange(0,periods*16,16),ymin,ymax)
+        for j in ax:
+            xticks = j.xaxis.get_major_ticks()
+            yticks = j.yaxis.get_major_ticks()
+            for jj in xticks: jj.label1.set_visible(False)
+            for jj in yticks: jj.label1.set_visible(False)
+            j.set_xlim([0,256])
+            j.set_ylim([0,256])
+        ax2.set_xlabel('frame number (or time)')
+        ax2.set_ylabel('pixel intensity')
+        ax2.grid()
+        if save_fig!=None:
+            fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            fig.tight_layout()
+            fig.savefig(save_fig)
+        fig.canvas.draw(); fig.show()
+
+        
+        # n_subplots = plot_array.shape[0]
+        # n_cols = int(np.ceil(n_subplots**0.5))
+        # if n_subplots/float(n_cols)>n_subplots/n_cols:
+        #     n_rows = n_subplots/n_cols + 1
+        # else:
+        #     n_rows = n_subplots/n_cols
+        # if fig==None or ax==None:
+        #     fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey=True);
+        # if n_rows == 1 and n_cols == 1: ax = np.array([ax])
+        # ax = ax.flatten()
+        # im_list = []
+        # for i in range(n_subplots):
+        #     if fliplr:
+        #         tmp = np.fliplr(plot_array[i,:,:])
+        #     else:
+        #         tmp = plot_array[i,:,:]
+        #     im_list.append(ax[i].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower'))
+        #     print np.sum(plot_array[i,:,:])
+        # if clim==None: 
+        #     print('Using fixed clim')
+        #     clim = [247,65535]
+        # elif clim.__class__==int:
+        #     print('Using first image clim')
+        #     clim = im_list[clim].get_clim()
+        # print clim
+        # for i in im_list:i.set_clim(clim)
+        # ylim, xlim = plot_array[0,:,:].shape
+        # ax[-1].set_xlim([0,xlim])
+        # ax[-1].set_ylim([0,ylim])
+        # fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
+        # if cal==0:
+        #     title = 'Raw Images'
+        # else:
+        #     title = 'Cal Images'
+        # #fig.suptitle(title)
+        # if savefig:
+        #     fig.savefig(savefig)
+        #     fig.clf()
+        # elif draw_show:
+        #     fig.canvas.draw(); fig.show()
+
 
     def plot_images(self,cal=0, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1):
         if cal==0: 

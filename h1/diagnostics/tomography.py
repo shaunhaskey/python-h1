@@ -611,6 +611,58 @@ def calculate_inverse_matrix2(LOS_obj, n_segments, s_min =0., s_max = 1.,n_list=
     return geom_mat_comb, pixel_list, segments
 
 
+def calculate_inverse_matrix_sep_images(LOS_obj, n_segments, s_min =0., s_max = 1.,n=None, m=None, interp_fact = None, mode_amps_input=None, channel_mask=None, scaling_factor = None, scaling_factor_s = None):
+    '''Calculate the inverse matrix for the calculation on density profile
+    based on a fixed number of segments, and some mode numbers
+    SH: 2013
+    '''
+    print 'calculating geometric matrix and its pseudo inverse'
+    #if n_list.__class__ == int:
+    #    n_list = [n_list]
+    #    m_list = [m_list]
+    segments = np.linspace(s_min, s_max, n_segments)
+    LOS_obj.segments = segments
+    LOS_obj.segment_midpoints = (segments[1:]+segments[0:-1])/2.
+    n_measurement_list = [np.sum(LOS_obj.valid_channels[start_ind:end_ind,:]) for start_ind, end_ind in zip(LOS_obj.start_indices, LOS_obj.end_indices)]
+    print 'n_measurement_list', n_measurement_list
+    #valid_channels_split = np.vsplit(LOS_obj.valid_channels, len(LOS_obj.orientations))
+    #interp_pts_split = np.vsplit(LOS_obj.interpolation_pts, len(LOS_obj.orientations))
+    #boozer_pts_split = np.vsplit(LOS_obj.interp_boozer, len(LOS_obj.orientations))
+    #dl_split = LOS_obj.dl[pixel_y, pixel_x]
+    #n_measurements = np.sum(LOS_obj.valid_channels)
+
+    geom_mat_list = []
+    for i in n_measurement_list: geom_mat_list.append(np.zeros((i,n_segments-1), dtype=complex))
+
+    #for i in n_list:
+    #    geom_mat_list.append(np.zeros((n_measurements,n_segments-1), dtype=complex))
+    #geom_mat2[channel_count, :] = output_array*1.
+    #s=0, theta = 1, phi = 2
+    #pixel_list = []
+
+    #for geom_mat, n, m in zip(geom_mat_list, n_list, m_list):
+    for geom_mat, start_ind, end_ind, n_measurement in zip(geom_mat_list, LOS_obj.start_indices, LOS_obj.end_indices, n_measurement_list):
+        channel_count = 0
+        for pixel_y in range(start_ind, end_ind):#LOS_obj.CCD_pixels_y):
+            for pixel_x in range(LOS_obj.CCD_pixels_x):
+                if LOS_obj.valid_channels[pixel_y, pixel_x]:
+                    interp_pts = LOS_obj.interpolation_pts[pixel_y, pixel_x,:,:]
+                    boozer_pts = LOS_obj.interp_boozer[pixel_y, pixel_x,:,:]
+                    dl = LOS_obj.dl[pixel_y, pixel_x]
+                    output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
+                    geom_mat[channel_count, :] = output_array*1.
+                    channel_count += 1
+                    #print channel_count
+                    #pixel_list.append([pixel_y, pixel_x])
+        print channel_count, n_measurement
+        if channel_count!=n_measurement: raise(Exception)
+    #geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
+    #start = 0
+    #for geom_mat in geom_mat_list:
+    #    end = start + n_segments - 1
+    #    geom_mat_comb[:, start:end] = +geom_mat
+    #    start = +end
+    return geom_mat_list, segments
 
 
 def intersection_points(R_values, Z_values, gradient, offset, plot = 0):

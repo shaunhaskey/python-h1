@@ -1,13 +1,74 @@
 """ A collection of utilities for working with vmec and heliac files.
 bdb 2011-2011
 """
-import StringIO
+import StringIO, os
 import numpy as np
 import pylab as pl
 from numpy import sin, cos, sum, linspace, pi, array, average, max, argsort, arctan2, cumsum, diff, sqrt, zeros, mod
 from curves_and_points import rms_distance_points_curve
 
 debug = 2
+
+def generate_VMEC_input2(input_file, boundary_details, ai_string = None):
+    '''Generate the VMEC input file based on the descur output and the various coefficients
+    SH : 2Apr2013
+    '''
+    print os.getpid(), 'generating VMEC input'
+    fin=open(input_file[0]+'outcurve','r')
+    m=[]; n=[]; rbc=[]; zbs=[]; raxis=[]; zaxis=[];
+    lines = fin.readlines(); i = 0
+    while lines[i].find('MB')<0 and lines[i].find('NB')<0:i+=1
+    i+=1
+    tmp = [float(j) for j in lines[i].split() if j!='']
+    while len(tmp)>1:
+        m.append(int(tmp[0])); n.append(int(tmp[1]))
+        rbc.append(tmp[2]); zbs.append(tmp[4])
+        if len(tmp)==8:raxis.append(tmp[6]); zaxis.append(tmp[7])
+        i+=1
+        tmp = [float(j) for j in lines[i].split() if j!='']
+    remaining_lines = lines[i+1:]
+    template = open('/home/srh112/code/python/h1_eq_generation/input.template2','r')
+    fout = open(input_file[0]+'input.'+input_file[1],'w')
+
+    for temp in template:
+        if temp[1:3] == 'am':
+            break
+        fout.write(temp)
+    import shlex
+
+    iotacoeffs=open("/home/srh112/code/python/h1_eq_generation/iotacoeffs.dat",'r')
+    ai_success=0
+    if ai_string==None:
+        for temp in iotacoeffs:
+            temps=shlex.split(temp)
+            #if float(temps[0])==float(infile[-3:])/100:
+            if np.abs(float(temps[0])-float(input_file[2]))<1.e-3:
+                fout.write(' ai             = '+temps[1]+', '+temps[2]+', '+temps[3]+'\n')
+                ai_success+=1
+    else:
+        fout.write(ai_string)
+        ai_success+=1
+    if ai_success != 1:
+        print '!!!!!!!!!!! no ai was written!!!!!!!', float(input_file[2])
+    iotacoeffs.close()
+    presscoeffs=open("/home/srh112/code/python/h1_eq_generation/pressurecoeffs.dat",'r')
+    fout.write(' am             = 14, -14 \n')
+    presscoeffs.close()
+    fout.write(boundary_details)
+    # raxisout='RAXIS = '; zaxisout='ZAXIS = '
+    # for i in range(len(raxis)):
+    #     raxisout = raxisout + repr(raxis[i]) + ', '
+    #     zaxisout = zaxisout + repr(zaxis[i]) + ', '
+
+    # fout.write(raxisout+'\n'+zaxisout+'\n')
+
+    # fout.writelines(remaining_lines)
+
+    # fout.write('/\n&END')
+
+    fin.close()
+    template.close()
+    fout.close()
 
 def read_descur_output(infile,suffix='.outcurve', fmt='%15.10f', maxm=50, maxn=40, mynan=0,debug=1):
     """ read the rmc etc from the descur outcurve file, and plot the cross 

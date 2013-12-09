@@ -1,5 +1,6 @@
 import numpy as np
 import mayavi.mlab as mlab
+import mayavi
 
 def _plot_coil_horizontal(centre, thickness, width, r, phi_samples=50,**kw):
     '''Plot a horizontal coil like hte PFC or OVC
@@ -464,7 +465,16 @@ def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
 def make_plot(phi_min = 0, phi_max = 2.*np.pi):
     vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
-    mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+    f = mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+    from mayavi.sources.poly_data_reader import PolyDataReader 
+    a = PolyDataReader()
+    a.initialize("/home/srh112/code/python/python-h1/h1/h1model/helical.stl")
+    e = mlab.get_engine()
+    e.add_source(a)
+    from mayavi.modules.surface import Surface
+    s = Surface()
+    e.add_module(s)
+
     x, y, z, B = plot_vmec(vmec_filename=vmec_filename, phi_min = phi_min, phi_max = phi_max)
     #x, y, z, B = extract_VMEC_surface_data(vmec_filename, s_ind=-1, phi_min = phi_min, phi_max = phi_max)
     #pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
@@ -498,6 +508,7 @@ def make_plot(phi_min = 0, phi_max = 2.*np.pi):
     if show_pol_array2:
         mlab.plot3d(pol_array2_x, pol_array2_y, pol_array2_z,line_width=1,tube_radius=0.02)
         mlab.points3d(pol_array2_x, pol_array2_y, pol_array2_z, scale_mode='none', scale_factor = 0.04, color=(0.,1.,0.),mode='cube')
+
     return x, y, z
     #mlab.show()
 

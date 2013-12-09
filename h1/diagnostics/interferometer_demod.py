@@ -861,7 +861,7 @@ def put_data_MDSplus(shot, f_m, dig_mult):
         chan_list = inter_obj.chan_list_dig
         chan_list_dig_top_down = inter_obj.chan_list_dig_top_down.tolist()
         for (n,ch) in enumerate(chan_list): 
-            nd=tr.getNode('\electr_dens::top.camac:'+ch);
+            nd = tr.getNode('\electr_dens::top.camac:'+ch);
             phs = np.zeros((inter_obj.orig_signal_length,), dtype=float)
             #sig=nd.data() 
             #t_raw=nd.dim_of().data()
@@ -871,7 +871,6 @@ def put_data_MDSplus(shot, f_m, dig_mult):
             #    continue
             #elif acrms<0.03: 
             #    bw = .1
-
             #phs = sgn*extract_phase(None, sig=sig,t_raw=t_raw,
             #                        f=5e3,bw=bw,plot=0)
             index = chan_list_dig_top_down.index(ch)

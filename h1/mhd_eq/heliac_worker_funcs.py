@@ -141,7 +141,7 @@ class heliac:
         self.trace_npuncs = np.sum(truth_values)
         self.trace_nsurf=Rtemp.shape[0]/self.trace_npuncs
 
-    def plot_heliac_iota_bar(self,ax, Nfp, x_axis='r',label='', plot_style='o-'):
+    def plot_heliac_iota_bar(self,ax, Nfp, x_axis='r',label='', plot_style='o-', plot_hlines = True):
         if x_axis=='psi_norm':
             ax.plot(self.psi_norm,self.iota_bar*Nfp,plot_style,label=label)
             ax.plot(self.psi_norm, np.polyval(self.iota_poly*Nfp,self.psi_norm),'s')
@@ -152,7 +152,8 @@ class heliac:
         elif x_axis=='r':
             ax.plot(self.iota_bar_rad,self.iota_bar * Nfp,plot_style,label=label)
             ax.set_xlabel('<r>')
-        ax.hlines([4./3, 5./4],ax.get_xlim()[0],ax.get_xlim()[1])
+        if plot_hlines:
+            ax.hlines([4./3, 5./4],ax.get_xlim()[0],ax.get_xlim()[1])
     def plot_heliac_psi(self,ax):
         ax.plot(self.psi_rad, self.psi, 'o-')
                 
