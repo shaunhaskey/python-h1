@@ -57,6 +57,28 @@ class ImaxData():
             self.electron_dens = self.phase_average * 0 + 1
         if plot_data: self.plot_images()
 
+    def get_phase_std(self,n_phases = 1, plot = False, ax = None):
+        phase_ave_list = []
+        phase_std_list = []
+        for loc, i in enumerate(self.shot_list):
+            print i
+            if loc==1: 
+                tmp_plot = True
+            else:
+                tmp_plot = False
+            tmp1, tmp2 = PLL_performance2(i, n_phases = n_phases, plot=tmp_plot)
+            phase_ave_list.extend(tmp1)
+            phase_std_list.extend(tmp2)
+        if plot:
+            if ax == None:
+                fig, ax = pt.subplots()
+            phases = np.array(phase_ave_list)
+            stds = np.array(phase_std_list)
+            ax.errorbar(np.arange(phases.shape[0]) + 1, phases, yerr = stds)
+            if ax ==None:
+                fig.canvas.draw(); fig.show()
+
+
     def plot_fourier_harmonics_pub(self,pub_fig = 0, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None,n_harmonics =3):
         fig,ax = pt.subplots(nrows=n_harmonics,ncols=2)
         if n_harmonics == 1: ax = ax[np.newaxis,:]
@@ -129,7 +151,7 @@ class ImaxData():
         fig.canvas.draw(); fig.show()
 
 
-    def plot_images_subset(self,cal=0, pub_fig = 0, image_indices = None, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None):
+    def plot_images_subset(self,cal=0, pub_fig = 0, image_indices = None, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None, inc_DC_diff = False):
         fig = pt.figure()
         if image_indices==None:
             image_indices = [0,2,4,6,8,10,12,14]
@@ -144,7 +166,7 @@ class ImaxData():
             mpl.rcParams['lines.markersize']=5.0
             mpl.rcParams['savefig.dpi']=300
             fig.set_figwidth(8.48*cm_to_inch)
-            fig.set_figheight(8.48*1.7*cm_to_inch)
+            fig.set_figheight(8.48*1.3*cm_to_inch)
 
         if cal==0: 
             print 'Uncalibrated images'
@@ -154,6 +176,7 @@ class ImaxData():
             plot_array = self.image_array_cal
         ax = []; im_list = []
         rows = len(image_indices)/2+1
+        if inc_DC_diff: rows+=1
         row = 0; col = 0
         for i,index in enumerate(image_indices):
             print row, col
@@ -169,6 +192,9 @@ class ImaxData():
         #ax.append(pt.subplot2grid((rows,2), (0,1), sharex=ax[0],sharey=ax[0]))
         #ax.append(pt.subplot2grid((rows,2), (1,0), sharex=ax[0],sharey=ax[0]))
         #ax.append(pt.subplot2grid((rows,2), (1,1), sharex=ax[0],sharey=ax[0]))
+        if inc_DC_diff:
+            ax.append(pt.subplot2grid((rows,2), (rows-2,0), sharex=ax[0],sharey=ax[0]))
+            ax.append(pt.subplot2grid((rows,2), (rows-2,1), sharex=ax[0],sharey=ax[0]))
         ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=2)
         #ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=1)
         
@@ -184,11 +210,27 @@ class ImaxData():
                 tmp_clim = np.array(im_list[-1].get_clim())
                 if tmp_clim[0]<clim[0]: clim[0]=tmp_clim[0]
                 if tmp_clim[1]>clim[1]: clim[1]=tmp_clim[1]
-            ax[i].set_ylabel('frame {}'.format(index))
+            ax[i].set_ylabel('frame {}'.format(index+1))
         for i in im_list: i.set_clim(clim)
+        if inc_DC_diff:
+            if fliplr:
+                tmp = np.fliplr(np.abs(self.fft_values[0,:,:]))
+                tmp2 = np.fliplr(plot_array[image_indices[1],:,:] - plot_array[image_indices[0],:,:])
+            else:
+                tmp = np.abs(self.fft_values[0,:,:])
+                tmp2 = plot_array[image_indices[1],:,:] - plot_array[image_indices[0],:,:]
+            im_DC = ax[-2].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower', cmap = 'spectral')
+            im_diff = ax[-1].imshow(tmp2, interpolation = 'none', aspect = 'auto', origin='lower', cmap = 'RdBu')
+            val = np.min(np.abs(im_diff.get_clim()))*0.8
+            #print tmp_min, tmp_max
+            im_diff.set_clim([-val,val])
+            ax[-2].set_ylabel('DC')
+            ax[-1].set_ylabel('frame {} - frame {}'.format(image_indices[1]+1, image_indices[0]+1))
+        ax[0].text(30,140,'TFC',color='white')
+        ax[0].text(177,140,'TFC',color='white')
         #for i in im_list: i.set_clim([3.7,4.4])
-        plot_locs = [[120,150], [140,70]]
-        periods = 5
+        plot_locs = [[120,150], [140,60]]
+        periods = 3
         for i in plot_locs:
             single_line = []
             for j in range(plot_array.shape[0]):
@@ -216,7 +258,7 @@ class ImaxData():
             j.set_xlim([0,256])
             j.set_ylim([0,256])
         ax2.set_xlabel('frame number (or time)')
-        ax2.set_ylabel('pixel intensity')
+        ax2.set_ylabel('pixel intensity (a.u)')
         ax2.grid()
         if save_fig!=None:
             fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
@@ -224,96 +266,6 @@ class ImaxData():
             fig.savefig(save_fig)
         fig.canvas.draw(); fig.show()
 
-        
-        # n_subplots = plot_array.shape[0]
-        # n_cols = int(np.ceil(n_subplots**0.5))
-        # if n_subplots/float(n_cols)>n_subplots/n_cols:
-        #     n_rows = n_subplots/n_cols + 1
-        # else:
-        #     n_rows = n_subplots/n_cols
-        # if fig==None or ax==None:
-        #     fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey=True);
-        # if n_rows == 1 and n_cols == 1: ax = np.array([ax])
-        # ax = ax.flatten()
-        # im_list = []
-        # for i in range(n_subplots):
-        #     if fliplr:
-        #         tmp = np.fliplr(plot_array[i,:,:])
-        #     else:
-        #         tmp = plot_array[i,:,:]
-        #     im_list.append(ax[i].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower'))
-        #     print np.sum(plot_array[i,:,:])
-        # if clim==None: 
-        #     print('Using fixed clim')
-        #     clim = [247,65535]
-        # elif clim.__class__==int:
-        #     print('Using first image clim')
-        #     clim = im_list[clim].get_clim()
-        # print clim
-        # for i in im_list:i.set_clim(clim)
-        # ylim, xlim = plot_array[0,:,:].shape
-        # ax[-1].set_xlim([0,xlim])
-        # ax[-1].set_ylim([0,ylim])
-        # fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-        # if cal==0:
-        #     title = 'Raw Images'
-        # else:
-        #     title = 'Cal Images'
-        # #fig.suptitle(title)
-        # if savefig:
-        #     fig.savefig(savefig)
-        #     fig.clf()
-        # elif draw_show:
-        #     fig.canvas.draw(); fig.show()
-
-
-    def plot_images(self,cal=0, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1):
-        if cal==0: 
-            print 'Uncalibrated images'
-            plot_array = self.image_array
-        else:
-            print 'Calibrated images'
-            plot_array = self.image_array_cal
-        n_subplots = plot_array.shape[0]
-        n_cols = int(np.ceil(n_subplots**0.5))
-        if n_subplots/float(n_cols)>n_subplots/n_cols:
-            n_rows = n_subplots/n_cols + 1
-        else:
-            n_rows = n_subplots/n_cols
-        if fig==None or ax==None:
-            fig, ax = pt.subplots(nrows = n_rows, ncols = n_cols, sharex = True, sharey=True);
-        if n_rows == 1 and n_cols == 1: ax = np.array([ax])
-        ax = ax.flatten()
-        im_list = []
-        for i in range(n_subplots):
-            if fliplr:
-                tmp = np.fliplr(plot_array[i,:,:])
-            else:
-                tmp = plot_array[i,:,:]
-            im_list.append(ax[i].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower'))
-            print np.sum(plot_array[i,:,:])
-        if clim==None: 
-            print('Using fixed clim')
-            clim = [247,65535]
-        elif clim.__class__==int:
-            print('Using first image clim')
-            clim = im_list[clim].get_clim()
-        print clim
-        for i in im_list:i.set_clim(clim)
-        ylim, xlim = plot_array[0,:,:].shape
-        ax[-1].set_xlim([0,xlim])
-        ax[-1].set_ylim([0,ylim])
-        fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-        if cal==0:
-            title = 'Raw Images'
-        else:
-            title = 'Cal Images'
-        #fig.suptitle(title)
-        if savefig:
-            fig.savefig(savefig)
-            fig.clf()
-        elif draw_show:
-            fig.canvas.draw(); fig.show()
 
     def get_mirnov_triggers_new(self,):
         if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
@@ -600,6 +552,223 @@ class ImaxData():
                 ax[0].plot(np.abs(self.fft_values[i,:,j]))
                 ax[1].plot(np.angle(self.fft_values[i,:,j]))
         fig.canvas.draw(); fig.show()
+
+
+def extract_PLL_data(shot_number):
+    PLL_node_path = '.mirnov.acq132_8:input_32'
+    mirnov_node_path = '.mirnov.acq132_7:input_24'
+    read_node_path = '.mirnov.acq132_9:input_32'
+    monitor_node_path = '.mirnov.acq132_7:input_32'
+
+    #PLL_node_path = '.waveforms.PLL'
+    PLL_tree = 'h1data'
+    #mirnov_node_path = '.waveforms.lock_signal'
+    mirnov_tree = 'h1data'
+
+    Tree = MDS.Tree(PLL_tree,shot_number)
+    PLL_node = Tree.getNode(PLL_node_path)
+    mirnov_node = Tree.getNode(mirnov_node_path)
+    read_node = Tree.getNode(read_node_path)
+    monitor_node = Tree.getNode(monitor_node_path)
+    monitor_data = monitor_node.data()
+    read_data = read_node.data()
+    time_ax = PLL_node.dim_of().data()
+    mirnov_data = mirnov_node.data()
+    mirnov_data = mirnov_data - np.mean(mirnov_data)
+    PLL_data = PLL_node.data()
+    return mirnov_data, PLL_data, time_ax, read_data, monitor_data
+
+
+def PLL_performance(shot_number, n_phases = 4):
+    mirnov_data, PLL_data, time_ax, read_data, monitor_data = extract_PLL_data(shot_number)
+    time_ax2 = np.arange(time_ax[4],time_ax[-4],1./500000)
+    read_data_interp = np.interp(time_ax2, time_ax, read_data)
+    tmp = read_data_interp[1:] - read_data_interp[0:-1]
+    tmp_argsorted = np.argsort(tmp)
+    pos_edges = []; pos_edges_amps = []
+    neg_edges = []; neg_edges_amps = []
+    for i in tmp_argsorted[0:n_phases]:
+        neg_edges.append(time_ax2[i])
+        neg_edges_amps.append(0)
+    for i in tmp_argsorted[-n_phases:]:
+        pos_edges.append(time_ax2[i])
+        pos_edges_amps.append(0)
+
+    hilb_sig = scipy.signal.hilbert(mirnov_data)
+    #peak = PLL_data>1.5
+    maxima = np.zeros(PLL_data.shape,dtype=bool)
+    pos_edge = np.zeros(PLL_data.shape,dtype=bool)
+    pos_edge[1:] = (PLL_data[1:] - PLL_data[0:-1])>1.5
+
+    #maxima[1:-1] = (PLL_data>2.5)[1:-1] * (PLL_data[1:-1]>PLL_data[0:-2])* (PLL_data[1:-1]>PLL_data[2:])
+    #peak = peak * maxima
+
+    peak = pos_edge
+
+    peak_mon = monitor_data>0.5
+    maxima_mon = np.zeros(peak.shape,dtype=bool)
+    maxima_mon[1:-1] = (monitor_data>0.5)[1:-1] * (monitor_data[1:-1]>monitor_data[0:-2])* (monitor_data[1:-1]>monitor_data[2:])
+    peak_mon = peak_mon * maxima_mon
+    peak_mon_phases = np.angle(hilb_sig)[peak_mon]
+    start = 0
+    print neg_edges
+
+    neg_edges.sort()
+    pos_edges.sort()
+    print neg_edges
+    print pos_edges
+    phase_average_list = []; phase_std_list = []; phase_time_list = []
+    for i in range(len(neg_edges)):
+        end = neg_edges[i]
+        end = pos_edges[i]
+        print start, end
+        tmp_truth = peak_mon * (time_ax>start) * (time_ax<end)
+        #angles = np.angle(hilb_sig)[tmp_truth]
+
+        phase_complex = np.exp(1j*np.angle(hilb_sig[tmp_truth]))
+        phase_average_list.append(np.angle(np.mean(phase_complex)))
+        phase_std_list.append(np.sqrt(np.log(1./np.abs(np.mean(phase_complex)))))
+        phase_time_list.append(np.mean(time_ax[tmp_truth]))
+        #amp_std_list.append(np.std(np.abs(hilb_sig[maxima])))
+
+        print 'n {}, mean {:.2f}deg, std {:.2f}deg'.format(np.sum(tmp_truth),np.rad2deg(phase_average_list[-1]), np.rad2deg(phase_std_list[-1]))
+        #print angles, len(angles)
+        start = neg_edges[i]
+        start = pos_edges[i]
+    return phase_average_list, phase_std_list
+
+
+def PLL_performance2(shot_number, n_phases=4, plot = False):
+    mirnov_data, PLL_data, time_ax, read_data, monitor_data = extract_PLL_data(shot_number)
+    time_ax2 = np.arange(time_ax[4],time_ax[-4],1./500000)
+    #self.extract_PLL_data()
+    #time_ax2 = np.arange(self.time_ax[4],self.time_ax[-4],1./500000)
+    read_data_interp = np.interp(time_ax2, time_ax, read_data)
+    tmp = read_data_interp[1:] - read_data_interp[0:-1]
+    tmp_argsorted = np.argsort(tmp)
+    pos_edges = []; pos_edges_amps = []
+    neg_edges = []; neg_edges_amps = []
+    for i in tmp_argsorted[0:n_phases]:
+        neg_edges.append(time_ax2[i])
+        neg_edges_amps.append(0)
+    for i in tmp_argsorted[-n_phases:]:
+        pos_edges.append(time_ax2[i])
+        pos_edges_amps.append(0)
+
+    hilb_sig = scipy.signal.hilbert(mirnov_data)
+    #peak = self.PLL_data>1.5
+    phase_data = PLL_data
+    phase_data = monitor_data
+    maxima = np.zeros(phase_data.shape,dtype=bool)
+    pos_edge = np.zeros(phase_data.shape,dtype=bool)
+    pos_edge[1:] = (phase_data[1:] - phase_data[0:-1])>1.5
+
+    #maxima[1:-1] = (self.PLL_data>2.5)[1:-1] * (self.PLL_data[1:-1]>self.PLL_data[0:-2])* (self.PLL_data[1:-1]>self.PLL_data[2:])
+    #peak = peak * maxima
+
+    peak = pos_edge
+    print 'hello!!'
+    peak_mon = monitor_data>2.5
+    logic_high = monitor_data>0.2
+    logic_low = monitor_data<0.1
+    logic_high_edges = logic_low[0:-1]*logic_high[1:]
+    #logic_high_edges[logic_high_edges[1:]*logic_high_edges[0:-1]]==False
+    #logic_high_edges[logic_high_edges[2:]*logic_high_edges[0:-2]]==False
+    #logic_high_edges[logic_high_edges[3:]*logic_high_edges[0:-3]]==False
+    print 'logic high edges', np.sum(logic_high_edges)
+
+
+    maxima_mon = np.zeros(peak.shape,dtype=bool)
+    maxima_mon[1:-1] = (monitor_data>0.5)[1:-1] * (monitor_data[1:-1]>monitor_data[0:-2])* (monitor_data[1:-1]>monitor_data[2:])
+    peak_mon = peak_mon * maxima_mon
+    peak_mon_phases = np.angle(hilb_sig)[peak_mon]
+    print np.sum(monitor_data[peak_mon]<2.5)
+    start = 0
+    print neg_edges
+
+    neg_edges.sort()
+    pos_edges.sort()
+    print 'neg edges: ', neg_edges
+    print 'pos edges: ', pos_edges
+    phase_average_list = []; phase_std_list = []; phase_time_list = []
+    for i in range(len(neg_edges)):
+        end = neg_edges[i]
+        end = pos_edges[i]
+        print start, end
+        tmp_truth = peak_mon * (time_ax>start) * (time_ax<end)
+        tmp_truth = logic_high * (time_ax>start) * (time_ax<end)
+        #angles = np.angle(hilb_sig)[tmp_truth]
+        phase_complex = np.exp(1j*np.angle(hilb_sig[tmp_truth]))
+        phase_average_list.append(np.angle(np.mean(phase_complex)))
+        phase_std_list.append(np.sqrt(np.log(1./np.abs(np.mean(phase_complex)))))
+        phase_time_list.append(np.mean(time_ax[tmp_truth]))
+        #amp_std_list.append(np.std(np.abs(hilb_sig[maxima])))
+
+        print 'n {}, mean {:.2f}deg, std {:.2f}deg'.format(np.sum(tmp_truth),np.rad2deg(phase_average_list[-1]), np.rad2deg(phase_std_list[-1]))
+        #print angles, len(angles)
+        start = neg_edges[i]
+        start = pos_edges[i]
+    if plot:
+        PLL_fig, PLL_ax = pt.subplots(nrows=3, sharex = True)
+        pub_fig = 1
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            PLL_fig.set_figwidth(8.48*cm_to_inch)
+            PLL_fig.set_figheight(8.48*1.5*cm_to_inch)
+
+        im = PLL_ax[0].specgram(mirnov_data, NFFT = 4096, Fs = 2000, noverlap = 1000,cmap='jet',rasterized = True)
+        print im
+        print im[-1].get_clim()
+        im[-1].set_clim([-80,10])
+        #PLL_ax[0].plot(time_ax[::2], PLL_data[::2], label = 'PLL')
+        PLL_ax[1].plot(time_ax[::2]*1000, monitor_data[::2], label = 'Camera Gate', rasterized=True)
+        PLL_ax[1].plot(time_ax[::2]*1000, read_data[::2], label = 'Camera Readout', rasterized=True)
+        PLL_ax[1].plot(time_ax[logic_high_edges]*1000, monitor_data[logic_high_edges], 'o',label = 'Camera Gates')
+        #PLL_ax[0].plot(time_ax2, read_data_interp, label = 'read2')
+        #PLL_ax[0].plot(pos_edges, pos_edges_amps, 'x')
+        #PLL_ax[0].plot(neg_edges, neg_edges_amps, 'o')
+        PLL_ax[1].legend(prop={'size':7}, loc='upper left')
+        #PLL_ax[1].plot(time_ax[::4], mirnov_data[::4], label = 'Mirnov')
+        #PLL_ax[1].plot(time_ax[peak], mirnov_data[peak], 'o')
+        #PLL_ax[1].legend(prop={'size':8}, loc='upper left')
+
+        #ax_phase[0].errorbar(range(16), phase_average_list, yerr= phase_std_list,fmt='-o')
+        #ax_phase[1].errorbar(range(16), amp_average_list, yerr= amp_std_list,fmt='-o')
+        #PLL_ax[2].errorbar(phase_time_list, phase_average_list, yerr = phase_std_list,fmt='-o', label='phase w std')
+        #PLL_ax[2].legend(prop={'size':8}, loc='upper left')
+        #PLL_ax[2].set_ylim([-np.pi,np.pi])
+
+        #PLL_ax[2].plot(time_ax[::2], np.abs(hilb_sig)[::2], label = 'Mirnov hilb amp')
+        #PLL_ax[2].legend()
+
+        #PLL_ax[1].plot(time_ax[::2], np.angle(hilb_sig)[::2], label = 'Mirnov hilb phase')
+        PLL_ax[2].plot(time_ax[peak]*1000, np.angle(hilb_sig)[peak], 'o',label = 'Camera Gates')
+        #PLL_ax[3].plot(PLL_node.dim_of().data(), PLL_node.data())
+        PLL_ax[2].legend(prop={'size':7}, loc='best')
+        #PLL_fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0.05, bottom=0.,top=0.95, right=0.95)
+        PLL_ax[2].set_xlim([0.03*1000,0.10*1000])
+        PLL_ax[0].set_ylim([0,120])
+        PLL_ax[1].set_ylim([0,5])
+        PLL_ax[2].grid()
+        PLL_ax[-1].set_xlabel('Time (ms)')
+        PLL_ax[2].set_ylabel('Phase (rad)')
+        PLL_ax[1].set_ylabel('Logic Signals (V)')
+        PLL_ax[0].set_ylabel('Frequency (kHz)')
+        PLL_ax[1].grid()
+        PLL_fig.savefig('PLL_multiple_phases.pdf',bbox_inches='tight', pad_inches=0.1)
+        PLL_fig.savefig('PLL_multiple_phases.eps',bbox_inches='tight', pad_inches=0.1)
+        PLL_fig.canvas.draw(); PLL_fig.show()
+
+
+    return phase_average_list, phase_std_list
 
 
 def make_animation(start_shot_list, titles, harmonic = 1, base_directory = '', prefix = 'hello'):

@@ -45,6 +45,117 @@ class Tomography():
         fig.suptitle(self.method)
         fig.canvas.draw(); fig.show()
 
+    def plot_reprojection_comparison_extrap(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1):
+        if cut_values == None:
+            cut_values = [33]
+            cut_values = [130]
+            cut_values=[LOS_object.valid_channels.shape[1]/2]
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        print cut_values
+        print(valid_channels.shape)
+        print(all_measurements.shape)
+        measurements = all_measurements[valid_channels]
+        valid_channels = valid_channels
+        n_measurements, n_regions = geom_matrix.shape
+
+        #If the geometry matrix or measurement matrix complex
+        #Need to build a larger matrix that contains the linear system of equations
+        #in real numbers only
+        if geom_matrix.dtype == np.complex_ or measurements.dtype == np.complex:
+            print 'complex input'
+            P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+            #Build a real matrix 
+            P[0::2,0::2] = +np.real(geom_matrix)
+            P[0::2,1::2] = -np.imag(geom_matrix)
+            P[1::2,0::2] = +np.imag(geom_matrix)
+            P[1::2,1::2] = +np.real(geom_matrix)
+            S = np.zeros(n_measurements*2, dtype=float)
+            S[0::2] = +np.real(measurements)
+            S[1::2] = +np.imag(measurements)
+            T_tmp = np.zeros(n_regions*2, dtype=float)
+            T_tmp[0::2] = +np.real(self.T)
+            T_tmp[1::2] = +np.imag(self.T)
+            input_type = 'complex'
+            tmp = np.dot(P,T_tmp)- S
+            print 'error', np.sum((tmp)**2)
+
+        else:
+            print 'real input'
+            P = geom_matrix
+            S = measurements
+            input_type = 'real'
+            
+        tmp = np.dot(P,T_tmp)
+        re_projection = tmp[0::2]+1j*tmp[1::2]
+        print re_projection, re_projection.shape
+        q = all_measurements*0
+        q[valid_channels]= re_projection
+        q[-valid_channels]= 0
+        fig2, ax2 = pt.subplots(ncols = 8, sharey=True)
+        ax2 = np.array([[ax2[0],ax2[1], ax2[4], ax2[6]],[ax2[2], ax2[3], ax2[5],ax2[7]]])
+        tmp = np.abs(all_measurements)*valid_channels
+        tmp[-valid_channels] = np.nan
+        im1_a = ax2[0,0].imshow(tmp,origin='upper',aspect='auto',interpolation='nearest', cmap='spectral')
+        #im1_a = ax2[0,0].imshow(np.abs(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest', cmap='gist_stern')
+        im1_p = ax2[1,0].imshow(np.angle(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
+        im1_p.set_clim([-np.pi,np.pi])
+
+        tmp = np.abs(q)
+        tmp[-valid_channels] = np.nan
+        im2_a = ax2[0,1].imshow(tmp,origin='upper', aspect='auto',interpolation='nearest', cmap='spectral')
+        
+        im2_p = ax2[1,1].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
+        im2_a.set_clim(im1_a.get_clim())
+        im2_p.set_clim(im1_p.get_clim())
+        start = 0; increment = len(T_tmp)/len(n)
+
+        tmp_y_axis = np.arange(len(all_measurements[:,0]))
+        tmp_y_axis = np.max(tmp_y_axis)- tmp_y_axis
+        tmp_reproj = all_measurements*0.
+        tmp_reproj[valid_channels] = re_projection
+
+        for i in cut_values:
+            ax2[0,2].plot((np.abs(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, '-', label='Measurement')
+            ax2[0,2].plot((multiplier*np.abs(tmp_reproj[:,i]))[::-1], tmp_y_axis,'-',label = 'Reprojection')
+            ax2[1,2].plot((np.angle(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, '-')
+            ax2[1,2].plot((np.angle(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'-', label = '')
+
+            ax2[0,3].plot((np.real(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, '-', label='Measurement')
+            ax2[0,3].plot((multiplier*np.real(tmp_reproj[:,i]))[::-1], tmp_y_axis,'-',label = 'Reprojection')
+            ax2[1,3].plot((np.imag(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, '-')
+            ax2[1,3].plot((np.imag(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'-', label = '')
+            for j in [0,1]:
+                for k in [0,1]:
+                    tmp = ax2[j,k].get_ylim()
+                    ax2[j,k].vlines(i,tmp[0], tmp[1])
+
+        ax2[1,2].set_xlabel('Phase (rad)')
+        #ax2[1,0].set_xlabel('Pixel')
+        #ax2[1,1].set_xlabel('Pixel')
+        #ax2[1,0].set_ylabel('Pixel')
+        ax2[0,0].set_ylabel('Pixel')
+        ax2[0,2].set_xlabel('Amplitude (a.u)')
+        ax2[0,2].legend(prop={'size':5}, loc = 'best')
+        ax2[1,2].set_ylim([0,valid_channels.shape[0]])
+        ax2[1,2].set_xlim([-np.pi,np.pi])
+        center = valid_channels.shape[1]/2
+        edge = center/4.
+        ax2[0,0].set_xlim([center+edge, center-edge])
+        ax2[0,1].set_xlim([center+edge,center-edge])
+        ax2[1,0].set_xlim([center+edge, center-edge])
+        ax2[1,1].set_xlim([center+edge, center-edge])
+        ax2[0,2].set_ylim([0,valid_channels.shape[0]])
+        for i in ax2: 
+            for j in i:
+                j.grid()
+        fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        #fig2.tight_layout()
+        #fig2.savefig('reprojection.pdf')
+        #fig2.savefig('reprojection.eps')
+        fig2.canvas.draw(); fig2.show()
+
 
     def plot_reprojection_comparison(self, n, m, LOS_object, cut_values = None, multiplier = 1., pub_fig = 1):
         '''This function is for making publication images comparing
@@ -519,14 +630,19 @@ class SIRT(Tomography):
                 self.T[1::2] = np.imag(self.initial_guess)
             else:
                 self.T = self.initial_guess*1.
-        if self.random_ordering:
-            mixture = np.random.rand(self.P.shape[0]*cycles)
-            ordering = np.argsort(mixture)
-        else:
-            ordering = np.range(self.P.shape[0]*cycles)
+        #if self.random_ordering:
+        #    mixture = np.random.rand(self.P.shape[0]*cycles)
+        #    ordering = np.argsort(mixture)
+        #else:
+        #    ordering = np.range(self.P.shape[0]*cycles)
         #for k in ordering:
+        self.error_sum = []    
         for k in range(cycles):
-            if (k%20)==0:print('cycle {} of {}, printout every 20'.format(k,cycles))
+            if (k%20)==0:
+                tmp = np.dot(self.P,self.T)- self.S
+                self.error_sum.append(np.sum((tmp)**2))
+                print 'real {:.2f}'.format(self.error_sum[-1])
+                print('cycle {} of {}, printout every 20'.format(k,cycles))
             current_modification = self.T*0
             curr_count = 0
             for i in range(self.P.shape[0]):

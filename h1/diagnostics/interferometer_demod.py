@@ -460,7 +460,7 @@ class interf_demod(object):
             fig.suptitle('predicted harmonic amps from bessel funcs (x), measured (o) - dividing by Q i exp(i n eps) for odd and C exp(i n eps)for even\nNote first 2 harmonics must agree perfectly because they are used to calc Q(0) and C(0). {}'.format(title_text))
             fig.canvas.draw(); fig.show()
 
-    def calculate_phase(self, phi1, odd, even, use_rfft = 0, clim = [0,5], show_fig = True, save_fig_name = None):
+    def calculate_phase(self, phi1, odd, even, use_rfft = 0, clim = [0,5], show_fig = True, save_fig_name = None, times = None):
         '''Calculate the actual phase shift caused by the plasma. Can use the rfft
         SRH: 5Nov2013
         '''
@@ -491,7 +491,8 @@ class interf_demod(object):
             for i in range(len(epsilon_used)):
                 ax[1].text(epsilon_used[i], np.mean(self.output,axis = -1)[i], str(i))
             fig.canvas.draw(); fig.show()
-        times = [0.02,0.04,0.063]
+        
+        if times==None: times = [0.02,0.04,0.063]
         colours = ['b','g','k']
         for col, t in zip(colours, times):
             t_loc = np.argmin(np.abs(self.t - t))
@@ -841,17 +842,27 @@ def plot_from_MDSplus(shot):
     #fig_big.canvas.draw(); fig.show()
 
 
-def put_data_MDSplus(shot, f_m, dig_mult):
+def put_data_MDSplus(shot, f_m=None, dig_mult=None):
     count = 0
     plots=0  # number of plots shown at beginning
+    print('hello world')
+    print f_m, dig_mult
     try:
+            
         tr = MDS.Tree('electr_dens',shot)
         chnd = tr.getNode('\electr_dens::top.ne_het:chan_list')
         chan_list = chnd.data()
         ch_z_nd = tr.getNode('\electr_dens::top.ne_het:chan_z')
         ch_z = ch_z_nd.data()
-
+        if dig_mult==None:
+            dig_mult = tr.getNode('\electr_dens::top.ne_het:digi_mult').data()
+            print('Got dig multiplier out of the tree : {}'.format(dig_mult))
+        if f_m==None:
+            f_m = tr.getNode('\electr_dens::top.ne_het:fm_freq').data()
+            print('Got freq modulation out of the tree : {}'.format(f_m))
+            
         #Get the data
+        print shot, f_m, dig_mult
         inter_obj = interf_demod(shot, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 0, eps_method = 'using_1st_carrier', tophat_width_prop = 1)
 
         clim = [0,5]
@@ -860,8 +871,15 @@ def put_data_MDSplus(shot, f_m, dig_mult):
         #inter_obj.calculate_phase_simul(inter_obj.phi1_min_simul, clim=clim, show_fig = 0)
         chan_list = inter_obj.chan_list_dig
         chan_list_dig_top_down = inter_obj.chan_list_dig_top_down.tolist()
+        print 'hello'
         for (n,ch) in enumerate(chan_list): 
+            if ch[0:3]=='A14':
+                digitiser_A14 = True
+            else:
+                digitiser_A14 = False
+            print 'hello', n
             nd = tr.getNode('\electr_dens::top.camac:'+ch);
+            old_dim_of = nd.dim_of()
             phs = np.zeros((inter_obj.orig_signal_length,), dtype=float)
             #sig=nd.data() 
             #t_raw=nd.dim_of().data()
@@ -882,14 +900,23 @@ def put_data_MDSplus(shot, f_m, dig_mult):
                 phs = -1.*phs
             #dim = Dimension(Window(startIdx[chan], endIdx[chan], trigTime), Range(None, None, clockPeriod))
             startIdx=tr.getNode('\electr_dens::top.camac:{}:startidx'.format(ch)).data()
-            trigTime = tr.getNode('\electr_dens::top.camac:{}:stop_trig'.format(ch.split(':')[0])).data()
+            if digitiser_A14:
+                trigTime = tr.getNode('\electr_dens::top.camac:{}:stop_trig'.format(ch.split(':')[0])).data()
+            else:
+                trigTime = tr.getNode('\electr_dens::top.camac:{}:trigger'.format(ch.split(':')[0])).data()
+
             try:
                 endIdx = tr.getNode('\electr_dens::top.camac:{}:endidx'.format(ch)).data()
             except MDS.TdiException, e:
                 #print e
                 pts = tr.getNode('\electr_dens::top.camac:{}:pts'.format(ch.split(':')[0])).data()
                 endIdx = pts - startIdx - 1
-            Range = tr.getNode('\electr_dens::top.camac:{}:ext_clock_in'.format(ch.split(':')[0])).evaluate()
+
+            if digitiser_A14:
+                Range = tr.getNode('\electr_dens::top.camac:{}:ext_clock_in'.format(ch.split(':')[0])).evaluate()
+            else:
+                Range = tr.getNode('\electr_dens::top.camac:{}:ext_clock'.format(ch.split(':')[0])).evaluate()
+
             win = MDS.Window(startIdx, endIdx, trigTime)
             dim = MDS.Dimension(win, Range)
             convExpr = MDS.Data.compile("0.35*$VALUE")
@@ -897,12 +924,15 @@ def put_data_MDSplus(shot, f_m, dig_mult):
             pnode = tr.getNode('\electr_dens::top.ne_het:ne_'+str(n+1))
             rawMdsData = MDS.Float32Array(phs)
             rawMdsData.setUnits("rad")
-            signal = MDS.Signal(convExpr, rawMdsData, dim)
+            if digitiser_A14:
+                signal = MDS.Signal(convExpr, rawMdsData, dim)
+            else:
+                signal = MDS.Signal(convExpr, rawMdsData, old_dim_of)
             pnode.putData(signal)
             if n==0:
                 centrenode = tr.getNode('\electr_dens::top.ne_het:ne_centre')
                 centrenode.putData(signal)
-    except Exception, reason:
+    except None:#Exception, reason:
         print('Exception on shot {s}, "{r}"'.format(s=shot,r=reason))
 
 
