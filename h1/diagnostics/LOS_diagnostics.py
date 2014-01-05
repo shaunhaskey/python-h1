@@ -1,9 +1,10 @@
 import MDSplus as MDS
 import h1.h1model.plot_functions as h1_plot
 import h1.diagnostics.imax as imax
-
+import time
 from scipy.interpolate import griddata as scipy_griddata
 import numpy as np
+np.pi2 = 2.*np.pi
 import matplotlib.pyplot as pt
 import h1.mhd_eq.BOOZER as BOOZER
 import cPickle as pickle
@@ -485,7 +486,7 @@ class LOS():
                     self.dl[pixel_y, pixel_x] = np.sqrt(np.sum((self.interpolation_pts[pixel_y, pixel_x,1,:] - self.interpolation_pts[pixel_y, pixel_x,0,:])**2))
 
 
-    def perform_interpolation(self,no_theta = 50, s_increment = 2):
+    def perform_interpolation(self,no_theta = 50, s_increment = 2, sin_cos_theta = True):
         ''' 
         valid_channels : bool array listing the channels that intersect the plasma
         cross_sect_s : 1D array of s values (corresponding to the interpolation_pts
@@ -557,14 +558,37 @@ class LOS():
         interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten()
         interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten()
         required_shape = self.interpolation_pts[self.valid_channels,:,0].shape
+        start_time = time.time()
+        print 's_pt2, orig grid shape : ', interp_pts_x.shape, ' new grid shape : ', len(points_tuple[0])
 
-        print 's_pt2'
         self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        print 'time to complete : {:.2f}'.format(time.time() - start_time)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,0]))))
         print 'theta'
-        interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
-        interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
-        self.interp_boozer[self.valid_channels,:,1] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
+        if sin_cos_theta:
+            interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+            interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+            self.interp_boozer[self.valid_channels,:,1] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
+        else:
+            print "Using three different interpolations for theta"
+            new_cross_sect = (np.array(cross_sect_theta) + 2.*np.pi/3)%(np.pi2)
+            new_cross_sect2 = (np.array(cross_sect_theta) + 4.*np.pi/3)%(np.pi2)
+            tmp1 = scipy_griddata(points_tuple, cross_sect_theta, (interp_pts_x, interp_pts_y, interp_pts_z))
+            tmp2 = scipy_griddata(points_tuple, new_cross_sect, (interp_pts_x, interp_pts_y, interp_pts_z))
+            tmp3 = scipy_griddata(points_tuple, new_cross_sect2, (interp_pts_x, interp_pts_y, interp_pts_z))
+            tmp1 = tmp1%(np.pi2)
+            tmp2 = (tmp2 - 2.*np.pi/3)%(np.pi2)
+            tmp3 = (tmp3 - 4.*np.pi/3)%(np.pi2)
+            self.tri_interp_theta = +tmp1
+            tmp_truth = np.abs(tmp2 - tmp3)<0.01
+            self.tri_interp_theta[tmp_truth] = +tmp2[tmp_truth]
+            close_answers = np.sum((np.abs(tmp2 - tmp3)<0.01) + (np.abs(tmp1 - tmp3)<0.01) + (np.abs(tmp2 - tmp1)<0.01))
+            print 'close answers : {} of {} ({:.2f}%)'.format(close_answers, len(tmp1), float(close_answers)/len(tmp1)*100)
+            self.interp_boozer[self.valid_channels,:,1] = self.tri_interp_theta.reshape(required_shape)
+            #self.tmp_orig = np.arctan2(interp_data_theta_sin, interp_data_theta_cos)
+            #print np.max(new_cross_sect2), np.min(new_cross_sect2)
+        #print np.sum(np.abs(self.tmp1 - self.tmp2)<0.03)
+        #self.tri_interp_truth = np.zeros(answer.tmp1.shape, dtype=bool)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,1]))))
         print 'phi'
         interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))

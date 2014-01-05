@@ -480,7 +480,9 @@ class DirectSolution(Tomography):
         self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix)
         self.T = np.dot(self.geom_matrix_pinv, self.all_measurements[self.valid_channels])
         self.re_projection = np.dot(self.geom_matrix, self.T)
-
+        tmp = np.dot(self.geom_matrix,self.T)- self.all_measurements[self.valid_channels]
+        self.error_sum = [np.sqrt(np.sum((tmp)**2))]
+        print 'error : {:.2f}'.format(self.error_sum[-1],)
 
 class ART(Tomography):
     def __init__(self, geom_matrix, measurements, lamda, initial_guess = None, save_increment = 50, produce_plots = 0, random_ordering = 1, valid_channels = None):
@@ -640,9 +642,9 @@ class SIRT(Tomography):
         for k in range(cycles):
             if (k%20)==0:
                 tmp = np.dot(self.P,self.T)- self.S
-                self.error_sum.append(np.sum((tmp)**2))
-                print 'real {:.2f}'.format(self.error_sum[-1])
-                print('cycle {} of {}, printout every 20'.format(k,cycles))
+                self.error_sum.append(np.sqrt(np.sum((tmp)**2)))
+                #print 'real {:.2f}'.format()
+                print('cycle {} of {}, error {:.2f}'.format(k,cycles, self.error_sum[-1]))
             current_modification = self.T*0
             curr_count = 0
             for i in range(self.P.shape[0]):

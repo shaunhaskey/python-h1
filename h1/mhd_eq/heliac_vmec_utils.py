@@ -9,10 +9,22 @@ from curves_and_points import rms_distance_points_curve
 
 debug = 2
 
-def generate_VMEC_input2(input_file, boundary_details, ai_string = None):
+def generate_VMEC_input2(input_file, boundary_details, **kwargs):
     '''Generate the VMEC input file based on the descur output and the various coefficients
     SH : 2Apr2013
     '''
+
+    default_settings = {'phi_edge':'0.05','am':'14, -14', 'ai':'',
+                        'ftol_array':'1.e-05,1.e-08,1.0e-10,8.0e-12',
+                        'ns_array':'10, 23, 65, 100',
+                        'niter':'15000','nzeta':'90', 'ntheta':'90',
+                        'ntor':'18', 'mpol':'18',}
+    for i in kwargs.keys():
+        print i, kwargs[i]
+        default_settings[i] = kwargs[i]
+
+    default_settings['boundary'] = boundary_details.rstrip('\n&END\n')
+
     print os.getpid(), 'generating VMEC input'
     fin=open(input_file[0]+'outcurve','r')
     m=[]; n=[]; rbc=[]; zbs=[]; raxis=[]; zaxis=[];
@@ -27,34 +39,52 @@ def generate_VMEC_input2(input_file, boundary_details, ai_string = None):
         i+=1
         tmp = [float(j) for j in lines[i].split() if j!='']
     remaining_lines = lines[i+1:]
-    template = open('/home/srh112/code/python/h1_eq_generation/input.template2','r')
-    fout = open(input_file[0]+'input.'+input_file[1],'w')
 
-    for temp in template:
-        if temp[1:3] == 'am':
-            break
-        fout.write(temp)
-    import shlex
+    with open('/home/srh112/code/python/h1_eq_generation/input.template2','r') as template:
+        vmec_input_text = template.read()
 
-    iotacoeffs=open("/home/srh112/code/python/h1_eq_generation/iotacoeffs.dat",'r')
     ai_success=0
-    if ai_string==None:
+    if default_settings['ai'] == '':
+        iotacoeffs=open("/home/srh112/code/python/h1_eq_generation/iotacoeffs.dat",'r')
         for temp in iotacoeffs:
             temps=shlex.split(temp)
             #if float(temps[0])==float(infile[-3:])/100:
             if np.abs(float(temps[0])-float(input_file[2]))<1.e-3:
                 fout.write(' ai             = '+temps[1]+', '+temps[2]+', '+temps[3]+'\n')
                 ai_success+=1
+        iotacoeffs.close()
     else:
-        fout.write(ai_string)
         ai_success+=1
+        #fout.write(ai_string)
     if ai_success != 1:
         print '!!!!!!!!!!! no ai was written!!!!!!!', float(input_file[2])
-    iotacoeffs.close()
-    presscoeffs=open("/home/srh112/code/python/h1_eq_generation/pressurecoeffs.dat",'r')
-    fout.write(' am             = 14, -14 \n')
-    presscoeffs.close()
-    fout.write(boundary_details)
+
+    for i in default_settings.keys():
+        vmec_input_text = vmec_input_text.replace('<<{}>>'.format(i), default_settings[i])
+    print vmec_input_text
+    with open(input_file[0]+'input.'+input_file[1],'w') as fout:
+        fout.write(vmec_input_text)
+    # for temp in template:
+    #     if temp[1:3] == 'am':
+    #         break
+    #     fout.write(temp)
+    # import shlex
+
+    # if ai_string == None:
+    #     for temp in iotacoeffs:
+    #         temps=shlex.split(temp)
+    #         #if float(temps[0])==float(infile[-3:])/100:
+    #         if np.abs(float(temps[0])-float(input_file[2]))<1.e-3:
+    #             fout.write(' ai             = '+temps[1]+', '+temps[2]+', '+temps[3]+'\n')
+    #             ai_success+=1
+    # else:
+    #     fout.write(ai_string)
+    #     ai_success+=1
+    #presscoeffs=open("/home/srh112/code/python/h1_eq_generation/pressurecoeffs.dat",'r')
+    #fout.write(' am             = 14, -14 \n')
+    #presscoeffs.close()
+    #fout.write(boundary_details)
+
     # raxisout='RAXIS = '; zaxisout='ZAXIS = '
     # for i in range(len(raxis)):
     #     raxisout = raxisout + repr(raxis[i]) + ', '
@@ -66,9 +96,9 @@ def generate_VMEC_input2(input_file, boundary_details, ai_string = None):
 
     # fout.write('/\n&END')
 
-    fin.close()
-    template.close()
-    fout.close()
+    #fin.close()
+    #template.close()
+    #fout.close()
 
 def read_descur_output(infile,suffix='.outcurve', fmt='%15.10f', maxm=50, maxn=40, mynan=0,debug=1):
     """ read the rmc etc from the descur outcurve file, and plot the cross 
