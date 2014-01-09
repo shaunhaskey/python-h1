@@ -14,7 +14,7 @@ calculate the best fit to interferometer data.
 
 SH: 5May2013
 '''
-
+import matplotlib as mpl
 import scipy.optimize as optimize
 from scipy.interpolate import griddata as scipy_griddata
 #import h1.mhd_eq.heliac_vmec_utils as hv_utils
@@ -25,7 +25,8 @@ from StringIO import StringIO
 import h1.mhd_eq.heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
-
+import itertools
+import multiprocessing
 
 class Tomography():
     def plot_amp_angle(self,):
@@ -45,7 +46,21 @@ class Tomography():
         fig.suptitle(self.method)
         fig.canvas.draw(); fig.show()
 
-    def plot_reprojection_comparison_extrap(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1):
+    def plot_reprojection_comparison_extrap(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name = None):
+        fig2, ax2 = pt.subplots(ncols = 8, sharey=True)
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig2.set_figwidth(8.48*2.*cm_to_inch)
+            fig2.set_figheight(8.48*1.25*cm_to_inch)
+
         if cut_values == None:
             cut_values = [33]
             cut_values = [130]
@@ -93,7 +108,6 @@ class Tomography():
         q = all_measurements*0
         q[valid_channels]= re_projection
         q[-valid_channels]= 0
-        fig2, ax2 = pt.subplots(ncols = 8, sharey=True)
         ax2 = np.array([[ax2[0],ax2[1], ax2[4], ax2[6]],[ax2[2], ax2[3], ax2[5],ax2[7]]])
         tmp = np.abs(all_measurements)*valid_channels
         tmp[-valid_channels] = np.nan
@@ -117,43 +131,67 @@ class Tomography():
         tmp_reproj[valid_channels] = re_projection
 
         for i in cut_values:
-            ax2[0,2].plot((np.abs(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, '-', label='Measurement')
-            ax2[0,2].plot((multiplier*np.abs(tmp_reproj[:,i]))[::-1], tmp_y_axis,'-',label = 'Reprojection')
-            ax2[1,2].plot((np.angle(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, '-')
-            ax2[1,2].plot((np.angle(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'-', label = '')
+            ax2[0,2].plot((np.abs(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, 'b-', label='Expt')
+            ax2[0,2].plot((multiplier*np.abs(tmp_reproj[:,i]))[::-1], tmp_y_axis,'g-',label = 'Reproj')
+            ax2[1,2].plot((np.angle(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, 'b-')
+            ax2[1,2].plot((np.angle(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'g-', label = '')
 
-            ax2[0,3].plot((np.real(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, '-', label='Measurement')
-            ax2[0,3].plot((multiplier*np.real(tmp_reproj[:,i]))[::-1], tmp_y_axis,'-',label = 'Reprojection')
-            ax2[1,3].plot((np.imag(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, '-')
-            ax2[1,3].plot((np.imag(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'-', label = '')
+            ax2[0,3].plot((np.real(all_measurements[:,i]*valid_channels[:,i]))[::-1], tmp_y_axis, 'b-', label='Expt')
+            ax2[0,3].plot((multiplier*np.real(tmp_reproj[:,i]))[::-1], tmp_y_axis,'g-',label = 'Reproj')
+            ax2[1,3].plot((np.imag(all_measurements[:,i])*valid_channels[:,i])[::-1], tmp_y_axis, 'b-')
+            ax2[1,3].plot((np.imag(tmp_reproj[:,i])*valid_channels[:,i])[::-1], tmp_y_axis,'g-', label = '')
             for j in [0,1]:
                 for k in [0,1]:
                     tmp = ax2[j,k].get_ylim()
                     ax2[j,k].vlines(i,tmp[0], tmp[1])
+
+        ax2[0,0].set_title('Amp Expt')
+        ax2[0,1].set_title('Amp Reproj')
+        ax2[1,0].set_title('Phase Expt')
+        ax2[1,1].set_title('Phase Reproj')
 
         ax2[1,2].set_xlabel('Phase (rad)')
         #ax2[1,0].set_xlabel('Pixel')
         #ax2[1,1].set_xlabel('Pixel')
         #ax2[1,0].set_ylabel('Pixel')
         ax2[0,0].set_ylabel('Pixel')
-        ax2[0,2].set_xlabel('Amplitude (a.u)')
+        ax2[1,1].set_xlabel('Pixel')
+        ax2[0,2].set_xlabel('Amp (a.u)')
+        ax2[0,3].set_xlabel('Real (a.u)')
+        ax2[1,3].set_xlabel('Imag (a.u)')
         ax2[0,2].legend(prop={'size':5}, loc = 'best')
         ax2[1,2].set_ylim([0,valid_channels.shape[0]])
         ax2[1,2].set_xlim([-np.pi,np.pi])
         center = valid_channels.shape[1]/2
         edge = center/4.
-        ax2[0,0].set_xlim([center+edge, center-edge])
-        ax2[0,1].set_xlim([center+edge,center-edge])
-        ax2[1,0].set_xlim([center+edge, center-edge])
-        ax2[1,1].set_xlim([center+edge, center-edge])
+        for i in ax2:
+            for j in i:
+                j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+                
+        for i in [ax2[0,0], ax2[0,1], ax2[1,0], ax2[1,1]]:
+            i.set_xlim([center+edge, center-edge])
+            #i.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+            i.set_xlabel('Pixel')
+        # ax2[0,0].set_xlim([center+edge, center-edge])
+        # ax2[0,1].set_xlim([center+edge,center-edge])
+        # ax2[1,0].set_xlim([center+edge, center-edge])
+        # ax2[1,1].set_xlim([center+edge, center-edge])
         ax2[0,2].set_ylim([0,valid_channels.shape[0]])
         for i in ax2: 
             for j in i:
                 j.grid()
-        fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0.05, bottom=0.05,top=0.95, right=0.95)
+
+        re_imag_limit = np.max(np.abs(np.array([ax2[1,3].get_xlim(), ax2[0,3].get_xlim()])))
+        ax2[1,3].set_xlim([-re_imag_limit, re_imag_limit])
+        ax2[0,3].set_xlim([-re_imag_limit, re_imag_limit])
+
+        #fig2.subplots_adjust(hspace=0.0, wspace=0.03,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig2.subplots_adjust(hspace=0.0, wspace=0.03,left=0.05, bottom=0.05,top=0.95, right=0.95)
         #fig2.tight_layout()
         #fig2.savefig('reprojection.pdf')
         #fig2.savefig('reprojection.eps')
+        if savefig_name!=None:
+            fig2.savefig(savefig_name)
         fig2.canvas.draw(); fig2.show()
 
 
@@ -230,6 +268,8 @@ class Tomography():
         ax2[1,0].set_xlim([center+edge, center-edge])
         ax2[1,1].set_xlim([center+edge, center-edge])
         ax2[0,2].set_ylim([0,self.valid_channels.shape[0]])
+
+            
         #ax2[0,3].plot(np.abs(self.all_measurements[self.valid_channels]), label='|data|')
         #ax2[0,3].plot(np.abs(self.re_projection), label='|reproj|')
 
@@ -317,8 +357,8 @@ class Tomography():
         fig, ax = pt.subplots(nrows = 2, ncols = 3)
         im_s = ax[0,0].imshow(np.ma.array(LOS_object.s_cross_sect, mask=LOS_object.grid_mask))
         im_s.set_clim([0,1])
-        im_theta = ax[0,1].imshow(np.ma.array(LOS_object.theta_cross_sect, mask=LOS_object.grid_mask))
-        im_theta.set_clim([-np.pi,np.pi])
+        im_theta = ax[0,1].imshow(np.ma.array(LOS_object.theta_cross_sect%(2.*np.pi), mask=LOS_object.grid_mask))
+        im_theta.set_clim([0,2.*np.pi])
         im_phi = ax[0,2].imshow(np.ma.array(LOS_object.phi_cross_sect, mask=LOS_object.grid_mask))
         im_phi.set_clim([-np.pi,np.pi])
         s_vals = (s_values[1:]+s_values[0:-1])/2
@@ -461,8 +501,6 @@ class Tomography():
             im2_p.set_clim(im1_p.get_clim())
             fig2.savefig('{:02d}.png'.format(i))
 
-
-
 class DirectSolution(Tomography):
     def __init__(self, geom_matrix, measurements, valid_channels = None):
         n_measurements, n_regions = geom_matrix.shape
@@ -474,15 +512,21 @@ class DirectSolution(Tomography):
             self.valid_channels = valid_channels
         else:
             self.measurements = measurements
-            self.valid_channels = np.ones(measurements.shape, dtyp=bool)
+            self.valid_channels = np.ones(measurements.shape, dtype=bool)
 
-    def run(self,):
+    def run(self):
+        #print self.geom_matrix.shape, self.all_measurements[self.valid_channels].shape
         self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix)
         self.T = np.dot(self.geom_matrix_pinv, self.all_measurements[self.valid_channels])
+        #tikhonov = regularisation * np.identity(self.geom_matrix.shape[1])
+        #self.T2 = np.dot(np.dot(np.linalg.inv(np.dot(self.geom_matrix.T, self.geom_matrix) - tikhonov), self.geom_matrix.T), self.all_measurements[self.valid_channels])
         self.re_projection = np.dot(self.geom_matrix, self.T)
         tmp = np.dot(self.geom_matrix,self.T)- self.all_measurements[self.valid_channels]
-        self.error_sum = [np.sqrt(np.sum((tmp)**2))]
-        print 'error : {:.2f}'.format(self.error_sum[-1],)
+        #tmp2 = np.dot(self.geom_matrix,self.T2)- self.all_measurements[self.valid_channels]
+        self.error_sum = [np.sqrt(np.sum(np.real(tmp)**2)+np.sum(np.imag(tmp)**2))]
+        #self.error_sum2 = [np.sqrt(np.sum(np.real(tmp2)**2)+np.sum(np.imag(tmp2)**2))]
+        #print 'error : {:.2f}'.format(self.error_sum[-1],)
+        #print 'error using reg : {:.2f}'.format(self.error_sum2[-1],)
 
 class ART(Tomography):
     def __init__(self, geom_matrix, measurements, lamda, initial_guess = None, save_increment = 50, produce_plots = 0, random_ordering = 1, valid_channels = None):
@@ -1755,3 +1799,204 @@ def imax_geometry(theta_values=None, make_single_plot = 0, make_multiple_plots =
     if make_multiple_plots:
         fig2.canvas.draw(); fig2.show()
     return gradient, intersect
+
+
+def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total):
+    #tomo_modes_n_indices = [n.index(i) for i in tomo_modes_n]
+    #tomo_modes_m_indices = [m.index(i) for i in tomo_modes_m]
+    tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
+    tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
+    if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
+    tomo_view_indices = [orientations.index(i) for i in tomo_orient]
+    rev_indices = tomo_view_indices
+    z = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
+    tomo_valid_channels = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+    tomo_measurements = np.vstack((fourier_data[1, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+
+    #lamda = 0.50
+    if method=='SIRT':
+        tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels)
+        tomo_sirt.run(cycles = cycles)
+        error = tomo_sirt.error_sum[-1]
+    elif method=='Direct':
+        tomo_direct = DirectSolution(z, tomo_measurements, valid_channels = tomo_valid_channels)
+        tomo_direct.run()
+        error = tomo_direct.error_sum[-1]
+    print 'n {}, m{}, error {:.2f}, {} of {}'.format(tomo_modes_n, tomo_modes_m, error, count, total)
+    return tomo_modes_n,tomo_modes_m,error
+
+def _single_multiproc_wrapper(arguments):
+    return single(*arguments)
+
+class try_several_modes_multi():
+    def __init__(self,n_list, m_list, tomo_orient,number_modes, answer, overall_geom_list, fourier_data,mode_tuples, lamda=0.5,cycles=300, pool_size = 1, method='SIRT'):
+        #self.answer = answer
+        self.overall_geom_list = overall_geom_list
+        self.fourier_data = fourier_data
+        self.mode_tuples = mode_tuples
+        self.valid_channels = answer.valid_channels
+
+        n_m = [[n_cur,m_cur] for n_cur,m_cur in zip(n_list, m_list)]
+        mode_comb_list = [i for i in itertools.combinations(n_m,number_modes)]
+        if number_modes>1:
+            for i in n_m: 
+                tmp = ()
+                for j in range(number_modes): tmp = tmp + (i,)
+                mode_comb_list.append(tmp)
+
+        print mode_comb_list
+
+        tomo_modes_n_list = []
+        tomo_modes_m_list = []
+
+        tomo_orient_list = [tomo_orient for i in mode_comb_list]
+        for i in mode_comb_list:
+            tomo_modes_n_list.append([j[0] for j in i])
+            tomo_modes_m_list.append([j[1] for j in i])
+            #tomo_orient_list.append(tomo_orient)
+        orientations = answer.orientations
+        arglist = [[self.fourier_data, self.valid_channels, self.overall_geom_list, self.mode_tuples, tomo_n, tomo_m, tomo_orient, lamda, orientations, answer.start_indices, answer.end_indices, method, cycles, counter, len(tomo_orient_list)] for tomo_n, tomo_m, tomo_orient,counter in zip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list, range(len(tomo_orient_list)))]
+        #print arglist
+
+
+        if pool_size > 1:
+            print "Using multiproc"
+            pool = multiprocessing.Pool(processes=pool_size)
+            #errors = pool.map(self._single_multiproc_wrapper, itertools.izip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list))
+            errors = pool.map(_single_multiproc_wrapper, arglist)
+            pool.close(); pool.join() # no more tasks
+        else:
+            #errors = map(self._single_multiproc_wrapper, itertools.izip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list))
+            errors = map(_single_multiproc_wrapper, arglist)
+            #errors = self._single_multiproc_wrapper(tomo_modes_n_list[0], tomo_modes_m_list[0], tomo_orient_list[0])
+
+        print errors
+
+        print '  closing pool and waiting for pool to finish'
+        print '  pool finished'
+        self.errors = errors
+
+def plot_error_multi_list2(input_errors, filename = None):
+    fig, ax = pt.subplots()
+    mode_list = []; errors = []
+    if filename!=None:
+        cm_to_inch=0.393701
+        import matplotlib as mpl
+        old_rc_Params = mpl.rcParams
+        mpl.rcParams['font.size']=8.0
+        mpl.rcParams['axes.titlesize']=8.0#'medium'
+        mpl.rcParams['xtick.labelsize']=8.0
+        mpl.rcParams['ytick.labelsize']=8.0
+        mpl.rcParams['lines.markersize']=5.0
+        mpl.rcParams['savefig.dpi']=150
+        fig.set_figwidth(8.48*cm_to_inch)
+        fig.set_figheight(8.48*0.8*cm_to_inch)
+    for i in input_errors:
+        mode_list.append([i[0][0],i[1][0]])
+        mode_list.append([i[0][1],i[1][1]])
+        errors.append(i[2])
+    print mode_list
+    mode_unique_list = []
+    for i in mode_list:
+        if i not in mode_unique_list:
+            mode_unique_list.append(i)
+    mode_unique_list.sort(key=lambda pair: pair[1])
+    error_array = np.zeros((len(mode_unique_list), len(mode_unique_list)),dtype = float)
+    errors = [i[2] for i in input_errors]
+    print 'Best mode combination : {}'.format(input_errors[np.argmin(errors)])
+    for i in input_errors:
+        m1 = [i[0][0],i[1][0]]
+        m2 = [i[0][1],i[1][1]]
+        i1 = mode_unique_list.index(m1)
+        i2 = mode_unique_list.index(m2)
+        error_array[i1,i2] = i[2]
+        error_array[i2,i1] = i[2]
+    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto')
+    im.set_clim([np.min(error_array),np.min(error_array)*4])
+    ax.set_xticks(range(len(mode_unique_list)))
+    ax.set_yticks(range(len(mode_unique_list)))
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    def mjrFormatter(x, pos):
+        x = int(x)
+        return '{},{}'.format(mode_unique_list[x][0], mode_unique_list[x][1])
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
+    ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
+    cbar = pt.colorbar(im, ax = ax)
+    cbar.set_label('Error')
+    for tick in ax.xaxis.iter_ticks():
+        #tick[0].label2On = True
+        tick[0].label1On = True
+        tick[0].label1.set_rotation('vertical')
+    #for tick in ax.yaxis.iter_ticks():
+    #    tick[0].label2On = True
+    #    tick[0].label1On = False
+    ax.set_xlabel('Mode 1 (n,m)')
+    ax.set_ylabel('Mode 2 (n,m)')
+    ax.set_title('Reconstruction error using 2 modes')
+    if filename!=None:
+        fig.tight_layout()
+        fig.savefig(filename)
+        print filename
+    fig.canvas.draw(); fig.show()
+    return input_errors[np.argmin(errors)]
+
+
+
+def plot_error_multi_list_single(input_errors, filename = None, single_m = None):
+    fig, ax = pt.subplots()
+    mode_list_n = []; mode_list_m = []; errors = []
+    for i in input_errors:
+        mode_list_n.append(i[0][0])
+        mode_list_m.append(i[1][0])
+        errors.append(i[2])
+    mode_list_n = list(set(mode_list_n))
+    mode_list_m = list(set(mode_list_m))
+    mode_list_n.sort()
+    mode_list_m.sort()
+    error_array = np.zeros((len(mode_list_n), len(mode_list_m)),dtype = float)
+    for i in input_errors:
+        m1 = i[0][0]
+        m2 = i[1][0]
+        i1 = mode_list_n.index(m1)
+        i2 = mode_list_m.index(m2)
+        error_array[i1,i2] = i[2]
+    im = ax.imshow(error_array, interpolation = 'nearest',)
+    im.set_clim([np.min(error_array),np.max(error_array)])
+    ax.set_xticks(range(len(mode_list_m)))
+    ax.set_yticks(range(len(mode_list_n)))
+    print mode_list_n
+    print mode_list_m
+    def mjrFormatter(x, pos):
+        x = int(x)
+        return '{}'.format(mode_list_n[x])
+    def mjrFormatter2(x, pos):
+        x = int(x)
+        return '{}'.format(mode_list_m[x])
+    ax.set_xlabel('m')
+    ax.set_ylabel('n')
+    ax.set_title('Error from Single mode fit')
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
+    ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter2))
+    cbar = pt.colorbar(im, ax = ax)
+    cbar.set_label('Error')
+    if single_m!=None:
+        fig2,ax2 = pt.subplots()
+        index = mode_list_m.index(single_m)
+        ax2.plot(mode_list_n, error_array[:,index], 'o-')
+        ax2.set_xlabel('n')
+        ax2.set_ylabel('Tomographic Reconstruction Error')
+        ax2.set_title('Reconstruction error for m={} and various n values'.format(single_m))
+        fig2.canvas.draw(); fig2.show()
+    # for tick in ax.xaxis.iter_ticks():
+    #     tick[0].label2On = True
+    #     tick[0].label1On = False
+    #     tick[0].label2.set_rotation('vertical')
+    # for tick in ax.yaxis.iter_ticks():
+    #     tick[0].label2On = True
+    #     tick[0].label1On = False
+    if filename!=None:
+        fig.savefig(filename)
+        print filename
+    fig.canvas.draw(); fig.show()

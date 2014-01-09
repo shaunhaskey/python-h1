@@ -486,7 +486,7 @@ class LOS():
                     self.dl[pixel_y, pixel_x] = np.sqrt(np.sum((self.interpolation_pts[pixel_y, pixel_x,1,:] - self.interpolation_pts[pixel_y, pixel_x,0,:])**2))
 
 
-    def perform_interpolation(self,no_theta = 50, s_increment = 2, sin_cos_theta = True):
+    def perform_interpolation(self,no_theta = 50, s_increment = 2, sin_cos_theta = True, old_way = False):
         ''' 
         valid_channels : bool array listing the channels that intersect the plasma
         cross_sect_s : 1D array of s values (corresponding to the interpolation_pts
@@ -499,24 +499,30 @@ class LOS():
         if self.patch.obtained_grid != 1:
             print 'getting patch grid'
             self.patch.get_grid_for_interpolation(no_theta = no_theta, s_increment = s_increment)
+
+        #Original Grid, and Boozer coordinates on that grid
         points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
         cross_sect_s = self.patch.grid_s
         cross_sect_phi = self.patch.grid_phi
         cross_sect_theta = self.patch.grid_theta
 
-        valid_channels = self.valid_channels
+        #valid_channels = self.valid_channels
+        #Points that we want to interpolate onto
         interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten()
         interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten()
         interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten()
         required_shape = self.interpolation_pts[self.valid_channels,:,0].shape
+
+        #array for holding the Boozer coordinates 
         self.interp_boozer = self.interpolation_pts*0
         print 's_pt1 - '
         #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
-        self.s_pt1 = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        self.s_pt1 = scipy_griddata(np.array(points_tuple).T, np.array(cross_sect_s), np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T).reshape(required_shape)
+        #print np.allclose(self.s_pt1, self.s_pt1_V2)
 
         print('before2 {}'.format(np.sum(np.isnan(self.s_pt1))))
-        #tmp = 
 
+        #Modify the intersection points to remove extrapolation
         self.start_pt = np.argmax(np.isfinite(self.s_pt1),axis = 1)
         self.end_pt = np.argmax(np.isfinite(self.s_pt1)[:,::-1],axis = 1)
         #tmp1 = self.interpolation_pts[self.valid_channels,:,:]
@@ -529,8 +535,7 @@ class LOS():
         b = +self.intersection2[self.valid_channels,:]
         c = +self.interpolation_pts[self.valid_channels,:,:]
         d = +self.valid_channels[self.valid_channels]
-        self.start_list = []
-        self.end_list = []
+        self.start_list = []; self.end_list = []
         for i in range(len(self.start_pt)):
             if float(np.sum(np.isnan(self.s_pt1[i,:])))/self.s_pt1.shape[1] > 0.4:
                 d[i]= False
@@ -550,32 +555,42 @@ class LOS():
         self.valid_channels[self.valid_channels] = +d
         #self.intersection1[self.valid_channels,:] = self.interpolation_pts[self.valid_channels,:,:][:,self.start_pt,:]
         #self.intersection2[self.valid_channels,:] = self.interpolation_pts[self.valid_channels,:,:][:,self.end_pt,:]
-
-        
         self.create_interpolation_points(self.n_interp_pts)
 
         interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten()
         interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten()
         interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten()
         required_shape = self.interpolation_pts[self.valid_channels,:,0].shape
-        start_time = time.time()
         print 's_pt2, orig grid shape : ', interp_pts_x.shape, ' new grid shape : ', len(points_tuple[0])
+        if old_way:
+            self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        else:
+            self.vtx, self.wts = interp_weights(np.array(points_tuple).T, np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T)
+            self.interp_boozer[self.valid_channels,:,0] = interpolate(np.array(cross_sect_s), self.vtx, self.wts).reshape(required_shape)
+        #print 's check second : ', np.allclose(self.s_tmp2, self.s_tmp2_V2)
 
-        self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
-        print 'time to complete : {:.2f}'.format(time.time() - start_time)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,0]))))
         print 'theta'
         if sin_cos_theta:
-            interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
-            interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+            if old_way:
+                interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+                interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+            else:
+                interp_data_theta_sin = interpolate(np.sin(cross_sect_theta), self.vtx, self.wts)
+                interp_data_theta_cos = interpolate(np.cos(cross_sect_theta), self.vtx, self.wts)
             self.interp_boozer[self.valid_channels,:,1] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
         else:
             print "Using three different interpolations for theta"
             new_cross_sect = (np.array(cross_sect_theta) + 2.*np.pi/3)%(np.pi2)
             new_cross_sect2 = (np.array(cross_sect_theta) + 4.*np.pi/3)%(np.pi2)
-            tmp1 = scipy_griddata(points_tuple, cross_sect_theta, (interp_pts_x, interp_pts_y, interp_pts_z))
-            tmp2 = scipy_griddata(points_tuple, new_cross_sect, (interp_pts_x, interp_pts_y, interp_pts_z))
-            tmp3 = scipy_griddata(points_tuple, new_cross_sect2, (interp_pts_x, interp_pts_y, interp_pts_z))
+            if old_way:
+                tmp1 = scipy_griddata(points_tuple, cross_sect_theta, (interp_pts_x, interp_pts_y, interp_pts_z))
+                tmp2 = scipy_griddata(points_tuple, new_cross_sect, (interp_pts_x, interp_pts_y, interp_pts_z))
+                tmp3 = scipy_griddata(points_tuple, new_cross_sect2, (interp_pts_x, interp_pts_y, interp_pts_z))
+            else:
+                tmp1 = interpolate(np.array(cross_sect_theta), self.vtx, self.wts)
+                tmp2 = interpolate(np.array(new_cross_sect), self.vtx, self.wts)
+                tmp3 = interpolate(np.array(new_cross_sect2), self.vtx, self.wts)
             tmp1 = tmp1%(np.pi2)
             tmp2 = (tmp2 - 2.*np.pi/3)%(np.pi2)
             tmp3 = (tmp3 - 4.*np.pi/3)%(np.pi2)
@@ -591,16 +606,20 @@ class LOS():
         #self.tri_interp_truth = np.zeros(answer.tmp1.shape, dtype=bool)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,1]))))
         print 'phi'
-        interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
-        interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        if old_way:
+            interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+            interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        else:
+            interp_data_phi_sin = interpolate(np.sin(cross_sect_phi), self.vtx, self.wts)
+            interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx, self.wts)
+        #print 'Phi check...', np.allclose(interp_data_phi_sin, interp_data_phi_sin_V2),np.allclose(interp_data_phi_cos, interp_data_phi_cos_V2)
+
         self.interp_boozer[self.valid_channels,:,2] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
         print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,2]))))
 
 
-
-    def grid_for_wave(self, phi_value=120., z_min = -0.4, z_max = 0.4, r_min = 0.9, r_max = 1.45, n_pts = 100, plot_mask = 0):
+    def grid_for_wave(self, phi_value=120., z_min = -0.4, z_max = 0.4, r_min = 0.9, r_max = 1.45, n_pts = 100, plot_mask = 0, old_way = False):
         ''' 
-
         SRH: 22July2013
         '''
         points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
@@ -658,14 +677,27 @@ class LOS():
         self.phi_cross_sect = self.x_grid *0
         print 's'
         #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
-        self.s_cross_sect[self.valid_pts] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        if old_way: 
+            self.s_cross_sect[self.valid_pts] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        else:
+            self.vtx2, self.wts2 = interp_weights(np.array(points_tuple).T, np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T)
+            self.s_cross_sect[self.valid_pts] = interpolate(np.array(cross_sect_s), self.vtx2, self.wts2).reshape(required_shape)
+
         print('theta')
-        interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
-        interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+        if old_way:
+            interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+            interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
+        else:
+            interp_data_theta_sin = interpolate(np.sin(cross_sect_theta), self.vtx2, self.wts2)
+            interp_data_theta_cos = interpolate(np.cos(cross_sect_theta), self.vtx2, self.wts2)
         self.theta_cross_sect[self.valid_pts] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
         print('phi')
-        interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
-        interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        if old_way:
+            interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+            interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
+        else:
+            interp_data_phi_sin = interpolate(np.sin(cross_sect_phi), self.vtx2, self.wts2)
+            interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx2, self.wts2)
         self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
 
     def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1):
@@ -831,6 +863,105 @@ class LOS():
         ren.reset_camera_clipping_range()
         if render:
             mayavi_fig.scene.render()
+
+    def check_geometry(self,):
+        fig,ax = pt.subplots(ncols = 2, sharex = True, sharey = True);
+        im = ax[0].imshow(self.intersection1[:,:,2],aspect='auto',origin='upper');
+        im2 = ax[1].imshow(self.intersection2[:,:,2],aspect='auto',origin='upper');
+        im2.set_clim([-0.3,0.3])
+        im.set_clim([-0.3,0.3])
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        ax[0].set_title('intersection1 - z')
+        ax[1].set_title('intersection2 - z')
+        fig.canvas.draw();fig.show()
+
+        
+        fig,ax = pt.subplots(ncols = 2, sharex = True, sharey = True)
+        im=ax[0].imshow(np.sqrt(self.intersection1[:,:,0]**2 +self.intersection1[:,:,1]**2) ,aspect='auto',origin='upper');
+        im2=ax[1].imshow(np.sqrt(self.intersection2[:,:,0]**2 +self.intersection2[:,:,1]**2) ,aspect='auto',origin='upper');
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        #pt.colorbar(im)
+        ax[0].set_title('intersection1 - r')
+        ax[1].set_title('intersection2 - r')
+        im.set_clim([0.9,1.4]);
+        im2.set_clim([0.9,1.4]);
+        fig.canvas.draw();fig.show()
+
+        fig,ax = pt.subplots(ncols = 3, sharex = True, sharey = True)
+        im=ax[0].imshow(np.sqrt(self.interpolation_pts[:,:,0,0]**2 +self.interpolation_pts[:,:,0,1]**2) ,aspect='auto',origin='upper')
+        center_loc = self.interpolation_pts.shape[2]/2
+        im2=ax[1].imshow(np.sqrt(self.interpolation_pts[:,:,center_loc,0]**2 +self.interpolation_pts[:,:,center_loc,1]**2) ,aspect='auto',origin='upper')
+        im3=ax[2].imshow(np.sqrt(self.interpolation_pts[:,:,-1,0]**2 +self.interpolation_pts[:,:,-1,1]**2) ,aspect='auto',origin='upper')
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        im.set_clim([0.9,1.4]);
+        im2.set_clim([0.9,1.4]);
+        im3.set_clim([0.9,1.4]);
+        ax[0].set_title('interpolation pts 0 - r')
+        ax[1].set_title('interpolation pts 1/2 - r')
+        ax[2].set_title('interpolation pts last - r')
+        fig.canvas.draw();fig.show()
+
+        fig,ax = pt.subplots(ncols = 3, sharex = True, sharey = True)
+        im=ax[0].imshow(self.interpolation_pts[:,:,0,2] ,aspect='auto',origin='upper')
+        center_loc = self.interpolation_pts.shape[2]/2
+        im2=ax[1].imshow(self.interpolation_pts[:,:,center_loc,2] ,aspect='auto',origin='upper')
+        im3=ax[2].imshow(self.interpolation_pts[:,:,-1,2] ,aspect='auto',origin='upper')
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        im.set_clim([-0.3,0.3])
+        im2.set_clim([-0.3,0.3])
+        im3.set_clim([-0.3,0.3])
+        ax[0].set_title('interpolation pts 0 - z')
+        ax[1].set_title('interpolation pts 1/2 - z')
+        ax[2].set_title('interpolation pts last - z')
+        fig.canvas.draw();fig.show()
+
+        print np.min(self.interp_boozer[:,:,:,1]), np.max(self.interp_boozer[:,:,:,1])
+        fig,ax = pt.subplots(ncols = 3, sharex = True, sharey = True)
+        im=ax[0].imshow(self.interp_boozer[:,:,0,1] ,aspect='auto',origin='upper')
+        center_loc = self.interpolation_pts.shape[2]/2
+        im2=ax[1].imshow(self.interp_boozer[:,:,center_loc,1] ,aspect='auto',origin='upper')
+        im3=ax[2].imshow(self.interp_boozer[:,:,-1,1] ,aspect='auto',origin='upper')
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        im.set_clim([0.,np.pi2])
+        im2.set_clim([0.,np.pi2])
+        im3.set_clim([0.,np.pi2])
+        ax[0].set_title('boozer theta 0')
+        ax[1].set_title('boozer theta 1/2')
+        ax[2].set_title('boozer theta last')
+        fig.canvas.draw();fig.show()
+
+        print np.min(self.interp_boozer[:,:,:,0]), np.max(self.interp_boozer[:,:,:,0])
+        fig,ax = pt.subplots(ncols = 3, sharex = True, sharey = True)
+        im=ax[0].imshow(self.interp_boozer[:,:,0,0] ,aspect='auto',origin='upper')
+        center_loc = self.interpolation_pts.shape[2]/2
+        im2=ax[1].imshow(self.interp_boozer[:,:,center_loc,0] ,aspect='auto',origin='upper')
+        im3=ax[2].imshow(self.interp_boozer[:,:,-1,0] ,aspect='auto',origin='upper')
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        im.set_clim([0.,1])
+        im2.set_clim([0.,1])
+        im3.set_clim([0.,1])
+        ax[0].set_title('boozer s 0')
+        ax[1].set_title('boozer s 1/2')
+        ax[2].set_title('boozer s last')
+        fig.canvas.draw();fig.show()
+
+        print np.min(self.interp_boozer[:,:,:,2]), np.max(self.interp_boozer[:,:,:,2])
+        fig,ax = pt.subplots(ncols = 3, sharex = True, sharey = True)
+        im=ax[0].imshow(self.interp_boozer[:,:,0,2] ,aspect='auto',origin='upper')
+        center_loc = self.interpolation_pts.shape[2]/2
+        im2=ax[1].imshow(self.interp_boozer[:,:,center_loc,2] ,aspect='auto',origin='upper')
+        im3=ax[2].imshow(self.interp_boozer[:,:,-1,2] ,aspect='auto',origin='upper')
+        ax[0].set_xlim([160,100]);ax[0].set_ylim([0,760]);
+        #im.set_clim([0.,1])
+        #im2.set_clim([0.,1])
+        #im3.set_clim([0.,1])
+        ax[0].set_title('boozer phi 0')
+        ax[1].set_title('boozer phi 1/2')
+        ax[2].set_title('boozer phi last')
+        fig.canvas.draw();fig.show()
+
+        # fig,ax = pt.subplots();im = ax.imshow(self.interp_boozer[:,:,0,1],aspect='auto',origin='upper');ax.set_xlim([160,100]);ax.set_ylim([0,760]);pt.colorbar(im);fig.canvas.draw();fig.show()
+
 
 
 def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True, min_pixel=None, max_pixel=None, plot_LOS_lines = False):
@@ -1068,3 +1199,25 @@ def plot_imax_mask(LOS_object, shot_number = 71235, cal_file=None, image_array=N
     ax[3].set_xlim([0,2])
     ax[3].set_ylim([extent[2], extent[3]])
     fig.canvas.draw(); fig.show()
+
+import scipy.interpolate as spint
+import scipy.spatial.qhull as qhull
+import itertools
+
+def interp_weights(xyz, uvw):
+    # Usage vtx, wts = interp_weights(xyz, uvw)
+    # interpolate(f, vtx, wts)
+    d = 3
+    tri = qhull.Delaunay(xyz)
+    simplex = tri.find_simplex(uvw)
+    vertices = np.take(tri.simplices, simplex, axis=0)
+    temp = np.take(tri.transform, simplex, axis=0)
+    delta = uvw - temp[:, d]
+    bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
+    return vertices, np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
+    return vertices, np.hstack((bary, 1 - bary.sum(axis=1)))
+
+def interpolate(values, vtx, wts, fill_value=np.nan):
+    ret = np.einsum('nj,nj->n', np.take(values, vtx), wts)
+    ret[np.any(wts < 0, axis=1)] = fill_value
+    return ret
