@@ -194,6 +194,116 @@ class Tomography():
             fig2.savefig(savefig_name)
         fig2.canvas.draw(); fig2.show()
 
+    def plot_reprojection_comparison_extrap_diff(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name = None):
+        fig2, ax2 = pt.subplots(ncols = 6, sharey=True, sharex = True)
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig2.set_figwidth(8.48*2.*cm_to_inch)
+            fig2.set_figheight(8.48*1.25*cm_to_inch)
+
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        print(valid_channels.shape)
+        print(all_measurements.shape)
+        measurements = all_measurements[valid_channels]
+        valid_channels = valid_channels
+        n_measurements, n_regions = geom_matrix.shape
+
+        #If the geometry matrix or measurement matrix complex
+        #Need to build a larger matrix that contains the linear system of equations
+        #in real numbers only
+        if geom_matrix.dtype == np.complex_ or measurements.dtype == np.complex:
+            print 'complex input'
+            P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+            #Build a real matrix 
+            P[0::2,0::2] = +np.real(geom_matrix)
+            P[0::2,1::2] = -np.imag(geom_matrix)
+            P[1::2,0::2] = +np.imag(geom_matrix)
+            P[1::2,1::2] = +np.real(geom_matrix)
+            S = np.zeros(n_measurements*2, dtype=float)
+            S[0::2] = +np.real(measurements)
+            S[1::2] = +np.imag(measurements)
+            T_tmp = np.zeros(n_regions*2, dtype=float)
+            T_tmp[0::2] = +np.real(self.T)
+            T_tmp[1::2] = +np.imag(self.T)
+            input_type = 'complex'
+            tmp = np.dot(P,T_tmp)- S
+            print 'error', np.sum((tmp)**2)
+        else:
+            print 'real input'
+            P = geom_matrix
+            S = measurements
+            input_type = 'real'
+            
+        tmp = np.dot(P,T_tmp)
+        re_projection = tmp[0::2]+1j*tmp[1::2]
+        q = all_measurements*0
+        q[valid_channels]= re_projection
+        q[-valid_channels]= 0
+        tmp_meas = np.abs(all_measurements)*valid_channels
+        tmp_meas[-valid_channels] = np.nan
+        im1_a = ax2[0].imshow(tmp_meas,origin='upper',aspect='auto',interpolation='nearest', cmap='spectral')
+        #im1_a = ax2[0,0].imshow(np.abs(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest', cmap='gist_stern')
+        im1_p = ax2[2].imshow(np.angle(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
+        im1_p.set_clim([-np.pi,np.pi])
+
+        tmp = np.abs(q)
+        tmp[-valid_channels] = np.nan
+        im2_a = ax2[1].imshow(tmp,origin='upper', aspect='auto',interpolation='nearest', cmap='spectral')
+        print np.mean(tmp[np.isfinite(tmp)])
+        print tmp_meas, tmp
+        percent_diff = (tmp_meas - tmp)/np.mean(tmp[np.isfinite(tmp)])*100
+        print np.mean(percent_diff[np.isfinite(percent_diff)])
+
+        amp_diff = ax2[4].imshow(percent_diff,origin='upper', aspect='auto',interpolation='nearest', cmap='bone')
+        amp_diff.set_clim([0,100])
+        pt.colorbar(amp_diff,ax = ax2[4], orientation = 'horizontal')
+        im2_p = ax2[3].imshow(np.angle(q),origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
+
+        #percent_diff = (np.angle(q) - np.angle(all_measurements))/np.mean(tmp)*100
+        im2_a.set_clim(im1_a.get_clim())
+        im2_p.set_clim(im1_p.get_clim())
+        start = 0; increment = len(T_tmp)/len(n)
+
+        tmp_y_axis = np.arange(len(all_measurements[:,0]))
+        tmp_y_axis = np.max(tmp_y_axis)- tmp_y_axis
+        tmp_reproj = all_measurements*0.
+        tmp_reproj[valid_channels] = re_projection
+
+        ax2[0].set_title('Amp Expt')
+        ax2[1].set_title('Amp Reproj')
+        ax2[2].set_title('Phase Expt')
+        ax2[3].set_title('Phase Reproj')
+
+        ax2[2].set_xlabel('Phase (rad)')
+        #ax2[1,0].set_xlabel('Pixel')
+        #ax2[1,1].set_xlabel('Pixel')
+        #ax2[1,0].set_ylabel('Pixel')
+        ax2[0].set_ylabel('Pixel')
+        center = valid_channels.shape[1]/2
+        edge = center/4.
+        for j in ax2:
+            j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+            j.grid()
+        for i in ax2:
+            i.set_xlim([center+edge, center-edge])
+            i.set_xlabel('Pixel')
+        ax2[0].set_ylim([0,valid_channels.shape[0]])
+
+        fig2.subplots_adjust(hspace=0.0, wspace=0.03,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        if savefig_name!=None:
+            fig2.savefig(savefig_name)
+        fig2.canvas.draw(); fig2.show()
+
 
     def plot_reprojection_comparison(self, n, m, LOS_object, cut_values = None, multiplier = 1., pub_fig = 1):
         '''This function is for making publication images comparing
@@ -1911,7 +2021,7 @@ def plot_error_multi_list2(input_errors, filename = None):
         i2 = mode_unique_list.index(m2)
         error_array[i1,i2] = i[2]
         error_array[i2,i1] = i[2]
-    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto')
+    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto', cmap='hot')
     im.set_clim([np.min(error_array),np.min(error_array)*4])
     ax.set_xticks(range(len(mode_unique_list)))
     ax.set_yticks(range(len(mode_unique_list)))
@@ -1924,7 +2034,7 @@ def plot_error_multi_list2(input_errors, filename = None):
     ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
     ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
     cbar = pt.colorbar(im, ax = ax)
-    cbar.set_label('Error')
+    cbar.set_label('Tomo Recon Error')
     for tick in ax.xaxis.iter_ticks():
         #tick[0].label2On = True
         tick[0].label1On = True
@@ -1934,7 +2044,7 @@ def plot_error_multi_list2(input_errors, filename = None):
     #    tick[0].label1On = False
     ax.set_xlabel('Mode 1 (n,m)')
     ax.set_ylabel('Mode 2 (n,m)')
-    ax.set_title('Reconstruction error using 2 modes')
+    #ax.set_title('Reconstruction error using 2 modes')
     if filename!=None:
         fig.tight_layout()
         fig.savefig(filename)
@@ -1944,8 +2054,25 @@ def plot_error_multi_list2(input_errors, filename = None):
 
 
 
-def plot_error_multi_list_single(input_errors, filename = None, single_m = None):
-    fig, ax = pt.subplots()
+def plot_error_multi_list_single(input_errors, filename = None, single_m = None,):
+    print 'hello'
+    if single_m!=None:
+        fig, [ax2,ax] = pt.subplots(nrows = 2)
+    else:
+        fig, ax = pt.subplots()
+    if filename!=None:
+        cm_to_inch=0.393701
+        import matplotlib as mpl
+        old_rc_Params = mpl.rcParams
+        mpl.rcParams['font.size']=8.0
+        mpl.rcParams['axes.titlesize']=8.0#'medium'
+        mpl.rcParams['xtick.labelsize']=8.0
+        mpl.rcParams['ytick.labelsize']=8.0
+        mpl.rcParams['lines.markersize']=5.0
+        mpl.rcParams['savefig.dpi']=150
+        fig.set_figwidth(8.48*cm_to_inch)
+        fig.set_figheight(8.48*1.2*cm_to_inch)
+
     mode_list_n = []; mode_list_m = []; errors = []
     for i in input_errors:
         mode_list_n.append(i[0][0])
@@ -1962,7 +2089,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None)
         i1 = mode_list_n.index(m1)
         i2 = mode_list_m.index(m2)
         error_array[i1,i2] = i[2]
-    im = ax.imshow(error_array, interpolation = 'nearest',)
+    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto',cmap='hot')
     im.set_clim([np.min(error_array),np.max(error_array)])
     ax.set_xticks(range(len(mode_list_m)))
     ax.set_yticks(range(len(mode_list_n)))
@@ -1976,19 +2103,21 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None)
         return '{}'.format(mode_list_m[x])
     ax.set_xlabel('m')
     ax.set_ylabel('n')
-    ax.set_title('Error from Single mode fit')
+    #ax.set_title('Error from Single mode fit')
     ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
     ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter2))
     cbar = pt.colorbar(im, ax = ax)
-    cbar.set_label('Error')
+    cbar.set_label('Tomo Recon Error')
     if single_m!=None:
-        fig2,ax2 = pt.subplots()
+        #fig2,ax2 = pt.subplots()
         index = mode_list_m.index(single_m)
-        ax2.plot(mode_list_n, error_array[:,index], 'o-')
+        ax2.plot(mode_list_n, error_array[:,index], 'o-',label='m={}'.format(single_m))
         ax2.set_xlabel('n')
-        ax2.set_ylabel('Tomographic Reconstruction Error')
-        ax2.set_title('Reconstruction error for m={} and various n values'.format(single_m))
-        fig2.canvas.draw(); fig2.show()
+        ax2.set_ylabel('Tomo Recon Error')
+        ax2.legend(loc='best')
+        ax2.grid()
+        #ax2.set_title('Reconstruction error for m={} and various n values'.format(single_m))
+        #fig2.canvas.draw(); fig2.show()
     # for tick in ax.xaxis.iter_ticks():
     #     tick[0].label2On = True
     #     tick[0].label1On = False
@@ -1997,6 +2126,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None)
     #     tick[0].label2On = True
     #     tick[0].label1On = False
     if filename!=None:
+        fig.tight_layout(pad=0.1)
         fig.savefig(filename)
         print filename
     fig.canvas.draw(); fig.show()
