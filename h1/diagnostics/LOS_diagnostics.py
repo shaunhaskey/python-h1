@@ -700,8 +700,11 @@ class LOS():
             interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx2, self.wts2)
         self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
 
-    def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1):
+    def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1, decimate = 20):
+        '''Plot the boozer lines of sight as a proportion of distance along the line of sight
 
+        SRH: 21Jan2013
+        '''
         mask = np.zeros(self.valid_channels.shape,dtype=bool)
         if y_vals == None and x_vals == None:
             mask = self.valid_channels
@@ -717,6 +720,10 @@ class LOS():
         mask *= self.valid_channels
         print np.sum(mask)
         fig, ax = pt.subplots(nrows = 3, sharex=True)
+        #fig = pt.figure()
+        #ax =[fig.add_subplot(311,rasterized=False)]
+        #ax.append(fig.add_subplot(312,rasterized=False))
+        #ax.append(fig.add_subplot(313,rasterized=False))
         if pub_fig:
             cm_to_inch=0.393701
             import matplotlib as mpl
@@ -728,7 +735,7 @@ class LOS():
             mpl.rcParams['lines.markersize']=5.0
             mpl.rcParams['savefig.dpi']=150
             fig.set_figwidth(8.48*cm_to_inch)
-            fig.set_figheight(8.48*1.5*cm_to_inch)
+            fig.set_figheight(8.48*1.3*cm_to_inch)
         #for i in range(len(mask))
         x_axis = np.arange(self.interp_boozer.shape[2],dtype=float)/self.interp_boozer.shape[2] * 100.
         colour_list = ['b-','k-.','r--']
@@ -737,16 +744,24 @@ class LOS():
             print i, style, i*self.CCD_pixels_y, (i+1)*self.CCD_pixels_y, n_ims
             mask2[i*self.CCD_pixels_y/n_ims:(i+1)*self.CCD_pixels_y/n_ims,:] = True
             print np.sum(mask2)
-            ax[0].plot(x_axis, self.interp_boozer[mask*mask2,:,0].T, style, linewidth=0.6)
-            ax[1].plot(x_axis, self.interp_boozer[mask*mask2,:,1].T, style, linewidth=0.6)
-            ax[2].plot(x_axis, self.interp_boozer[mask*mask2,:,2].T, style, linewidth=0.6)
+            tmp=self.interp_boozer[mask*mask2,:,:]
+            print self.interp_boozer.shape, tmp.shape
+            x_decimate = 1
+            ax[0].plot(x_axis[::x_decimate], tmp[::decimate,::x_decimate,0].T, style, linewidth=0.6)
+            ax[1].plot(x_axis[::x_decimate], np.unwrap((tmp[::decimate,::x_decimate,1].T+np.pi)%(2.*np.pi)-np.pi,axis=0), style, linewidth=0.6)
+            #ax[1].plot(x_axis, (tmp[::decimate,:,1].T+np.pi)%(2.*np.pi)-np.pi, '.', linewidth=0.6)
+            ax[2].plot(x_axis[::x_decimate], (tmp[::decimate,::x_decimate,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
+            #ax[1].plot(x_axis, (self.interp_boozer[mask*mask2,:,1].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
+            #ax[2].plot(x_axis, (self.interp_boozer[mask*mask2,:,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
         ax[2].set_xlabel('Prop of Distance along line of sight (%)')
-        ax[0].set_ylabel('s')
-        ax[1].set_ylabel(r'$\theta_b$ (rad)')
-        ax[2].set_ylabel(r'$\phi_b$ (rad)')
-        ax[2].set_xlabel('Prop of Distance along line of sight (%)')
+        ax[0].set_ylabel(r'$\Psi_N$')
+        ax[0].set_ylim([0,1])
+        for i in ax: i.grid()
+        ax[1].set_ylabel(r'$\theta$ (rad)')
+        ax[2].set_ylabel(r'$\phi$ (rad)')
+        ax[2].set_xlabel('Proportion of Distance through plasma ($\%$)')
         if save_fig!=None:
-            fig.tight_layout()
+            fig.tight_layout(pad=0.01)
             fig.savefig(save_fig)
         fig.canvas.draw(); fig.show()
 
