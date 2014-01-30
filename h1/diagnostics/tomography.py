@@ -240,8 +240,8 @@ class Tomography():
         # ax2.append(pt.subplot2grid((4,7), (0,0), colspan = 2))
         # ax2.append(pt.subplot2grid((4,7), (1,0), colspan = 2, sharex = ax2[5]))
         # ax2.append(pt.subplot2grid((4,7), (2,0), colspan = 2, rowspan = 2))
-
-        plot_radial_structure(self.T, LOS_object.segment_midpoints, n, m, prov_ax = [ax2[5],ax2[6]], norm = True, extra_txt = '', single_mode = None)
+        norm = False
+        plot_radial_structure(self.T, LOS_object.segment_midpoints, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = '', single_mode = None)
         start = 0; increment = len(self.T)/len(n)
         s_vals = LOS_object.segment_midpoints
         #s_vals = (s_values[1:]+s_values[0:-1])/2
@@ -271,15 +271,17 @@ class Tomography():
         ax2[6].set_ylim([-2*np.pi,2*np.pi])
         ax2[5].set_xlim([0,1])
         ax2[6].set_xlim([0,1])
-        ax2[5].set_ylim([0,0.12])
+        if norm:
+            ax2[5].set_ylim([0,0.12])
         ax2[6].set_xlabel(r'$\Psi_N$')
         ax2[5].set_xlabel(r'$\Psi_N$')
         ax2[5].legend(loc='upper left')
         ax2[7].set_xticks(ax2[7].get_xticks()[::2])
         ax2[6].set_yticks(ax2[6].get_yticks()[::2])
-        ax2[5].set_yticks(ax2[5].get_yticks()[::2])
+        if norm:
+            ax2[5].set_yticks(ax2[5].get_yticks()[::2])
+            ax2[5].text(0.85,0.83*ax2[5].get_ylim()[1],'(a)')
         ax2[7].text(1.35,0.2,'(c)')
-        ax2[5].text(0.85,0.83*ax2[5].get_ylim()[1],'(a)')
         ax2[6].text(0.85,(ax2[6].get_ylim()[1] - ax2[6].get_ylim()[0])*0.85 + ax2[6].get_ylim()[0],'(b)')
         if n.__class__ == int:
             n = [n]
@@ -618,6 +620,15 @@ class Tomography():
 
     def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10, inc_cbar=0, pub_fig = False, save_fig = None, inc_profile=False):
         #Get the boozer locations to interpolate
+        cm_to_inch=0.393701
+        import matplotlib as mpl
+        old_rc_Params = mpl.rcParams
+        mpl.rcParams['font.size']=8.0
+        mpl.rcParams['axes.titlesize']=8.0#'medium'
+        mpl.rcParams['xtick.labelsize']=8.0
+        mpl.rcParams['ytick.labelsize']=8.0
+        mpl.rcParams['lines.markersize']=5.0
+        mpl.rcParams['savefig.dpi']=150
         if n.__class__ == int:
             n = [n]
             m = [m]
@@ -630,18 +641,8 @@ class Tomography():
         else:
             fig, ax = pt.subplots()
             ax = [ax]
-        if pub_fig:
-            cm_to_inch=0.393701
-            import matplotlib as mpl
-            old_rc_Params = mpl.rcParams
-            mpl.rcParams['font.size']=8.0
-            mpl.rcParams['axes.titlesize']=8.0#'medium'
-            mpl.rcParams['xtick.labelsize']=8.0
-            mpl.rcParams['ytick.labelsize']=8.0
-            mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=150
-            fig.set_figwidth(8.48*cm_to_inch)
-            fig.set_figheight(8.48*1.6*cm_to_inch)
+        fig.set_figwidth(8.48*cm_to_inch)
+        fig.set_figheight(8.48*1.6*cm_to_inch)
         s_vals = (s_values[1:]+s_values[0:-1])/2
         wave_field = 0
         start = 0; increment = len(self.T)/len(n)
@@ -656,7 +657,8 @@ class Tomography():
         image_extent = [LOS_object.r_grid[0,0], LOS_object.r_grid[0,-1], LOS_object.z_grid[0,0], LOS_object.z_grid[-1,0]]
         for i, t_cur in enumerate(t):
             wave_field_tmp = wave_field * np.exp(1j*t_cur)
-            im = ax[0].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto')
+            ax[0].cla()
+            im = ax[0].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto',origin='lower')
             tmp = im.get_clim()
             max_val = np.max(np.abs(tmp))
             im.set_clim([-max_val, max_val])
@@ -667,8 +669,6 @@ class Tomography():
                 cbar = pt.colorbar(im, cax=cax)
                 cbar.set_label('Wave Amplitude (a.u)')
             if i==0:
-                ax[0].set_xlabel('R (m)')
-                ax[0].set_ylabel('Z (m)')
                 if inc_profile:
                     start = 0
                     for n_cur, m_cur in zip(n,m):
@@ -684,18 +684,50 @@ class Tomography():
                     ax[1].set_ylabel('Amplitude (a.u)')
                     ax[2].set_xlabel('s')
                     ax[2].set_ylim([-np.pi,np.pi])
-                    loc = LOS_object.valid_channels.shape[1]/2
-                    for i in range(LOS_object.start_indices[1], LOS_object.end_indices[1], 4):
-                        if LOS_object.valid_channels[i,loc]:
-                            z_val = [LOS_object.intersection1[i,loc,2],LOS_object.intersection2[i,loc,2]]
-                            r_val = [np.sqrt(LOS_object.intersection1[i,loc,0]**2+LOS_object.intersection1[i,loc,1]**2),np.sqrt(LOS_object.intersection2[i,loc,0]**2+LOS_object.intersection2[i,loc,1]**2)]
-                            ax[0].plot(r_val,z_val,'k-', linewidth=1)
-                if save_fig!=None:
-                    xticks = ax[0].xaxis.get_major_ticks()
-                    print xticks, len(xticks), range(0,len(xticks),3)
-                    for tmp_tick in range(0,len(xticks),2):
-                        print tmp_tick
-                        xticks[tmp_tick].label1.set_visible(False)
+            loc = LOS_object.valid_channels.shape[1]/2
+            start_loc, end_loc, style = [LOS_object.start_indices[1], LOS_object.end_indices [1],'k-']
+            tmp_reproj = +self.all_measurements
+            tmp_reproj[self.valid_channels] = +self.re_projection
+            if i==0:
+                meas_vals = []; z_vals = []; reproj_vals = []
+            for j in range(start_loc, end_loc, 1):
+                if LOS_object.valid_channels[j,loc]:
+                    point1_z = LOS_object.intersection1[j,loc,2] 
+                    point2_z = LOS_object.intersection2[j,loc,2]
+                    point1_r = np.sqrt(LOS_object.intersection1[j,loc,0]**2+LOS_object.intersection1[j,loc,1]**2) 
+                    point2_r = np.sqrt(LOS_object.intersection2[j,loc,0]**2+LOS_object.intersection2[j,loc,1]**2)
+                    gradient = (point2_z - point1_z)/(point2_r - point1_r)
+                    offset = point1_z - gradient*point1_r
+                    r_val = np.array([0.5,1.4])
+                    z_val = gradient*r_val + offset
+                    if (start_loc-j)%8==0:
+                        ax[0].plot(r_val,z_val,style, linewidth=0.3)
+                    #if min_z == None: min_z = +z_val[1]
+                    #max_z = +z_val[1]
+                    if i==0:
+                        meas_vals.append(self.all_measurements[j - start_loc, loc])
+                        reproj_vals.append(tmp_reproj[j - start_loc, loc])
+                        z_vals.append(+z_val[1])
+                        scale_fact = 0.05/np.max(np.abs(meas_vals))
+            #tmp_fig, tmp_ax = pt.subplots()
+            #tmp_ax.plot(z_vals, np.real(meas_vals))
+            #tmp_ax.plot(z_vals, np.imag(meas_vals))
+            #tmp_fig.canvas.draw(); tmp_fig.show()
+            tmp_val = np.real(np.array(meas_vals)*np.exp(1j*t_cur))*scale_fact
+            tmp_val_reproj = np.real(np.array(reproj_vals)*np.exp(1j*t_cur))*scale_fact
+
+            ax[0].plot(tmp_val+1.4, np.array(z_vals),'-')
+            ax[0].plot(tmp_val_reproj+1.4, np.array(z_vals),'-')
+            ax[0].set_xlabel('R (m)')
+            ax[0].set_ylabel('Z (m)')
+            ax[0].set_xlim([1,1.45])
+            ax[0].plot([1.4]*len(z_vals),np.array(z_vals))
+            ax[0].set_ylim([-0.25,0.25])
+            if save_fig!=None:
+                xticks = ax[0].xaxis.get_major_ticks()
+                for tmp_tick in range(0,len(xticks),2):
+                    xticks[tmp_tick].label1.set_visible(False)
+                if i==0:
                     fig.tight_layout()
                     fig.savefig(save_fig+'.pdf')
                     fig.savefig(save_fig+'.eps')
@@ -708,7 +740,7 @@ class Tomography():
             for i in image_list: image_string+=i + ' '
             print image_string
             os.system('convert -delay {} -loop 0 {} {}'.format(delay, image_string, save_name))
-
+            os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
     def plot_convergence(self):
         fig, ax = pt.subplots(nrows = 2)
         for i, T in enumerate(self.T_list):
@@ -770,15 +802,12 @@ class DirectSolution(Tomography):
         self.re_projection = np.dot(self.geom_matrix, self.T)
         tmp = np.dot(self.geom_matrix,self.T)- valid_meas
         #tmp2 = np.dot(self.geom_matrix,self.T2)- self.all_measurements[self.valid_channels]
+        
         self.error_sum = [np.sqrt(np.sum(np.real(tmp)**2)+np.sum(np.imag(tmp)**2))]
         self.error_mean = [np.sqrt(np.mean(np.abs(tmp)))]
         print 'hello2', np.sum(np.real(tmp)**2)+np.sum(np.imag(tmp)**2), np.sum(np.real(valid_meas)**2)+np.sum(np.imag(valid_meas)**2)
+        self.error_rms_ratio = [np.sqrt(np.sum(np.abs(tmp)**2))/np.sqrt(np.sum(np.abs(valid_meas)**2))]
         self.error_mean_prop = [np.sum(np.sqrt(np.real(tmp)**2+np.imag(tmp)**2))/np.sum(np.sqrt(np.real(valid_meas)**2+np.imag(valid_meas)**2))]
-
-        #[self.error_sum[-1]/np.sqrt(np.sum(np.real(valid_meas)**2)+np.sum(np.imag(valid_meas)**2))]
-        #np.sqrt(np.mean(np.real(self.all_measurements[self.valid_channels])**2)+np.mean(np.imag(self.all_measurements[self.valid_channels])**2))]
-
-        #/np.sqrt(np.mean(np.real(self.all_measurements[self.valid_channels])**2)+np.mean(np.imag(self.all_measurements[self.valid_channels])**2))]
         #self.error_sum2 = [np.sqrt(np.sum(np.real(tmp2)**2)+np.sum(np.imag(tmp2)**2))]
         #print 'error : {:.2f}'.format(self.error_sum[-1],)
         #print 'error using reg : {:.2f}'.format(self.error_sum2[-1],)
@@ -939,11 +968,13 @@ class SIRT(Tomography):
         #for k in ordering:
         self.error_sum = []    
         self.error_mean = []    
+        self.error_rms_ratio = []    
         for k in range(cycles):
             if (k%20)==0:
                 tmp = np.dot(self.P,self.T)- self.S
                 self.error_sum.append(np.sqrt(np.sum((tmp)**2)))
                 self.error_mean.append(np.sqrt(np.mean((tmp)**2)))
+                self.error_rms_ratio.append(np.sqrt(np.sum((tmp)**2))/np.sqrt(np.sum((self.S)**2)))
                 #print 'real {:.2f}'.format()
                 print('cycle {} of {}, error {:.2f}'.format(k,cycles, self.error_sum[-1]))
             current_modification = self.T*0
@@ -2074,6 +2105,7 @@ def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_mo
     if method=='SIRT':
         tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_sirt.run(cycles = cycles)
+        cur_tomo = tomo_sirt
         error = tomo_sirt.error_sum[-1]
         error_mean = tomo_sirt.error_mean[-1]
         error_mean_prop = tomo_sirt.error_mean_prop[-1]
@@ -2081,15 +2113,16 @@ def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_mo
     elif method=='Direct':
         tomo_direct = DirectSolution(z, tomo_measurements, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_direct.run()
-        error = tomo_direct.error_sum[-1]
-        error_mean = tomo_direct.error_mean[-1]
-        error_mean_prop = tomo_direct.error_mean_prop[-1]
-        return_answer = tomo_direct
-    print 'n {}, m{}, error sum {:.2f}, error mean {:.2f}, error mean prop {:.2f}% {} of {}'.format(tomo_modes_n, tomo_modes_m, error, error_mean, error_mean_prop*100, count, total)
+        cur_tomo = tomo_direct
+    error = cur_tomo.error_sum[-1]
+    error_mean = cur_tomo.error_mean[-1]
+    error_mean_prop = cur_tomo.error_mean_prop[-1]
+    error_rms_ratio = cur_tomo.error_rms_ratio[-1]
+    print 'n {}, m{}, error sum {:.2f}, error mean {:.2f}, error mean prop {:.2f}%, error rms ratio {:.2f}% {} of {}'.format(tomo_modes_n, tomo_modes_m, error, error_mean, error_mean_prop*100, error_rms_ratio, count, total)
     if return_tomo_inv:
-        return tomo_modes_n,tomo_modes_m,error,return_answer
+        return tomo_modes_n,tomo_modes_m,error_rms_ratio,cur_tomo
     else:
-        return tomo_modes_n,tomo_modes_m,error
+        return tomo_modes_n,tomo_modes_m,error_rms_ratio
 
 def _single_multiproc_wrapper(arguments):
     return single(*arguments)
@@ -2249,7 +2282,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
         i1 = mode_list_n.index(m1)
         i2 = mode_list_m.index(m2)
         error_array[i1,i2] = i[2]
-    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto',cmap='bone')
+    im = ax.imshow(error_array, interpolation = 'nearest',aspect='auto',cmap='jet')
     if clim==None:clim = [np.min(error_array),np.max(error_array)]
     im.set_clim(clim)
     ax.set_xticks(range(len(mode_list_m)))
@@ -2416,7 +2449,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             cur_T = T[start:end]
             start = +end
             amp_list.append(np.sum(np.abs(cur_T)))
-    norm_fact = np.max(amp_list)
+        norm_fact = np.max(amp_list)
     start = 0
     for n_cur, m_cur in zip(n,m):
         cor_run = True

@@ -499,7 +499,7 @@ class ImaxData():
 
             #subtract the dark image
             self.image_array_cal[i,:,:] = np.clip(self.image_array_cal[i,:,:] - self.dark_image,0,65536)
-            tmp = np.clip(self.white_image - self.dark_image,0.2*np.max(self.white_image - self.dark_image), 65536) 
+            tmp = np.clip(self.white_image - self.dark_image,clip*np.max(self.white_image - self.dark_image), 65536) 
             self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / tmp
             
             #print 'clipped image min,max,mean', np.min(tmp), np.max(tmp), np.mean(tmp)
@@ -507,6 +507,7 @@ class ImaxData():
             #self.image_array_cal[i,:,:] = np.clip(self.image_array[i,:,:] - self.dark_image, 0,50000)/np.clip(self.white_image - self.dark_image, max_value*clip,65000)
             #print np.min(np.clip(self.white_image - self.dark_image, max_value*clip,65000)), np.max(np.clip(self.white_image - self.dark_image, max_value*clip,65000))
             print i,
+            print '!!!!!!', cal_sum
             if cal_sum:
                 print 'cal_sum,', np.sum(self.image_array_cal[i,:,:]), self.electron_dens[i], self.amp_average[i]
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:]/np.sum(self.image_array_cal[i,:,:])* 65000.
