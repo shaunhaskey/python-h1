@@ -2,7 +2,6 @@ import scipy.signal
 import MDSplus as MDS
 import numpy as np
 import matplotlib.pyplot as pt
-import h1.diagnostics.winspec as winspec
 import h1.diagnostics.SPE_reader as SPE_reader
 import copy
 class ImaxData():
@@ -17,6 +16,7 @@ class ImaxData():
             self.shot_list = [single_mdsplus]
         elif shot_list!=None:
             self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
+            print 'flipud:{}, fliplr:{},rot90:{}'.format(flipud, fliplr, rot90)
             for i, shot in enumerate(self.shot_list):
                 tmp_data = MDS.Tree(mdsplus_tree,shot).getNode(mdsplus_node).data()[0,:,:]
                 if flipud: tmp_data = np.flipud(tmp_data)
@@ -28,6 +28,7 @@ class ImaxData():
         elif SPE_file!=None:
             if SPE_file.__class__==list:
                 n_files = len(SPE_file)
+                import h1.diagnostics.winspec as winspec
                 self.image_array = np.zeros((n_files,512,512),dtype=float)
                 for i in range(n_files):
                     tmp_data = winspec.SpeFile(SPE_file[i]).data[0,:,:]
@@ -37,6 +38,7 @@ class ImaxData():
                     self.image_array[i,:,:] = tmp_data.copy()
             else:
                 self.image_array = np.zeros((1,512,512),dtype=float)
+                import h1.diagnostics.winspec as winspec
                 cal_file = winspec.SpeFile(SPE_file)
                 #self.image_array[0,:,:] = np.rot90(cal_file.data[0,:,:])
                 self.image_array = cal_file.data
@@ -61,7 +63,6 @@ class ImaxData():
         phase_ave_list = []
         phase_std_list = []
         for loc, i in enumerate(self.shot_list):
-            print i
             if loc==1: 
                 tmp_plot = True
             else:
@@ -166,7 +167,7 @@ class ImaxData():
             mpl.rcParams['lines.markersize']=5.0
             mpl.rcParams['savefig.dpi']=300
             fig.set_figwidth(8.48*cm_to_inch)
-            fig.set_figheight(8.48*1.3*cm_to_inch)
+            fig.set_figheight(8.48*1.5*cm_to_inch)
 
         if cal==0: 
             print 'Uncalibrated images'
@@ -175,29 +176,34 @@ class ImaxData():
             print 'Calibrated images'
             plot_array = self.image_array_cal
         ax = []; im_list = []
-        rows = len(image_indices)/2+1
+        rows = (len(image_indices)/2+1+1)*3
         if inc_DC_diff: rows+=1
         row = 0; col = 0
         for i,index in enumerate(image_indices):
             print row, col
             if i==0:
-                ax.append(pt.subplot2grid((rows,2), (row,col)))
+                ax.append(pt.subplot2grid((rows,2), (row,col), rowspan = 3, colspan = 1))
             else:
-                ax.append(pt.subplot2grid((rows,2), (row,col), sharex=ax[0],sharey=ax[0]))
+                ax.append(pt.subplot2grid((rows,2), (row,col), rowspan = 3, colspan = 1, sharex=ax[0],sharey=ax[0]))
             if col==0:
                 col+=1
             else:
                 col = 0
-                row += 1
+                row += 3
         #ax.append(pt.subplot2grid((rows,2), (0,1), sharex=ax[0],sharey=ax[0]))
         #ax.append(pt.subplot2grid((rows,2), (1,0), sharex=ax[0],sharey=ax[0]))
         #ax.append(pt.subplot2grid((rows,2), (1,1), sharex=ax[0],sharey=ax[0]))
         if inc_DC_diff:
-            ax.append(pt.subplot2grid((rows,2), (rows-2,0), sharex=ax[0],sharey=ax[0]))
-            ax.append(pt.subplot2grid((rows,2), (rows-2,1), sharex=ax[0],sharey=ax[0]))
-        ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=2)
+            ax.append(pt.subplot2grid((rows,2), (row,0), rowspan = 3,colspan = 1, sharex=ax[0],sharey=ax[0]))
+            ax.append(pt.subplot2grid((rows,2), (row,1), rowspan = 3, colspan = 1, sharex=ax[0],sharey=ax[0]))
+        row+=3
+        #cbar_ax1 = pt.subplot2grid((rows,2), (row,0), rowspan = 1, colspan = 1)
+        #cbar_ax2 = pt.subplot2grid((rows,2), (row,1), rowspan = 1, colspan = 1)
+        #row+=1
+        print row, rows
+        ax2 = pt.subplot2grid((rows,2), (row,0), rowspan = 3, colspan=2)
         #ax2 = pt.subplot2grid((rows,2), (rows-1,0), colspan=1)
-        
+        print row, rows
         for i, index in enumerate(image_indices):
             if fliplr:
                 tmp = np.fliplr(plot_array[index,:,:])
@@ -214,12 +220,14 @@ class ImaxData():
         for i in im_list: i.set_clim(clim)
         if inc_DC_diff:
             if fliplr:
-                tmp = np.fliplr(np.abs(self.fft_values[0,:,:]))
+                tmp = np.fliplr(np.abs(self.fft_values[0,:,:])/(self.fft_values.shape[0]))
                 tmp2 = np.fliplr(plot_array[image_indices[1],:,:] - plot_array[image_indices[0],:,:])
             else:
-                tmp = np.abs(self.fft_values[0,:,:])
+                tmp = np.abs(self.fft_values[0,:,:]/(self.fft_values.shape[0]*2))
                 tmp2 = plot_array[image_indices[1],:,:] - plot_array[image_indices[0],:,:]
             im_DC = ax[-2].imshow(tmp, interpolation = 'none', aspect = 'auto', origin='lower', cmap = 'spectral')
+            print im_DC.get_clim()
+            im_DC.set_clim(clim)
             im_diff = ax[-1].imshow(tmp2, interpolation = 'none', aspect = 'auto', origin='lower', cmap = 'RdBu')
             val = np.min(np.abs(im_diff.get_clim()))*0.8
             #print tmp_min, tmp_max
@@ -249,7 +257,9 @@ class ImaxData():
                 j.plot(i[0],i[1], 'kx')
         ax2.set_xlim([0,16*periods-1])
         ymin, ymax = ax2.get_ylim()
-        ax2.vlines(np.arange(0,periods*16,16),ymin,ymax)
+        #ax2.vlines(np.arange(0,periods*16,16),ymin,ymax)
+        for i in np.arange(0,periods*16,16):
+            ax2.axvline(i)
         for j in ax:
             xticks = j.xaxis.get_major_ticks()
             yticks = j.yaxis.get_major_ticks()
@@ -257,12 +267,22 @@ class ImaxData():
             for jj in yticks: jj.label1.set_visible(False)
             j.set_xlim([0,256])
             j.set_ylim([0,256])
-        ax2.set_xlabel('frame number (or time)')
-        ax2.set_ylabel('pixel intensity (a.u)')
+        ax2.set_xlabel('Frame Number (or time)')
+        ax2.set_ylabel('Pixel Brightness (a.u)')
         ax2.grid()
+        fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        fig.tight_layout(pad = 0.3)
+        cbar_DC = pt.colorbar(im_DC, ax = [ax[0], ax[-2]], orientation = 'horizontal', fraction = 0.03)
+        cbar_DC.set_ticks(np.round(np.linspace(clim[0],clim[1],5),2)[0:-1])
+        cbar_diff = pt.colorbar(im_diff, ax = [ax[1], ax[-1]], orientation = 'horizontal', fraction = 0.03)
+        cbar_diff.set_ticks(np.round(np.linspace(-val,+val,5),2)[:-1])
+        cbar_diff.ax.set_title('Pixel Brightness (a.u)')
+        cbar_DC.ax.set_title('Pixel Brightness (a.u)')
+        #pt.colorbar(im_DC, cax = cbar_ax1, orientation = 'horizontal')
+        #pt.colorbar(im_diff, cax = cbar_ax2, orientation = 'horizontal')
         if save_fig!=None:
-            fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
-            fig.tight_layout()
+            #fig.subplots_adjust(hspace=0.05, wspace=0.05,left=0.05, bottom=0.05,top=0.95, right=0.95)
+            #fig.tight_layout()
             fig.savefig(save_fig)
         fig.canvas.draw(); fig.show()
 
@@ -443,7 +463,7 @@ class ImaxData():
         fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
         fig.canvas.draw(); fig.show()
 
-    def calibrate_data(self, dark_shot=1103, white_shot=1107, dark_SPE = None, white_SPE= None, plot_calibration_im = 0, clip = 0.2, plot_cal_images=0, cal_sum = 1, med_filt = 3, mode_amp_filt = None, old_imax = 1, clip_image = 20000):
+    def calibrate_data(self, dark_shot=1103, white_shot=1107, dark_SPE = None, white_SPE= None, plot_calibration_im = 0, clip = 0.2, plot_cal_images=0, cal_sum = 1, med_filt = 3, mode_amp_filt = None, old_imax = 1, clip_image = 20000, flipud=0, fliplr=0, rot90=0):
         '''Calibrate the imax image using a dark and white shot
 
         need to provide a dark_shot number, white_shot number calibrate by
@@ -467,9 +487,19 @@ class ImaxData():
 
         if white_SPE==None:
             self.white_image = MDS.Tree('imax',white_shot).getNode(node).data()[0,:,:]
+
+
         else:
             tmp0, tmp1 = SPE_reader.extract_SPE_data(white_SPE)
             self.white_image = +tmp0[0,:,:]
+        print 'flipud:{}, fliplr:{},rot90:{}'.format(flipud, fliplr, rot90)
+        if flipud: self.white_image = np.flipud(self.white_image)
+        if fliplr: self.white_image = np.fliplr(self.white_image)
+        if rot90: self.white_image = np.rot90(self.white_image)
+
+        if flipud: self.dark_image = np.flipud(self.dark_image)
+        if fliplr: self.dark_image = np.fliplr(self.dark_image)
+        if rot90: self.dark_image = np.rot90(self.dark_image)
 
         if plot_calibration_im:
             fig, ax = pt.subplots(nrows= 2,sharex = True, sharey = True); ax = ax.flatten()
@@ -480,10 +510,6 @@ class ImaxData():
             fig.canvas.draw(); fig.show()
         full_scale = (self.white_image - self.dark_image)
         max_value = np.max(full_scale)
-        print 'max value : ', max_value
-        # if plot_cal_images: 
-        #     fig, ax = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax = ax.flatten()
-        #     im_list = []
 
         if med_filt!=0:
             self.white_image = scipy.signal.medfilt(self.white_image, med_filt)
@@ -492,12 +518,12 @@ class ImaxData():
         for i in range(self.image_array.shape[0]):
             #med filt, subtract dark, divide by clip(white-dark)
             if med_filt!=0:
-                print 'med_filt,',
                 self.image_array_cal[i,:,:] = scipy.signal.medfilt(self.image_array[i,:,:], med_filt)
             else:
                 self.image_array_cal[i,:,:] = self.image_array[i,:,:].copy()
 
             #subtract the dark image
+            print clip
             self.image_array_cal[i,:,:] = np.clip(self.image_array_cal[i,:,:] - self.dark_image,0,65536)
             tmp = np.clip(self.white_image - self.dark_image,clip*np.max(self.white_image - self.dark_image), 65536) 
             self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / tmp
@@ -506,8 +532,6 @@ class ImaxData():
             #np.clip(self.white_image - self.dark_image, max_value*clip,65000)
             #self.image_array_cal[i,:,:] = np.clip(self.image_array[i,:,:] - self.dark_image, 0,50000)/np.clip(self.white_image - self.dark_image, max_value*clip,65000)
             #print np.min(np.clip(self.white_image - self.dark_image, max_value*clip,65000)), np.max(np.clip(self.white_image - self.dark_image, max_value*clip,65000))
-            print i,
-            print '!!!!!!', cal_sum
             if cal_sum:
                 print 'cal_sum,', np.sum(self.image_array_cal[i,:,:]), self.electron_dens[i], self.amp_average[i]
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:]/np.sum(self.image_array_cal[i,:,:])* 65000.
@@ -515,7 +539,7 @@ class ImaxData():
             if mode_amp_filt:
                 print 'mode_amp_filt',
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / self.amp_average[i]
-            print 'cal_sum,', np.sum(self.image_array_cal[i,:,:]), np.min(self.image_array_cal[i,:,:]),np.max(self.image_array_cal[i,:,:]), np.mean(self.image_array_cal[i,:,:]),self.electron_dens[i], self.amp_average[i]
+            print 'calibrated image sum:{:.3f}, min:{:.3f}, max:{:.3f}, mean:{:.3f}'.format(np.sum(self.image_array_cal[i,:,:]), np.min(self.image_array_cal[i,:,:]),np.max(self.image_array_cal[i,:,:]), np.mean(self.image_array_cal[i,:,:]))
             # if plot_cal_images:
             #     im_list.append(ax[i].imshow(self.image_array_cal[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower'))
             # print ''
@@ -668,7 +692,7 @@ def PLL_performance2(shot_number, n_phases=4, plot = False):
     #peak = peak * maxima
 
     peak = pos_edge
-    print 'hello!!'
+
     peak_mon = monitor_data>2.5
     logic_high = monitor_data>0.2
     logic_low = monitor_data<0.1
@@ -676,35 +700,35 @@ def PLL_performance2(shot_number, n_phases=4, plot = False):
     #logic_high_edges[logic_high_edges[1:]*logic_high_edges[0:-1]]==False
     #logic_high_edges[logic_high_edges[2:]*logic_high_edges[0:-2]]==False
     #logic_high_edges[logic_high_edges[3:]*logic_high_edges[0:-3]]==False
-    print 'logic high edges', np.sum(logic_high_edges)
+    new_edges = np.zeros(len(monitor_data),dtype=bool)
+    new_edges[1:] = (monitor_data>1.0)[1:] * (monitor_data<1.0)[0:-1]
 
 
     maxima_mon = np.zeros(peak.shape,dtype=bool)
     maxima_mon[1:-1] = (monitor_data>0.5)[1:-1] * (monitor_data[1:-1]>monitor_data[0:-2])* (monitor_data[1:-1]>monitor_data[2:])
+
+
+    #(monitor_data[1:-1]>monitor_data[0:-2])* (monitor_data[1:-1]>monitor_data[2:])
     peak_mon = peak_mon * maxima_mon
     peak_mon_phases = np.angle(hilb_sig)[peak_mon]
-    print np.sum(monitor_data[peak_mon]<2.5)
+    #print np.sum(monitor_data[peak_mon]<2.5)
     start = 0
-    print neg_edges
-
     neg_edges.sort()
     pos_edges.sort()
-    print 'neg edges: ', neg_edges
-    print 'pos edges: ', pos_edges
+    print 'shot:', shot_number,'neg edges: ', neg_edges, 'pos_edges:', pos_edges, 'gates:',np.sum(new_edges)
     phase_average_list = []; phase_std_list = []; phase_time_list = []
     for i in range(len(neg_edges)):
         end = neg_edges[i]
         end = pos_edges[i]
-        print start, end
         tmp_truth = peak_mon * (time_ax>start) * (time_ax<end)
         tmp_truth = logic_high * (time_ax>start) * (time_ax<end)
+        tmp_truth = new_edges * (time_ax>start) * (time_ax<end)
         #angles = np.angle(hilb_sig)[tmp_truth]
         phase_complex = np.exp(1j*np.angle(hilb_sig[tmp_truth]))
         phase_average_list.append(np.angle(np.mean(phase_complex)))
         phase_std_list.append(np.sqrt(np.log(1./np.abs(np.mean(phase_complex)))))
         phase_time_list.append(np.mean(time_ax[tmp_truth]))
         #amp_std_list.append(np.std(np.abs(hilb_sig[maxima])))
-
         print 'n {}, mean {:.2f}deg, std {:.2f}deg'.format(np.sum(tmp_truth),np.rad2deg(phase_average_list[-1]), np.rad2deg(phase_std_list[-1]))
         #print angles, len(angles)
         start = neg_edges[i]
@@ -726,8 +750,7 @@ def PLL_performance2(shot_number, n_phases=4, plot = False):
             PLL_fig.set_figheight(8.48*1.5*cm_to_inch)
 
         im = PLL_ax[0].specgram(mirnov_data, NFFT = 4096, Fs = 2000, noverlap = 1000,cmap='jet',rasterized = True)
-        print im
-        print im[-1].get_clim()
+
         im[-1].set_clim([-80,10])
         #PLL_ax[0].plot(time_ax[::2], PLL_data[::2], label = 'PLL')
         PLL_ax[1].plot(time_ax[::2]*1000, monitor_data[::2], label = 'Camera Gate', rasterized=True)
@@ -805,8 +828,84 @@ def make_animation(start_shot_list, titles, harmonic = 1, base_directory = '', p
     
 
 
+def extract_data(light_type, kh, orientations, shot_database, decimate_pixel, cal_sum = False, norm_orient_relative = False, clip = 0.2):
+    '''This is a convenience function to extract a set of images from
+    mdsplus where the shot numbers are defined in the
+    shot_database. Will extract multiple viewing locations, and can
+    normalise each view to itself, then scale it relative to the other
+    views based on the average for that set of images.
+
+
+    SRH: 7Feb2014
+    '''
+    print 'hello world!!!!!', kh
+    camera_data_list = []
+    for i, orient in enumerate(orientations):
+        shot_details = shot_database[light_type]['{:.2f}'.format(kh)][orient]
+        shot_node = shot_database[light_type]['{:.2f}'.format(kh)][orient]['mdsplus_node']
+        shot_tree = shot_database[light_type]['{:.2f}'.format(kh)][orient]['mdsplus_tree']
+        tree_path = shot_database[light_type]['{:.2f}'.format(kh)][orient]['mdsplus_tree_path']
+        CCD_side_length = shot_database[light_type]['{:.2f}'.format(kh)][orient]['CCD_side_length']
+        flipud = shot_database[light_type]['{:.2f}'.format(kh)][orient]['flipud']
+        fliplr = shot_database[light_type]['{:.2f}'.format(kh)][orient]['fliplr']
+        rot90 = shot_database[light_type]['{:.2f}'.format(kh)][orient]['rot90']
+        #os.environ[shot_tree+'_path'] = tree_path
+        print shot_node, shot_tree
+        print shot_details
+        n = shot_details['n']
+        m = shot_details['m']
+
+        title = '{:.2f}_{}_{}-{}'.format(kh, shot_details['comment'], n, m)
+        if shot_details['shot_list'] == None:
+            camera_data = ImaxData(shot_list = None, plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0, SPE_file = shot_details['SPE_files'], fliplr=fliplr, flipud=flipud, rot90=rot90)
+        else:
+            camera_data = ImaxData(shot_list = shot_details['shot_list'], plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0, mdsplus_tree = shot_tree, mdsplus_node = shot_node, fliplr=fliplr, flipud=flipud, rot90=rot90)
+            #camera_data.get_john_analysis(plot_john_data = 0)
+
+        null, n_pixels_y, n_pixels_x = camera_data.image_array.shape
+
+        dark_SPE = shot_database[light_type]['{:.2f}'.format(kh)][orient]['dark_SPE']
+        white_SPE = shot_database[light_type]['{:.2f}'.format(kh)][orient]['white_SPE']
+        dark_shot = shot_database[light_type]['{:.2f}'.format(kh)][orient]['dark_shot']
+        white_shot = shot_database[light_type]['{:.2f}'.format(kh)][orient]['white_shot']
+
+        #Do not normalise in the calbration step, otherwise we loose the average amplitude per image information 
+        if norm_orient_relative: cal_sum = False
+
+        #Perform the calibration
+        camera_data.calibrate_data(dark_shot=dark_shot, white_shot=white_shot, dark_SPE = dark_SPE, white_SPE = white_SPE, plot_calibration_im = 0, clip = clip, plot_cal_images = 0, cal_sum = cal_sum, med_filt = 3, mode_amp_filt = None, fliplr = fliplr, flipud=flipud, rot90=rot90)
+        tmp1 = []
+
+        #Normalise the different views relative to each other
+        if norm_orient_relative:
+            for j in range(16):
+                tmp1.append(np.mean(camera_data.image_array_cal[j,:,:]))
+                #tmp2.append(np.sum(camera_data.image_array[j,:,:]))
+            mean_after_cal = np.mean(tmp1)
+            if i==0: ref_mean = +mean_after_cal
+            for j in range(16):camera_data.image_array_cal[j,:,:] = camera_data.image_array_cal[j,:,:]/tmp1[j]*mean_after_cal/ref_mean
+
+        #decimate and fourier decompose the camera data
+        camera_data.decimate_data(decimate_pixel)
+        camera_data.fourier_decomp(plot_amps = 0, plot_phases = 0)
+
+        #Build a composite camera view with all images ontop of each other
+        if i == 0:
+            len1, len2, len3 = camera_data.fft_values.shape
+            print len1, len2, len3
+            fourier_data = np.zeros((len1,len2*len(orientations),len3),dtype=complex)
+
+        fourier_data[:,len2*i:len2*(i+1),:] = +camera_data.fft_values
+        camera_data_list.append(camera_data)
+    return fourier_data, n_pixels_y, n_pixels_x, camera_data_list
+
+
 
 def database_of_shots():
+    '''This is the database of interesting shots
+
+    SRH: 7Feb2014
+    '''
     dict_of_shots = {}
 
     ##### Broadband, Nandi and John #########

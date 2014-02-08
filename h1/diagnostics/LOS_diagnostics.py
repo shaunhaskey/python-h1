@@ -700,7 +700,7 @@ class LOS():
             interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx2, self.wts2)
         self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
 
-    def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1, decimate = 20):
+    def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1, decimate = 20, x_axis_prop=True):
         '''Plot the boozer lines of sight as a proportion of distance along the line of sight
 
         SRH: 21Jan2013
@@ -744,22 +744,32 @@ class LOS():
             print i, style, i*self.CCD_pixels_y, (i+1)*self.CCD_pixels_y, n_ims
             mask2[i*self.CCD_pixels_y/n_ims:(i+1)*self.CCD_pixels_y/n_ims,:] = True
             print np.sum(mask2)
+            if x_axis_prop==True:
+                x_decimate = 1
+                tmp_x_axis = x_axis[::x_decimate]
+                x_label = 'Proportion of Distance through plasma ($\%$)'
+            else:
+                x_decimate = 1
+                tmp_x_axis = (np.arange(self.interp_boozer.shape[2],dtype=float)*self.dl[mask*mask2][:,np.newaxis])
+                tmp_x_axis = tmp_x_axis[::decimate,::x_decimate].T
+                print tmp_x_axis.shape
+                x_label = 'Integrated distance along LOS within plasma (m)'
             tmp=self.interp_boozer[mask*mask2,:,:]
             print self.interp_boozer.shape, tmp.shape
-            x_decimate = 1
-            ax[0].plot(x_axis[::x_decimate], tmp[::decimate,::x_decimate,0].T, style, linewidth=0.6)
-            ax[1].plot(x_axis[::x_decimate], np.unwrap((tmp[::decimate,::x_decimate,1].T+np.pi)%(2.*np.pi)-np.pi,axis=0), style, linewidth=0.6)
+            ax[0].plot(tmp_x_axis, tmp[::decimate,::x_decimate,0].T, style, linewidth=0.6)
+            ax[1].plot(tmp_x_axis, np.unwrap((tmp[::decimate,::x_decimate,1].T+np.pi)%(2.*np.pi)-np.pi,axis=0), style, linewidth=0.6)
             #ax[1].plot(x_axis, (tmp[::decimate,:,1].T+np.pi)%(2.*np.pi)-np.pi, '.', linewidth=0.6)
-            ax[2].plot(x_axis[::x_decimate], (tmp[::decimate,::x_decimate,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
-            #ax[1].plot(x_axis, (self.interp_boozer[mask*mask2,:,1].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
-            #ax[2].plot(x_axis, (self.interp_boozer[mask*mask2,:,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
-        ax[2].set_xlabel('Prop of Distance along line of sight (%)')
-        ax[0].set_ylabel(r'$\Psi_N$')
+            ax[2].plot(tmp_x_axis, (tmp[::decimate,::x_decimate,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
+            
+            #ax[0].plot(x_axis[::x_decimate], tmp[::decimate,::x_decimate,0].T, style, linewidth=0.6)
+            #ax[1].plot(x_axis[::x_decimate], np.unwrap((tmp[::decimate,::x_decimate,1].T+np.pi)%(2.*np.pi)-np.pi,axis=0), style, linewidth=0.6)
+            #ax[2].plot(x_axis[::x_decimate], (tmp[::decimate,::x_decimate,2].T+np.pi)%(2.*np.pi)-np.pi, style, linewidth=0.6)
+        ax[0].set_ylabel(r'$s$')
         ax[0].set_ylim([0,1])
         for i in ax: i.grid()
         ax[1].set_ylabel(r'$\theta$ (rad)')
         ax[2].set_ylabel(r'$\phi$ (rad)')
-        ax[2].set_xlabel('Proportion of Distance through plasma ($\%$)')
+        ax[2].set_xlabel(x_label)
         if save_fig!=None:
             fig.tight_layout(pad=0.01)
             fig.savefig(save_fig)
@@ -1027,6 +1037,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         #CCD_R = 1.1475+0.963+0.0175 #2.128m
         CCD_z = 7.0/100; 
         CCD_z = 8.0/100;
+        CCD_z = 5.0/100;
         CCD_z = 5.0/100;
         CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
         CCD_position = np.array([CCD_x, CCD_y, CCD_z])

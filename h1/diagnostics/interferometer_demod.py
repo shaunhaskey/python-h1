@@ -936,3 +936,52 @@ def put_data_MDSplus(shot, f_m=None, dig_mult=None):
         print('Exception on shot {s}, "{r}"'.format(s=shot,r=reason))
 
 
+
+
+def error(test_vals, x, values, omega, mirror_depth):
+    phi, a , b = test_vals
+    art = mirror_depth * np.sin(omega*x + phi) + a*x + b
+    return np.sqrt(np.sum((values - art)**2))/len(values)
+
+def calc_art_big_fit(test_vals, t, values, x_locs, omega, mirror_depth):
+    phi, k, a = test_vals
+    term1 = t
+    term2 = x_locs * float(k)
+    art = mirror_depth*np.cos(omega*term1[np.newaxis,:] + term2[:,np.newaxis]+phi) + a * t
+    return art
+
+def error2(test_vals, t, values, x_locs, omega, mirror_depth):
+    # phi, k = test_vals
+    # term1 = t
+    # term2 = x_locs * float(k)
+    # art = np.sin(term1[np.newaxis,:] + term2[:,np.newaxis]+phi)
+    art = calc_art_big_fit(test_vals, t, values, x_locs, omega, mirror_depth)
+    return np.sqrt(np.sum((values - art)**2))#/np.sqrt(np.sum(values**2))
+
+
+def plot_wobbly_mirror_results(big_fit_values, t, big_fit, art, mirror_depth, title, savefig_name):
+    fig, ax = pt.subplots()
+    cm_to_inch=0.393701
+    fig.set_figwidth(8.48*cm_to_inch)
+    fig.set_figheight(8.48*2*cm_to_inch)
+    import matplotlib as mpl
+    mpl.rcParams['font.size']=8.0
+    mpl.rcParams['axes.titlesize']=8.0#'medium'                                                                                
+    mpl.rcParams['xtick.labelsize']=8.0
+    mpl.rcParams['ytick.labelsize']=8.0
+    mpl.rcParams['lines.markersize']=5.0
+    mpl.rcParams['savefig.dpi']=300
+
+
+    for i, offset in enumerate(big_fit_values):
+        for j in range(3):
+            ax.plot(t + np.max(t)*j, big_fit[i,:]+offset*2*mirror_depth,'b')
+            ax.plot(t + np.max(t)*j, art[i,:]+offset*2*mirror_depth,'g')
+    ax.set_xlabel('time (3 periods have been pasted together)')
+    ax.set_ylabel('Phase + i x 2.*np.pi where i is channel number')
+    #ax.set_ylim([0,21*2.*np.pi])
+    ax.hlines(np.arange(0,21)*2.*mirror_depth,ax.get_xlim()[0],ax.get_xlim()[1],linestyles='dashed')
+    ax.set_xlim([0,np.max(t)*(j+1)])
+    ax.set_title(title)
+    fig.savefig(savefig_name)
+    fig.canvas.draw(); fig.show()
