@@ -1,3 +1,21 @@
+'''
+Functions and classes mainly related to dealing with the synchronous
+imaging data from the pimax camera. ImaxData is the main class, it
+gets the data out of SPE files or MDSplus, calibrates it, and FFT's
+it. Also has some plotting routines in it.
+
+Also included in here are some functions for checking the performance
+of the PLL
+
+extract_data function will perform all the above for multiple camera
+views, calibrate them relative to one another and glue them together.
+
+Database of shots has the interesting shot number data stored in it
+along with calibration file locations etc...
+
+SRH : 12Feb2014
+'''
+
 import scipy.signal
 import MDSplus as MDS
 import numpy as np
@@ -6,49 +24,37 @@ import h1.diagnostics.SPE_reader as SPE_reader
 import copy
 class ImaxData():
     def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=0, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images', flipud=0, fliplr=0, rot90=0):
+        '''Used to extract the imax data, calibrate it, fft it, plot it, and check the performance of the PLL
+        
+        SRH : 12Feb2014
+        '''
         self.shot_list = shot_list
-        if single_mdsplus!=0:
-            #self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
-            self.image_array = MDS.Tree(mdsplus_tree,single_mdsplus).getNode(mdsplus_node).data()
-            if flipud: self.image_array = np.flipud(self.image_array)
-            if fliplr: self.image_array = np.fliplr(self.image_array)
-            if rot90: self.image_array = np.rot90(self.image_array)
-            self.shot_list = [single_mdsplus]
-        elif shot_list!=None:
-            self.image_array = np.zeros((len(shot_list),512,512),dtype=float)
-            print 'flipud:{}, fliplr:{},rot90:{}'.format(flipud, fliplr, rot90)
+        if SPE_file.__class__!=list and SPE_file!=None:SPE_file = [SPE_file]
+        if single_mdsplus!=0: self.shot_list = [single_mdsplus]
+        if shot_list!=None:
             for i, shot in enumerate(self.shot_list):
                 tmp_data = MDS.Tree(mdsplus_tree,shot).getNode(mdsplus_node).data()[0,:,:]
-                if flipud: tmp_data = np.flipud(tmp_data)
-                if fliplr: tmp_data = np.fliplr(tmp_data)
-                if rot90: tmp_data = np.rot90(tmp_data)
-
                 if i==0: self.image_array = np.zeros((len(shot_list),tmp_data.shape[0],tmp_data.shape[1]),dtype=float)
                 self.image_array[i,:,:] = tmp_data.copy()
-        elif SPE_file!=None:
-            if SPE_file.__class__==list:
-                n_files = len(SPE_file)
-                import h1.diagnostics.winspec as winspec
-                self.image_array = np.zeros((n_files,512,512),dtype=float)
-                for i in range(n_files):
-                    tmp_data = winspec.SpeFile(SPE_file[i]).data[0,:,:]
-                    if flipud: tmp_data = np.flipud(tmp_data)
-                    if fliplr: tmp_data = np.fliplr(tmp_data)
-                    if rot90: tmp_data = np.rot90(tmp_data)
-                    self.image_array[i,:,:] = tmp_data.copy()
-            else:
-                self.image_array = np.zeros((1,512,512),dtype=float)
-                import h1.diagnostics.winspec as winspec
-                cal_file = winspec.SpeFile(SPE_file)
-                #self.image_array[0,:,:] = np.rot90(cal_file.data[0,:,:])
-                self.image_array = cal_file.data
-                for i in range(self.image_array.shape[0]):
-                    if flipud: self.image_array = np.flipud(self.image_array)
-                    if fliplr: self.image_array = np.fliplr(self.image_array)
-                    if rot90: self.image_array = np.rot90(self.image_array)
-                    self.image_array[i,:,:] = self.image_array[i, :, :].copy()
+        elif SPE_file.__class__==list:
+            n_files = len(SPE_file)
+            import h1.diagnostics.winspec as winspec
+            for i in range(n_files):
+                tmp_data = winspec.SpeFile(SPE_file[i]).data[0,:,:]
+                if i==0: self.image_array = np.zeros((n_files,tmp_data.shape[0],tmp_data.shape[1]),dtype=float)
+                self.image_array[i,:,:] = tmp_data.copy()
         else:
             raise ValueError("either shot_list, or SPE_file must not be None")
+
+        #Correctly orient the image
+        print 'Orienting the images : flipud:{}, fliplr:{},rot90:{}'.format(flipud, fliplr, rot90)
+        for i in range(self.image_array.shape[0]):
+            if flipud: self.image_array[i,:,:] = np.flipud(self.image_array[i,:,:])
+            if fliplr: self.image_array[i,:,:] = np.fliplr(self.image_array[i,:,:])
+            if rot90: self.image_array[i,:,:] = np.rot90(self.image_array[i,:,:])
+
+        #Get the trigger locations if they are needed to assess the performance of the PLL
+        #This is not really used anymore!!
         if get_mirnov_triggers:
             self.get_mirnov_triggers(plot_mirnov_triggers)
         else:
@@ -60,6 +66,10 @@ class ImaxData():
         if plot_data: self.plot_images()
 
     def get_phase_std(self,n_phases = 1, plot = False, ax = None):
+        '''Used to check the performance of the PLL
+
+        SRH: 12Feb2014
+        '''
         phase_ave_list = []
         phase_std_list = []
         for loc, i in enumerate(self.shot_list):
@@ -71,30 +81,32 @@ class ImaxData():
             phase_ave_list.extend(tmp1)
             phase_std_list.extend(tmp2)
         if plot:
-            if ax == None:
-                fig, ax = pt.subplots()
+            if ax == None: fig, ax = pt.subplots()
             phases = np.array(phase_ave_list)
             stds = np.array(phase_std_list)
             ax.errorbar(np.arange(phases.shape[0]) + 1, phases, yerr = stds)
-            if ax ==None:
-                fig.canvas.draw(); fig.show()
+            if ax ==None: fig.canvas.draw(); fig.show()
 
 
     def plot_fourier_harmonics_pub(self,pub_fig = 0, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None,n_harmonics =3):
+        '''Function for plotting the fourier harmonics for papers
+        used in the synchronous imaging paper 
+
+        SRH: 12Feb2014
+        '''
         fig,ax = pt.subplots(nrows=n_harmonics,ncols=2)
         if n_harmonics == 1: ax = ax[np.newaxis,:]
-        if pub_fig:
-            cm_to_inch=0.393701
-            import matplotlib as mpl
-            old_rc_Params = mpl.rcParams
-            mpl.rcParams['font.size']=8.0
-            mpl.rcParams['axes.titlesize']=8.0#'medium'
-            mpl.rcParams['xtick.labelsize']=8.0
-            mpl.rcParams['ytick.labelsize']=8.0
-            mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=300
-            fig.set_figwidth(8.48*cm_to_inch)
-            fig.set_figheight((8.48*(0.5*n_harmonics)+0.1)*cm_to_inch)
+        cm_to_inch=0.393701
+        #import matplotlib as mpl
+        #old_rc_Params = mpl.rcParams
+        #mpl.rcParams['font.size']=8.0
+        #mpl.rcParams['axes.titlesize']=8.0#'medium'
+        #mpl.rcParams['xtick.labelsize']=8.0
+        #mpl.rcParams['ytick.labelsize']=8.0
+        #mpl.rcParams['lines.markersize']=5.0
+        #mpl.rcParams['savefig.dpi']=300
+        fig.set_figwidth(8.48*cm_to_inch)
+        fig.set_figheight((8.48*(0.5*n_harmonics)+0.1)*cm_to_inch)
         amp_im_list = []
         phase_im_list = []
         for i in range(n_harmonics):
@@ -132,20 +144,6 @@ class ImaxData():
             yticks = j.yaxis.get_major_ticks()
             for jj in xticks: jj.label1.set_visible(False)
             for jj in yticks: jj.label1.set_visible(False)
-        # if plot_amps:
-        #     for i in range(2,len(im_list)):im_list[i].set_clim(im_list[1].get_clim())
-        #     ax[-1].set_xlim([0,self.fft_values.shape[1]])
-        #     ax[-1].set_ylim([0,self.fft_values.shape[2]])
-        #     fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-        #     if draw:
-        #         fig.suptitle('Fourier amplitude (color range 0, 0.5)')
-        #         fig.canvas.draw(); fig.show()
-        #     #fig.savefig('imax_Fourier_amplitude.png')
-        # if plot_phases:
-        #     fig2.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-        #     if draw:
-        #         fig2.suptitle('Fourier phase (color range -pi,pi)')
-        #         fig2.canvas.draw(); fig2.show()
 
         if save_fig!=None:
             fig.savefig(save_fig, bbox_inches='tight',pad_inches=0.05)
@@ -153,6 +151,11 @@ class ImaxData():
 
 
     def plot_images_subset(self,cal=0, pub_fig = 0, image_indices = None, clim=None, savefig= None, fig = None, ax = None, draw_show = 1, fliplr = 1, save_fig=None, inc_DC_diff = False):
+        '''Function for plotting the raw images and difference images etc...
+        used in the synchronous imaging paper 
+
+        SRH: 12Feb2014
+        '''
         fig = pt.figure()
         if image_indices==None:
             image_indices = [0,2,4,6,8,10,12,14]
@@ -287,18 +290,20 @@ class ImaxData():
         fig.canvas.draw(); fig.show()
 
 
-    def get_mirnov_triggers_new(self,):
-        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
-        if plot_mirnov_triggers: fig_phase, ax_phase = pt.subplots(nrows = 2); 
-        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
-        #PLL_node = MDS.Tree('imax',shot).getNode('.PLL
-        mirnov_node = MDS.Tree('imax',shot).getNode('.operations.mirnov:a14_15:input_1')
+    # def get_mirnov_triggers_new(self,):
+    #     if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
+    #     if plot_mirnov_triggers: fig_phase, ax_phase = pt.subplots(nrows = 2); 
+    #     if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
+    #     #PLL_node = MDS.Tree('imax',shot).getNode('.PLL
+    #     mirnov_node = MDS.Tree('imax',shot).getNode('.operations.mirnov:a14_15:input_1')
 
         
     def get_mirnov_triggers(self, plot_mirnov_triggers, old_way = 1):
-        if plot_mirnov_triggers: fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
-        if plot_mirnov_triggers: fig_phase, ax_phase = pt.subplots(nrows = 2); 
-        if plot_mirnov_triggers: fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
+
+        if plot_mirnov_triggers: 
+            fig_trig, ax_trig = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_trig = ax_trig.flatten()
+            fig_phase, ax_phase = pt.subplots(nrows = 2); 
+            fig_hilb, ax_hilb = pt.subplots(nrows= 4, ncols = 4,sharex = True, sharey = True); ax_hilb = ax_hilb.flatten()
         phase_average_list = []; phase_std_list = []
         amp_average_list = []; amp_std_list = []
         density_list = []
@@ -398,11 +403,12 @@ class ImaxData():
         self.image_array_cal = tmp_decimate/tmp_count
         
 
-    def fourier_decomp(self,plot_amps = 0, plot_phases = 0, amp_fig=None, amp_ax = None, phase_fig = None, phase_ax = None, draw = 1, amp_clims = None, fliplr = 1):
+    def fourier_decomp(self,plot_amps = 0, plot_phases = 0, amp_fig=None, amp_ax = None, phase_fig = None, phase_ax = None, draw = 1, amp_clims = None, fliplr_plotted_image = 1):
         '''Perform an FFT on the image and plot the results if asked to
         '''
         self.fft_values = np.fft.fft(self.image_array_cal, axis = 0)
 
+        #The rest of this function is for plotting!
         n_subplots = self.fft_values.shape[0]/2
         n_cols = int(np.ceil(n_subplots**0.5))
         if n_subplots/float(n_cols)>n_subplots/n_cols:
@@ -425,7 +431,7 @@ class ImaxData():
                 ax2 = phase_ax
         im_list = []
         for i in range(self.fft_values.shape[0]/2):
-            if fliplr:
+            if fliplr_plotted_image:
                 tmp = np.fliplr(self.fft_values[i,:,:])
             else:
                 tmp = self.fft_values[i,:,:]
@@ -478,25 +484,22 @@ class ImaxData():
             node = '.images'
         else:
             node = '.pimax.images'
-
         if dark_SPE==None:
             self.dark_image = MDS.Tree('imax',dark_shot).getNode(node).data()[0,:,:]
         else:
             tmp0, tmp1 = SPE_reader.extract_SPE_data(dark_SPE)
             self.dark_image = +tmp0[0,:,:]
-
         if white_SPE==None:
             self.white_image = MDS.Tree('imax',white_shot).getNode(node).data()[0,:,:]
-
-
         else:
             tmp0, tmp1 = SPE_reader.extract_SPE_data(white_SPE)
             self.white_image = +tmp0[0,:,:]
+
+        #Orient images if required
         print 'flipud:{}, fliplr:{},rot90:{}'.format(flipud, fliplr, rot90)
         if flipud: self.white_image = np.flipud(self.white_image)
         if fliplr: self.white_image = np.fliplr(self.white_image)
         if rot90: self.white_image = np.rot90(self.white_image)
-
         if flipud: self.dark_image = np.flipud(self.dark_image)
         if fliplr: self.dark_image = np.fliplr(self.dark_image)
         if rot90: self.dark_image = np.rot90(self.dark_image)
@@ -508,9 +511,9 @@ class ImaxData():
             im = ax[1].imshow(self.dark_image, interpolation = 'none', aspect = 'auto', origin='lower')
             pt.colorbar(im,ax=ax[1])
             fig.canvas.draw(); fig.show()
-        full_scale = (self.white_image - self.dark_image)
-        max_value = np.max(full_scale)
 
+        #full_scale = (self.white_image - self.dark_image)
+        #max_value = np.max(full_scale)
         if med_filt!=0:
             self.white_image = scipy.signal.medfilt(self.white_image, med_filt)
             self.dark_image = scipy.signal.medfilt(self.dark_image, med_filt)
@@ -523,15 +526,9 @@ class ImaxData():
                 self.image_array_cal[i,:,:] = self.image_array[i,:,:].copy()
 
             #subtract the dark image
-            print clip
             self.image_array_cal[i,:,:] = np.clip(self.image_array_cal[i,:,:] - self.dark_image,0,65536)
             tmp = np.clip(self.white_image - self.dark_image,clip*np.max(self.white_image - self.dark_image), 65536) 
             self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / tmp
-            
-            #print 'clipped image min,max,mean', np.min(tmp), np.max(tmp), np.mean(tmp)
-            #np.clip(self.white_image - self.dark_image, max_value*clip,65000)
-            #self.image_array_cal[i,:,:] = np.clip(self.image_array[i,:,:] - self.dark_image, 0,50000)/np.clip(self.white_image - self.dark_image, max_value*clip,65000)
-            #print np.min(np.clip(self.white_image - self.dark_image, max_value*clip,65000)), np.max(np.clip(self.white_image - self.dark_image, max_value*clip,65000))
             if cal_sum:
                 print 'cal_sum,', np.sum(self.image_array_cal[i,:,:]), self.electron_dens[i], self.amp_average[i]
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:]/np.sum(self.image_array_cal[i,:,:])* 65000.
@@ -540,18 +537,8 @@ class ImaxData():
                 print 'mode_amp_filt',
                 self.image_array_cal[i,:,:] = self.image_array_cal[i,:,:] / self.amp_average[i]
             print 'calibrated image sum:{:.3f}, min:{:.3f}, max:{:.3f}, mean:{:.3f}'.format(np.sum(self.image_array_cal[i,:,:]), np.min(self.image_array_cal[i,:,:]),np.max(self.image_array_cal[i,:,:]), np.mean(self.image_array_cal[i,:,:]))
-            # if plot_cal_images:
-            #     im_list.append(ax[i].imshow(self.image_array_cal[i,:,:], interpolation = 'none', aspect = 'auto', origin='lower'))
-            # print ''
-        if plot_cal_images: 
-            self.plot_images(cal=1, clim=0)
-            # for i in range(0,len(im_list)):im_list[i].set_clim(im_list[0].get_clim())
-            # ax[-1].set_xlim([0,512])
-            # ax[-1].set_ylim([0,512])
-            # fig.subplots_adjust(hspace=0.0, wspace=0.0,left=0., bottom=0.,top=0.95, right=0.95)
-            # fig.suptitle('imax_corrected Images')
-            # fig.canvas.draw(); fig.show()
-            # fig.savefig('imax_corrected_images.png')
+        if plot_cal_images: self.plot_images(cal=1, clim=0)
+
 
     def get_john_analysis(self, plot_john_data = 0):
         '''Extracts Johns results from the MDSplus tree
@@ -729,7 +716,7 @@ def PLL_performance2(shot_number, n_phases=4, plot = False):
         phase_std_list.append(np.sqrt(np.log(1./np.abs(np.mean(phase_complex)))))
         phase_time_list.append(np.mean(time_ax[tmp_truth]))
         #amp_std_list.append(np.std(np.abs(hilb_sig[maxima])))
-        print 'n {}, mean {:.2f}deg, std {:.2f}deg'.format(np.sum(tmp_truth),np.rad2deg(phase_average_list[-1]), np.rad2deg(phase_std_list[-1]))
+        print ' n {}, mean {:.2f}deg, std {:.2f}deg'.format(np.sum(tmp_truth),np.rad2deg(phase_average_list[-1]), np.rad2deg(phase_std_list[-1]))
         #print angles, len(angles)
         start = neg_edges[i]
         start = pos_edges[i]
@@ -790,8 +777,6 @@ def PLL_performance2(shot_number, n_phases=4, plot = False):
         PLL_fig.savefig('PLL_multiple_phases.pdf',bbox_inches='tight', pad_inches=0.1)
         PLL_fig.savefig('PLL_multiple_phases.eps',bbox_inches='tight', pad_inches=0.1)
         PLL_fig.canvas.draw(); PLL_fig.show()
-
-
     return phase_average_list, phase_std_list
 
 
@@ -835,10 +820,18 @@ def extract_data(light_type, kh, orientations, shot_database, decimate_pixel, ca
     normalise each view to itself, then scale it relative to the other
     views based on the average for that set of images.
 
+    light_type, kh are used to find the shot numbers in the database
+    orientations (list) are the camera orientations to use in the database
+    shot_database - passed database of shots
+    decimate_pixel - how to decimate the data
+    cal_sum - normalise the sum of each image
+    norm_orient_relative - norm each image relative to the view, but then scale each view according to the average for each view
+    clip - used in the white - dark image calibration to prevent crazy results
 
-    SRH: 7Feb2014
+    SRH: 12Feb2014
     '''
-    print 'hello world!!!!!', kh
+
+    print '######### Extracting data for kh :{:.3f} ########'.format(kh)
     camera_data_list = []
     for i, orient in enumerate(orientations):
         shot_details = shot_database[light_type]['{:.2f}'.format(kh)][orient]
@@ -850,12 +843,13 @@ def extract_data(light_type, kh, orientations, shot_database, decimate_pixel, ca
         fliplr = shot_database[light_type]['{:.2f}'.format(kh)][orient]['fliplr']
         rot90 = shot_database[light_type]['{:.2f}'.format(kh)][orient]['rot90']
         #os.environ[shot_tree+'_path'] = tree_path
-        print shot_node, shot_tree
         print shot_details
         n = shot_details['n']
         m = shot_details['m']
 
         title = '{:.2f}_{}_{}-{}'.format(kh, shot_details['comment'], n, m)
+
+        #Extract data from SPE files, or from MDSplus
         if shot_details['shot_list'] == None:
             camera_data = ImaxData(shot_list = None, plot_data = 0, plot_mirnov_triggers = 0,get_mirnov_triggers = 0, SPE_file = shot_details['SPE_files'], fliplr=fliplr, flipud=flipud, rot90=rot90)
         else:
@@ -878,12 +872,13 @@ def extract_data(light_type, kh, orientations, shot_database, decimate_pixel, ca
 
         #Normalise the different views relative to each other
         if norm_orient_relative:
-            for j in range(16):
+            for j in range(camera_data.image_array_cal.shape[0]):
                 tmp1.append(np.mean(camera_data.image_array_cal[j,:,:]))
                 #tmp2.append(np.sum(camera_data.image_array[j,:,:]))
             mean_after_cal = np.mean(tmp1)
             if i==0: ref_mean = +mean_after_cal
-            for j in range(16):camera_data.image_array_cal[j,:,:] = camera_data.image_array_cal[j,:,:]/tmp1[j]*mean_after_cal/ref_mean
+            for j in range(camera_data.image_array_cal.shape[0]):
+                camera_data.image_array_cal[j,:,:] = camera_data.image_array_cal[j,:,:]/tmp1[j]*mean_after_cal/ref_mean
 
         #decimate and fourier decompose the camera data
         camera_data.decimate_data(decimate_pixel)

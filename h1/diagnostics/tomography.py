@@ -214,9 +214,6 @@ class Tomography():
         ax2.append(pt.subplot(gs[:8,5], sharex = ax2[0],sharey = ax2[0]))
         ax2.append(pt.subplot(gs[:8,6], sharex = ax2[0],sharey = ax2[0]))
 
-        #ax2.append(pt.subplot(gs[0:2,0:2]))
-        #ax2.append(pt.subplot(gs[2:4,0:2], sharex = ax2[5]))
-        #ax2.append(pt.subplot(gs[4:8,0:2]))
         ax2.append(pt.subplot(gs[0:2,0:2]))
         ax2.append(pt.subplot(gs[2:4,0:2]))#, sharex = ax2[5]))
         ax2.append(pt.subplot(gs[4:8,0:2]))
@@ -225,14 +222,6 @@ class Tomography():
         cbar_phase_ax = pt.subplot(gs[8,2:4])
         cbar_amp_ax = pt.subplot(gs[8,4:])
 
-        # ax2.append(pt.subplot2grid((4,7), (0,2), rowspan=7))
-        # ax2.append(pt.subplot2grid((4,7), (0,3), rowspan=7, sharex = ax2[0],sharey = ax2[0]))
-        # ax2.append(pt.subplot2grid((4,7), (0,4), rowspan=7, sharex = ax2[0],sharey = ax2[0]))
-        # ax2.append(pt.subplot2grid((4,7), (0,5), rowspan=7, sharex = ax2[0],sharey = ax2[0]))
-        # ax2.append(pt.subplot2grid((4,7), (0,6), rowspan=7, sharex = ax2[0],sharey = ax2[0]))
-        # ax2.append(pt.subplot2grid((4,7), (0,0), colspan = 2))
-        # ax2.append(pt.subplot2grid((4,7), (1,0), colspan = 2, sharex = ax2[5]))
-        # ax2.append(pt.subplot2grid((4,7), (2,0), colspan = 2, rowspan = 2))
         norm = False
         if LOS_object.radial_s_spacing:
             plot_radial_structure(self.T, np.sqrt(LOS_object.segment_midpoints), n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = '', single_mode = None)
@@ -340,14 +329,21 @@ class Tomography():
         re_projection[valid_channels]= tmp
         re_projection[-valid_channels]= 0
         tmp_meas = np.abs(all_measurements)*valid_channels
+        #tmp_meas = all_measurements
         tmp_meas[-valid_channels] = np.nan
+        #tmp_meas[-valid_channels] = 0
         [amp_exp_ax, amp_best_ax, phase_exp_ax, phase_best_ax, error_ax, foo1, foo2, foo3] = ax2
         [phase_exp_ax, phase_best_ax, amp_exp_ax, amp_best_ax, error_ax, foo1, foo2, foo3] = ax2
-        amp_cmap = 'spectral'
+        amp_cmap = 'jet'
+
         im1_a = amp_exp_ax.imshow(tmp_meas,origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        #im1_a = amp_exp_ax.imshow(complex_array_to_rgb(tmp_meas, rmax=1, theme = 'dark'),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
         tmp = np.abs(re_projection)
+        #tmp = re_projection
+        #tmp[-valid_channels] = 0
         tmp[-valid_channels] = np.nan
         im2_a = amp_best_ax.imshow(tmp,origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        #im2_a = amp_best_ax.imshow(complex_array_to_rgb(tmp, rmax=1, theme = 'dark'),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
         foo_tmp = np.angle(all_measurements)
         foo_tmp[-valid_channels] = np.nan
         #im1_p = phase_exp_ax.imshow(np.angle(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
@@ -360,32 +356,31 @@ class Tomography():
         im2_p.set_clim([-np.pi,np.pi])
         im2_a.set_clim(im1_a.get_clim())
 
-
-
         average_magnitude = np.mean(np.abs(re_projection[valid_channels]))
         difference = re_projection*0
         difference[valid_channels] = re_projection[valid_channels]- all_measurements[valid_channels]
         difference = np.abs(difference) #/ average_magnitude * 100
+        #difference = difference #/ average_magnitude * 100
         difference[-valid_channels] = np.nan
+        #difference[-valid_channels] = 0
         #percent_diff = (tmp_meas - tmp)/np.mean(tmp[np.isfinite(tmp)])*100
         #print np.mean(percent_diff[np.isfinite(percent_diff)])
 
         amp_diff = error_ax.imshow(difference,origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        #amp_diff = error_ax.imshow(complex_array_to_rgb(difference, rmax=1, theme = 'dark'),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
         #amp_diff.set_clim([0,100])
         amp_diff.set_clim(im1_a.get_clim())
-        #cbar1 = pt.colorbar(amp_diff,ax = error_ax, orientation = 'horizontal',pad = 0.01)
-        #cbar1.set_ticks(np.round(np.linspace(amp_diff.get_clim()[0],amp_diff.get_clim()[1],5,endpoint=True),1))#[0:-1])
-        #cbar1.set_label('Error (percent)')
-        #cbar2 = pt.colorbar(im1_a,ax = [amp_exp_ax,amp_best_ax,error_ax], orientation = 'horizontal',pad=0.01, aspect=20)
-        cbar2 = pt.colorbar(im1_a,cax = cbar_amp_ax, orientation = 'horizontal')
-        cbar2.set_ticks(np.round(np.linspace(im1_a.get_clim()[0],im1_a.get_clim()[1],7),1)[0:-1])
 
+        cbar2 = pt.colorbar(im1_a,cax = cbar_amp_ax, orientation = 'horizontal')
+        #cbar2 = hue_sat_cbar(cbar_amp_ax, rmax = 1)
+        cbar2.set_ticks(np.round(np.linspace(im1_a.get_clim()[0],im1_a.get_clim()[1],7),1)[0:-1])
         cbar2.set_label('Amp (a.u)')
+
         #cbar3 = pt.colorbar(im1_p,ax = [phase_exp_ax,phase_best_ax], orientation = 'horizontal',pad=0.01, aspect = 20./3*2)
         cbar3 = pt.colorbar(im1_p,cax = cbar_phase_ax, orientation = 'horizontal')
+
         cbar3.set_ticks(np.round(np.linspace(-np.pi,np.pi,7),1)[0:-1])
         cbar3.set_label('Phase (rad)')
-
 
         #percent_diff = (np.angle(q) - np.angle(all_measurements))/np.mean(tmp)*100
         start = 0; increment = len(T_tmp)/len(n)
@@ -400,7 +395,249 @@ class Tomography():
         phase_exp_ax.set_title('(d)Experiment')
         phase_best_ax.set_title('(e)Best Fit')
         error_ax.set_title('(h)Error')
+        center = valid_channels.shape[1]/2
+        edge = center/4.
+        for j in ax2[0:5]:j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+        for j in ax2:j.grid()
 
+        for i in ax2[0:5]: i.set_xlim([center+edge*0.85, center-edge*1.2])
+        amp_exp_ax.set_ylim([0,valid_channels.shape[0]-40])
+        
+        #fig2.subplots_adjust(hspace=0.0, wspace=0.03,left=0.05, bottom=0.05,top=0.95, right=0.95)
+        if savefig_name!=None:
+            gs.tight_layout(fig2, pad = 0.0001)
+            #fig2.tight_layout(pad = 0.05)
+            fig2.savefig(savefig_name+'.pdf', bbox_inches='tight',pad_inches=0.05)
+            fig2.savefig(savefig_name+'.eps', bbox_inches='tight',pad_inches=0.05)
+        fig2.canvas.draw(); fig2.show()
+
+
+
+
+
+
+    def plot_reprojection_comparison_extrap_diff_hue_sat(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name = None, include_lines = True, decimate_lines = 10):
+        #fig2, ax2 = pt.subplots(ncols = 5, sharey=True, sharex = True)
+        fig2 = pt.figure()
+        if pub_fig:
+            cm_to_inch=0.393701
+            import matplotlib as mpl
+            old_rc_Params = mpl.rcParams
+            mpl.rcParams['font.size']=8.0
+            mpl.rcParams['legend.fontsize']=7.0
+            mpl.rcParams['axes.titlesize']=8.0#'medium'
+            mpl.rcParams['xtick.labelsize']=8.0
+            mpl.rcParams['ytick.labelsize']=8.0
+            mpl.rcParams['lines.markersize']=5.0
+            mpl.rcParams['savefig.dpi']=150
+            fig2.set_figwidth(8.48*2.*cm_to_inch)
+            fig2.set_figheight(8.48*1.5*cm_to_inch)
+
+        ax2 = []
+        import matplotlib.gridspec as gridspec
+        gs = gridspec.GridSpec(9,6)
+        ax2.append(None)
+        ax2.append(None)
+        #ax2.append(pt.subplot(gs[:8,2]))
+        #ax2.append(pt.subplot(gs[:8,3], sharex = ax2[0],sharey = ax2[0]))
+        ax2.append(pt.subplot(gs[:8,3]))
+        ax2.append(pt.subplot(gs[:8,4], sharex = ax2[2],sharey = ax2[2]))
+        ax2.append(pt.subplot(gs[:8,5], sharex = ax2[2],sharey = ax2[2]))
+
+        #ax2.append(pt.subplot(gs[0:2,0:2]))
+        #ax2.append(pt.subplot(gs[2:4,0:2], sharex = ax2[5]))
+        #ax2.append(pt.subplot(gs[4:8,0:2]))
+        ax2.append(pt.subplot(gs[0:2,0:3]))
+        ax2.append(pt.subplot(gs[2:4,0:3]))#, sharex = ax2[5]))
+        ax2.append(pt.subplot(gs[4:8,0:3]))
+
+        cbar_wave_ax = pt.subplot(gs[8,0:3])
+        cbar_amp_ax = pt.subplot(gs[8,3:])
+
+
+        norm = False
+        if LOS_object.radial_s_spacing:
+            plot_radial_structure(self.T, np.sqrt(LOS_object.segment_midpoints), n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = '', single_mode = None)
+        else:
+            plot_radial_structure(self.T, LOS_object.segment_midpoints, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = '', single_mode = None)
+
+        start = 0; increment = len(self.T)/len(n)
+        s_vals = LOS_object.segment_midpoints
+        #s_vals = (s_values[1:]+s_values[0:-1])/2
+        wave_field = 0
+        for n_cur, m_cur in zip(n,m):
+            end = start + increment
+            wave_amp = np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.real(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape) + 1j* np.interp(LOS_object.s_cross_sect.flatten(), s_vals, np.imag(self.T[start:end])).reshape(LOS_object.theta_cross_sect.shape)
+            wave_field = wave_field + wave_amp * np.exp(1j*(n_cur*LOS_object.phi_cross_sect + m_cur * LOS_object.theta_cross_sect))
+            start = +end
+
+        wave_field_tmp = wave_field 
+        image_extent = [LOS_object.r_grid[0,0], LOS_object.r_grid[0,-1], LOS_object.z_grid[0,0], LOS_object.z_grid[-1,0]]
+        im = ax2[7].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto')
+        tmp = im.get_clim()
+        max_val = np.max(np.abs(tmp))
+        im.set_clim([-max_val, max_val])
+        #cbar_xsection = pt.colorbar(im, ax=[ax2[5],ax2[6],ax2[7]], orientation = 'horizontal', pad = 0.01, aspect = 20./3*2)
+        cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
+        cbar_xsection.set_label('Real (a. u.)')
+        ax2[7].set_xlabel('R (m)')
+        ax2[7].set_ylabel('Z (m)')
+        ax2[5].set_title('Tomographic Reconstruction')
+        ax2[7].set_xlim([1,1.4])
+        ax2[7].set_ylim([-0.25,0.25])
+
+        cbar_xsection.set_ticks(np.round(np.linspace(im.get_clim()[0],im.get_clim()[1],7),1)[0:-1])
+
+        #ax2[6].set_ylim([-2*np.pi,2*np.pi])
+        ax2[5].set_xlim([0,1])
+        ax2[6].set_xlim([0,1])
+        if norm:
+            ax2[5].set_ylim([0,0.12])
+        if LOS_object.radial_s_spacing:
+            ax2[6].set_xlabel(r'$\sqrt{s}$')
+            ax2[5].set_xlabel(r'$\sqrt{s}$')
+        else:
+            ax2[6].set_xlabel(r'$s$')
+            ax2[5].set_xlabel(r'$s$')
+        ax2[5].legend(loc='center left')
+        ax2[7].set_xticks(ax2[7].get_xticks()[::2])
+        ax2[6].set_yticks(ax2[6].get_yticks()[::2])
+        #if norm:
+        if True:
+            ax2[5].set_yticks(ax2[5].get_yticks()[::2])
+            ax2[5].text(0.85,0.83*ax2[5].get_ylim()[1],'(a)')
+        ax2[7].text(1.35,0.2,'(c)')
+        ax2[6].text(0.85,(ax2[6].get_ylim()[1] - ax2[6].get_ylim()[0])*0.85 + ax2[6].get_ylim()[0],'(b)')
+        if n.__class__ == int:
+            n = [n]
+            m = [m]
+        measurements = all_measurements[valid_channels]
+        valid_channels = valid_channels
+        n_measurements, n_regions = geom_matrix.shape
+        if include_lines:
+            loc = LOS_object.valid_channels.shape[1]/2
+            #for start_loc, end_loc, style in zip(LOS_object.start_indices, LOS_object.end_indices,['b-','k-','r-']):
+            start_loc, end_loc, style = [LOS_object.start_indices[1], LOS_object.end_indices [1],'k-']
+            for i in range(start_loc, end_loc, decimate_lines):
+                if LOS_object.valid_channels[i,loc]:
+                    point1_z = LOS_object.intersection1[i,loc,2] 
+                    point2_z = LOS_object.intersection2[i,loc,2]
+                    point1_r = np.sqrt(LOS_object.intersection1[i,loc,0]**2+LOS_object.intersection1[i,loc,1]**2) 
+                    point2_r = np.sqrt(LOS_object.intersection2[i,loc,0]**2+LOS_object.intersection2[i,loc,1]**2)
+                    gradient = (point2_z - point1_z)/(point2_r - point1_r)
+                    offset = point1_z - gradient*point1_r
+                    r_val = np.array([0.5,1.5])
+                    z_val = gradient*r_val + offset
+                    #z_val = [point1_z, point2_z]
+                    #r_val = [point1_r, point2_r]
+                    ax2[7].plot(r_val,z_val,style, linewidth=0.3)
+
+        #If the geometry matrix or measurement matrix complex
+        #Need to build a larger matrix that contains the linear system of equations
+        #in real numbers only
+        if geom_matrix.dtype == np.complex_ or measurements.dtype == np.complex:
+            P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+            #Build a real matrix 
+            P[0::2,0::2] = +np.real(geom_matrix)
+            P[0::2,1::2] = -np.imag(geom_matrix)
+            P[1::2,0::2] = +np.imag(geom_matrix)
+            P[1::2,1::2] = +np.real(geom_matrix)
+            S = np.zeros(n_measurements*2, dtype=float)
+            S[0::2] = +np.real(measurements)
+            S[1::2] = +np.imag(measurements)
+            T_tmp = np.zeros(n_regions*2, dtype=float)
+            T_tmp[0::2] = +np.real(self.T)
+            T_tmp[1::2] = +np.imag(self.T)
+            input_type = 'complex'
+            tmp = np.dot(P,T_tmp)- S
+        else:
+            print 'real input'
+            P = geom_matrix
+            S = measurements
+            input_type = 'real'
+            
+        tmp = np.dot(P,T_tmp)
+        tmp = tmp[0::2]+1j*tmp[1::2]
+        re_projection = all_measurements*0
+        re_projection[valid_channels]= tmp
+        re_projection[-valid_channels]= 0
+        tmp_meas = np.abs(all_measurements)*valid_channels
+        tmp_meas = all_measurements
+        #tmp_meas[-valid_channels] = np.nan
+        tmp_meas[-valid_channels] = 0
+        [phase_exp_ax, phase_best_ax, amp_exp_ax, amp_best_ax, error_ax, foo1, foo2, foo3] = ax2
+        amp_cmap = 'jet'
+
+
+        print 'pre amp'
+        im1_a = amp_exp_ax.imshow(complex_array_to_rgb(tmp_meas, rmax=1, theme = 'dark'),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        tmp = np.abs(re_projection)
+        tmp = re_projection
+        tmp[-valid_channels] = 0
+        print 'post amp'
+        #im2_a = amp_best_ax.imshow(tmp,origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        im2_a = amp_best_ax.imshow(complex_array_to_rgb(tmp, rmax=1, theme = 'dark'),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        foo_tmp = np.angle(all_measurements)
+        foo_tmp[-valid_channels] = np.nan
+        #im1_p = phase_exp_ax.imshow(np.angle(all_measurements)*valid_channels,origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
+        #im1_p = phase_exp_ax.imshow(foo_tmp,origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
+        #foo_tmp = np.angle(re_projection)
+        #foo_tmp[-valid_channels] = np.nan
+        #im2_p = phase_best_ax.imshow(np.angle(re_projection),origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
+        #im2_p = phase_best_ax.imshow(foo_tmp,origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
+        #im1_p.set_clim([-np.pi,np.pi])
+        #im2_p.set_clim([-np.pi,np.pi])
+        #im2_a.set_clim(im1_a.get_clim())
+
+        print '!!!!'
+
+
+        average_magnitude = np.mean(np.abs(re_projection[valid_channels]))
+        difference = re_projection*0
+        difference[valid_channels] = re_projection[valid_channels]- all_measurements[valid_channels]
+        #difference = np.abs(difference) #/ average_magnitude * 100
+        #difference = difference #/ average_magnitude * 100
+        #difference[-valid_channels] = np.nan
+        difference[-valid_channels] = 0
+        #percent_diff = (tmp_meas - tmp)/np.mean(tmp[np.isfinite(tmp)])*100
+        #print np.mean(percent_diff[np.isfinite(percent_diff)])
+
+        #amp_diff = error_ax.imshow(difference,origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        amp_diff = error_ax.imshow(complex_array_to_rgb(difference, rmax=1, theme = 'dark'),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        #amp_diff.set_clim([0,100])
+        amp_diff.set_clim(im1_a.get_clim())
+        #cbar1 = pt.colorbar(amp_diff,ax = error_ax, orientation = 'horizontal',pad = 0.01)
+        #cbar1.set_ticks(np.round(np.linspace(amp_diff.get_clim()[0],amp_diff.get_clim()[1],5,endpoint=True),1))#[0:-1])
+        #cbar1.set_label('Error (percent)')
+        #cbar2 = pt.colorbar(im1_a,ax = [amp_exp_ax,amp_best_ax,error_ax], orientation = 'horizontal',pad=0.01, aspect=20)
+
+        #cbar2 = pt.colorbar(im1_a,cax = cbar_amp_ax, orientation = 'horizontal')
+        cbar2 = hue_sat_cbar(cbar_amp_ax, rmax = 1)
+        #cbar2.set_ticks(np.round(np.linspace(im1_a.get_clim()[0],im1_a.get_clim()[1],7),1)[0:-1])
+        #cbar2.set_label('Amp (a.u)')
+
+        #cbar3 = pt.colorbar(im1_p,ax = [phase_exp_ax,phase_best_ax], orientation = 'horizontal',pad=0.01, aspect = 20./3*2)
+        #cbar3 = pt.colorbar(im1_p,cax = cbar_phase_ax, orientation = 'horizontal')
+
+        #cbar3.set_ticks(np.round(np.linspace(-np.pi,np.pi,7),1)[0:-1])
+        #cbar3.set_label('Phase (rad)')
+
+
+        #percent_diff = (np.angle(q) - np.angle(all_measurements))/np.mean(tmp)*100
+        start = 0; increment = len(T_tmp)/len(n)
+
+        tmp_y_axis = np.arange(len(all_measurements[:,0]))
+        tmp_y_axis = np.max(tmp_y_axis)- tmp_y_axis
+        #tmp_reproj = all_measurements*0.
+        #tmp_reproj[valid_channels] = re_projection
+
+        amp_exp_ax.set_title('(f)Experiment')
+        amp_best_ax.set_title('(g)Best Fit')
+        #phase_exp_ax.set_title('(d)Experiment')
+        #phase_best_ax.set_title('(e)Best Fit')
+        error_ax.set_title('(h)Error')
+
+        print '!!!!'
         #phase_exp_ax.set_xlabel('Phase (rad)')
         #ax2[1,0].set_xlabel('Pixel')
         #ax2[1,1].set_xlabel('Pixel')
@@ -408,12 +645,13 @@ class Tomography():
         #ax2[0].set_ylabel('Pixel')
         center = valid_channels.shape[1]/2
         edge = center/4.
-        for j in ax2[0:5]:j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+        print '!!!!'
+        for j in ax2[2:5]:j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
         #ax2[5].tick_params(axis='both',which='both',labelbottom='off',labelleft='on')
         #ax2[7].tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
-        for j in ax2:j.grid()
-
-        for i in ax2[0:5]: i.set_xlim([center+edge*0.85, center-edge*1.2])
+        for j in ax2[2:]:j.grid()
+        print '!!!!'
+        for i in ax2[2:5]: i.set_xlim([center+edge*0.85, center-edge*1.2])
         amp_exp_ax.set_ylim([0,valid_channels.shape[0]-40])
         
         #fig2.subplots_adjust(hspace=0.0, wspace=0.03,left=0.05, bottom=0.05,top=0.95, right=0.95)
@@ -2080,9 +2318,8 @@ def imax_geometry(theta_values=None, make_single_plot = 0, make_multiple_plots =
     return gradient, intersect
 
 
-def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval):
-    #tomo_modes_n_indices = [n.index(i) for i in tomo_modes_n]
-    #tomo_modes_m_indices = [m.index(i) for i in tomo_modes_m]
+
+def return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, tomo_orient, overall_geom_list, valid_channels, start_indices, end_indices, fourier_data, harmonic):
     tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
     tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
     if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
@@ -2091,6 +2328,18 @@ def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_mo
     z = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
     tomo_valid_channels = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
     tomo_measurements = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+    return z, tomo_valid_channels, tomo_measurements
+
+def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval):
+    #tomo_modes_n_indices = [n.index(i) for i in tomo_modes_n]
+    #tomo_modes_m_indices = [m.index(i) for i in tomo_modes_m]
+    z, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, tomo_orient, overall_geom_list, valid_channels, start_indices, end_indices, fourier_data, harmonic)
+    # if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
+    # tomo_view_indices = [orientations.index(i) for i in tomo_orient]
+    # rev_indices = tomo_view_indices
+    # z = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
+    # tomo_valid_channels = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+    # tomo_measurements = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
 
     if method=='SIRT':
         tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
@@ -2108,6 +2357,8 @@ def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_mo
         error = tomo_recon_error_calc(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
     else:
         tomo_view_indices = [orientations.index(i) for i in tomo_eval]
+        tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
+        tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
         z_tmp = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
         tomo_valid_channels_tmp = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
         tomo_measurements_tmp = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
@@ -2305,6 +2556,8 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
         x = int(x)
         return '{}'.format(mode_list_m[x])
     ax.set_xlabel('m')
+    x_min, x_max = ax.get_xlim(); y_min, y_max = ax.get_ylim()
+    ax.text(x_min+ (x_max-x_min)*0.05, y_min+ (y_max-y_min)*0.9,'(a)')
     ax.set_ylabel('n')
     #ax.set_title('Error from Single mode fit')
     ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
@@ -2315,16 +2568,28 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
         if single_m.__class__=='int': 
             single_m = [single_m]
             print single_m.__class__
-        for tmp_single_m in single_m:
-        #fig2,ax2 = pt.subplots()
-            index = mode_list_m.index(tmp_single_m)
-            ax2.plot(mode_list_n, error_array[:,index], 'o-',label='all views m={}'.format(tmp_single_m))
-            min_loc = np.argmin(error_array[:,index])
-            if second_errors != None:
-                ax2.plot(mode_list_n, second_error_array[:,index], 'x-',label='center view m={}'.format(tmp_single_m))
+        colors = ['b','g','r','k']
+        if second_errors != None:
+            for tmp_i in range(len(single_m)):
+            #fig2,ax2 = pt.subplots()
+                tmp_single_m = single_m[tmp_i]
+                color = colors[tmp_i]
+                index = mode_list_m.index(tmp_single_m)
+                ax2.plot(mode_list_n, second_error_array[:,index], 'x-', color = color, label='center view m={}'.format(tmp_single_m))
             #ax2.text(mode_list_n[0], error_array[0,index],'m={}'.format(tmp_single_m))
+        colors = ['b','g','r','k']
+        for tmp_i in range(len(single_m)):
+        #fig2,ax2 = pt.subplots()
+            tmp_single_m = single_m[tmp_i]
+            color = colors[tmp_i]
+            index = mode_list_m.index(tmp_single_m)
+            ax2.plot(mode_list_n, error_array[:,index], 's-',color = color, label='all views m={}'.format(tmp_single_m))
+            min_loc = np.argmin(error_array[:,index])
+
         ax2.set_xlabel('n')
         ax2.set_ylim([0.25,0.85])
+        x_min, x_max = ax2.get_xlim(); y_min, y_max = ax2.get_ylim()
+        ax2.text(x_min+ (x_max-x_min)*0.05, y_min+ (y_max-y_min)*0.9,'(b)')
         ax2.set_ylabel('Tomo Recon Error')
         ax2.legend(loc='best')
         ax2.grid()
@@ -2420,8 +2685,9 @@ def compare_reconstruction_method(tomo1, tomo2, LOS_object, n, m, filename = Non
         print filename
     fig.canvas.draw(); fig.show()
 
-def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, filename = None):
+def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, filename = None, colors = None):
     if marker == None: marker = ['x','d','s','o']
+    if colors == None: colors = [None]*len(marker)
     if labels == None: labels = ['']*len(tomo_list)
     fig, ax = pt.subplots(nrows = 2, sharex = True)
     if filename!=None:
@@ -2436,11 +2702,11 @@ def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, 
         mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight(8.48*1.0*cm_to_inch)
-    for i, tmp_marker, tmp_label in zip(tomo_list,marker, labels):
+    for i, tmp_marker, tmp_label, color in zip(tomo_list,marker, labels, colors):
         if LOS_object.radial_s_spacing:
-            plot_radial_structure(i.T, np.sqrt(LOS_object.segment_midpoints), n, m,  prov_ax = ax, norm = True, extra_txt = tmp_label + ',', single_mode = None, marker = tmp_marker)
+            plot_radial_structure(i.T, np.sqrt(LOS_object.segment_midpoints), n, m,  prov_ax = ax, norm = True, extra_txt = tmp_label + ',', single_mode = None, marker = tmp_marker, color = color)
         else:
-            plot_radial_structure(i.T, LOS_object.segment_midpoints, n, m,  prov_ax = ax, norm = True, extra_txt = tmp_label + ',', single_mode = None, marker = tmp_marker)
+            plot_radial_structure(i.T, LOS_object.segment_midpoints, n, m,  prov_ax = ax, norm = True, extra_txt = tmp_label + ',', single_mode = None, marker = tmp_marker, color=color)
     ax[0].legend(loc='upper left',prop={'size':7})
     ax[1].set_xlim([0,1])
     ax[1].set_ylim([-2.*np.pi,0])
@@ -2458,7 +2724,10 @@ def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, 
         print filename
     fig.canvas.draw(); fig.show()
 
-def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x'):
+def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid'):
+
+    plot_dict = {'linestyle':linestyle, 'marker':marker}
+    if color!=None: plot_dict['color'] = color
     start = 0; increment = len(T)/len(n)
     if prov_ax==None:
         fig, ax = pt.subplots(nrows = 2)
@@ -2485,7 +2754,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
         if cor_run:
             if norm:
                 cur_T = cur_T/norm_fact
-            ax[0].plot(segment_midpoints, np.abs(cur_T), '-'+marker,label='{}{},{}'.format(extra_txt, n_cur, m_cur))
+            ax[0].plot(segment_midpoints, np.abs(cur_T), label='{}{},{}'.format(extra_txt, n_cur, m_cur), **plot_dict)
             max_ind = np.argmax(np.abs(cur_T[:-5]))
             max_s = segment_midpoints[max_ind]
             max_amp = np.max(np.abs(cur_T[:-5]))
@@ -2494,7 +2763,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             start_pt = angs.shape[0]/3
             while np.mean(angs[start_pt:])>np.pi: angs += -2.*np.pi
             while np.mean(angs[start_pt:])<-np.pi: angs += 2.*np.pi
-            ax[1].plot(segment_midpoints, angs, '-'+marker, label='Arg({},{})'.format(n_cur, m_cur))
+            ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
             ax[0].legend(loc='best')
             ax[0].set_xlim([0,1])
@@ -2508,8 +2777,6 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
 
 
 def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  mode_tuples, filename, fourier_data, answer, overall_geom_list, s_values, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = False, plot_wave_animation = False, tomo_DC = None):
-
-
     tomo_inv = single(fourier_data, answer.valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, answer.orientations, answer.start_indices, answer.end_indices, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap)[3]
     if plot_old_combo:
         tomo_inv.plot_lots_of_things(tomo_modes_n, tomo_modes_m, answer, cut_values=cut_values)
@@ -2541,3 +2808,127 @@ def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  
     if plot_reprojection_comp2:
         tomo_inv.plot_reprojection_comparison_extrap_diff(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_diff_'+filename)
     return tomo_inv
+
+def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, mode_tuples, fourier_data, answer, overall_geom_list, s_values, cut_values, tomo_DC, make_animation = False, run_dI_I = True):
+    kh_string = '{:.2f}'.format(kh).replace('.','_')
+    filename = 'kh_{}_'.format(kh_string)
+    for i, j in zip(tomo_modes_n_best, tomo_modes_m_best):
+        filename+='{}_{}__'.format(i,j)
+
+    #This makes a nice plot of m vs n
+    #tomo.plot_error_multi_list_single(error_multi_list.errors,filename='kh_{}_helicity_check'.format(kh_string),single_m=-3)
+    print tomo_orient
+    if run_dI_I:
+        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient,  mode_tuples, filename+'_dI-I', fourier_data, answer, overall_geom_list, s_values, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
+    else:
+        tomo_dI = None
+    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient,  mode_tuples, filename+'_norm', fourier_data, answer, overall_geom_list, s_values, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
+    if make_animation:
+        tomo_norm.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,s_values, n_images = 32, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation.gif',delay=10)
+    mode_output_data = {'T':tomo_norm.T, 'segment_midpoints':answer.segment_midpoints,'n':tomo_modes_n_best,'m':tomo_modes_m_best}
+    inv_prof_fname = filename + 'mode_norm.pickle'
+    pickle.dump(mode_output_data, file(inv_prof_fname,'w'))
+    if run_dI_I:
+        mode_output_data = {'T':tomo_dI.T, 'segment_midpoints':answer.segment_midpoints,'n':tomo_modes_n_best,'m':tomo_modes_m_best}
+        inv_prof_fname = filename + 'mode_dII.pickle'
+        pickle.dump(mode_output_data, file(inv_prof_fname,'w'))
+    return tomo_dI, tomo_norm
+
+
+def many_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
+    filename_list = []
+    for i, peak_loc in enumerate(np.linspace(0.1,0.9,5)):
+        filename = str(i)
+        create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
+        filename_list.append('reproj_diff_{}'.format(filename))
+    print filename_list
+    for i in filename_list:
+        os.system('convert {}.pdf {}.png'.format(i, i))
+
+    os.system('convert -delay {} -loop 0 {} {}'.format(100, '.png '.join(filename_list)+'.png', 'moving_gaussian_{}_noise.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
+    #os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
+
+def many_measurements_vary_m(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
+    filename_list = []
+    for i, m_new in enumerate(range(-8,9)):
+        filename = 'm_{}_n_{}'.format(m_new, tomo_modes_n[0], )
+        create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, [m_new], tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
+        filename_list.append('reproj_diff_m_{}_n_{}'.format(m_new, tomo_modes_n[0]))
+    print filename_list
+    for i in filename_list:
+        os.system('convert {}.pdf {}.png'.format(i, i))
+
+    os.system('convert -delay {} -loop 0 {} {}'.format(20, '.png '.join(filename_list)+'.png', 'moving_gaussian_{}_noise.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
+    #os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
+
+def many_measurements_vary_n(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
+    filename_list = []
+    for i, n_new in enumerate(range(-8,9)):
+        filename = 'm_{}_n_{}'.format(tomo_modes_m[0],n_new )
+        create_measurements(n, m, LOS_object, mode_tuples, [n_new], tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
+        filename_list.append('reproj_diff_m_{}_n_{}'.format(tomo_modes_m[0], n_new))
+    print filename_list
+    for i in filename_list:
+        os.system('convert {}.pdf {}.png'.format(i, i))
+    os.system('convert -delay {} -loop 0 {} {}'.format(100, '.png '.join(filename_list)+'.png', 'dummy_data_different_n.gif'))
+
+def create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
+    '''Generates fake measurement data to see how the tomographic reconstruction behaves.
+    Data is a gaussian with peak_loc = mean and peak_width=std 
+    The phase is a constant value across the peak
+    '''
+    
+    geom_matrix, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, LOS_object.orientations, tomo_orient, overall_geom_list, LOS_object.valid_channels, LOS_object.start_indices, LOS_object.end_indices, fourier_data, harmonic)
+    from scipy.stats import norm
+    s_vals = LOS_object.segment_midpoints
+    rv = norm(loc = peak_loc, scale = peak_width)
+    amps = rv.pdf(LOS_object.segment_midpoints)
+    phases = amps*0+2.13
+    T = amps*np.cos(phases) + 1j*amps*np.sin(phases)
+    
+    re_projection = np.dot(geom_matrix, T)
+
+    new_meas = np.zeros(tomo_valid_channels.shape, dtype=complex)
+    sig_strength = np.mean(np.abs(re_projection))
+    noise1 = np.random.normal(0,sig_strength*noise_strength,len(re_projection))
+    noise2 = np.random.normal(0,sig_strength*noise_strength,len(re_projection))
+
+    new_meas[tomo_valid_channels] = re_projection + noise1 + 1j*noise2
+    #new_meas[new_meas<0]=0
+
+    fig, ax = pt.subplots(ncols = 2)
+    ax[0].imshow(np.abs(new_meas), aspect = 'auto')
+    ax[1].imshow(np.angle(new_meas), aspect = 'auto')
+
+    fig.canvas.draw(); fig.show()
+    tomo_orient_extrap = tomo_orient
+
+    fourier_data[harmonic,:,:] = +new_meas
+    run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  mode_tuples, filename, fourier_data, LOS_object, overall_geom_list, LOS_object.segment_midpoints, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = True, plot_wave_animation = False, tomo_DC = None)
+
+def complex_array_to_rgb(X, theme='dark', rmax=None):
+    '''Takes an array of complex number and converts it to an array of [r, g, b],
+    where phase gives hue and saturaton/value are given by the absolute value.
+    Especially for use with imshow for complex plots.'''
+    absmax = rmax or np.abs(X).max()
+    Y = np.zeros(X.shape + (3,), dtype='float')
+    Y[..., 0] = np.angle(X) / (2 * np.pi) % 1
+    if theme == 'light':
+        Y[..., 1] = np.clip(np.abs(X) / absmax, 0, 1)
+        Y[..., 2] = 1
+    elif theme == 'dark':
+        Y[..., 1] = 1
+        Y[..., 2] = np.clip(np.abs(X) / absmax, 0, 1)
+    Y = mpl.colors.hsv_to_rgb(Y)
+    return Y
+
+def hue_sat_cbar(cbar_wave_ax, rmax = 1):
+    phase = np.linspace(-np.pi,np.pi,50)
+    amp = np.linspace(0,1,50)
+    phase_mesh, amp_mesh  = np.meshgrid(phase, amp)
+    new_array = amp_mesh * np.cos(phase_mesh) + 1j*amp_mesh *np.sin(phase_mesh)
+    im = cbar_wave_ax.imshow(complex_array_to_rgb(new_array, rmax=rmax, theme = 'dark'), aspect='auto', origin = 'lower', extent=[-np.pi, np.pi, 0, 1])
+    cbar_wave_ax.set_xlabel('phase')
+    cbar_wave_ax.set_ylabel('amp')
+    cbar_wave_ax.set_xticks([-3,0,3])
+    cbar_wave_ax.set_yticks([0,1])

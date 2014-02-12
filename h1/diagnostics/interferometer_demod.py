@@ -74,14 +74,23 @@ class interf_demod(object):
             count += 1
         self.t = np.arange(-self.start_samples, self.keep_length - self.start_samples) * 1./self.f_s
 
-    def extract_epsilon_sync_signal(self,):
+    def extract_epsilon_sync_signal(self,plot=False):
+        '''Get epsilon from the digitised fm modulation signal 
+        '''
         T = MDS.Tree('h1data',self.shot_number)
-        n = T.getNode('.electr_dens.camac.A14_24.input_4')
-        sync_signal = n.data()[:self.raw_signals.shape[1]]
+        n = T.getNode('.electr_dens.camac.A14_24.input_5')
+        #-ve is because of a polarity problem on the BNC-> lemo connector
+        sync_signal = -n.data()[:self.raw_signals.shape[1]]
         sync_signal_fft = np.fft.fft(sync_signal)
         fft_ax = np.fft.fftfreq(len(sync_signal_fft),1./self.f_s)
         f_m_loc = np.argmin(np.abs(fft_ax - self.f_m))
-        self.sync_epsilon = np.angle(sync_signal_fft[f_m_loc])
+        #+np.pi/2 because the modulation is represented by a sine wave, not a cos, 
+        #+np.pi,  mod 2pi,  - np.pi, to be within -np.pi, and np.pi
+        self.sync_epsilon = (np.angle(sync_signal_fft[f_m_loc])+np.pi/2+np.pi)%(2.*np.pi) - np.pi
+        if plot:
+            fig, ax = pt.subplots()
+            ax.plot(sync_signal)
+            fig.canvas.draw(); fig.show()
         return self.sync_epsilon
 
     def epsilon_analysis(self,ch = 7, use_full = 0):
@@ -593,9 +602,10 @@ class interf_demod(object):
         return np.sum((np.dot(J_tile, S) - h)**2)
 
 
-    def calculate_phase_phi_simul(self, use_rfft = 0, clim = [0,5], show_fig = True, channel_mask = None):
+    def calculate_phase_phi_simul(self, use_rfft = 0, clim = [0,5], show_fig = True, channel_mask = None, max_harm = None):
         '''Calculate phi1 (modulation depth) simulatneously using all interferometer channels
 
+        max_harm is the maximum harmonic that is used for the phi simultaneous fit
         SRH: 5Nov2013
         '''
         if use_rfft: 
@@ -603,14 +613,15 @@ class interf_demod(object):
         else:
             carriers = self.carriers
         n_samples = 2000
-        harms, chans, Ns = carriers.shape
 
+        harms, chans, Ns = carriers.shape
+        if max_harm!=None: harms = max_harm
         self.J = np.zeros((harms, 3), dtype = float)
 
         #self.h = np.zeros((harms*chans, Ns),dtype = float)
         self.h = np.zeros((harms*chans, n_samples),dtype = float)
         for i in range(chans):
-            self.h[i*harms:(i+1)*harms,:] = np.real(carriers[:,i,:n_samples])
+            self.h[i*harms:(i+1)*harms,:] = np.real(carriers[:max_harm,i,:n_samples])
         phi1_list = np.linspace(0.3,1.3*np.pi,50)
         error_list = []
         for phi1 in phi1_list:
@@ -626,7 +637,7 @@ class interf_demod(object):
         self.phi1_min_simul = phi1_list[np.argmin(error_list)]
         self.J[::2,2] = spec.jn(np.arange(0, harms,2), self.phi1_min_simul)
         self.J[1::2,1] = spec.jn(np.arange(1, harms,2), self.phi1_min_simul)
-        self.J[0,0] = 1
+        self.J[0, 0] = 1
         self.J_tile = np.tile(self.J,(chans,1))
         self.J_inv = np.linalg.pinv(self.J_tile)
         self.S = np.dot(self.J_inv, self.h)
@@ -635,9 +646,13 @@ class interf_demod(object):
         a = opt.fmin(self.min_func_phi1_simul, np.deg2rad(135), args=(harms, chans, self.h),disp=1, xtol=0.00001)
         a2 = opt.minimize(self.min_func_phi1_simul, np.deg2rad(135), args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,1.3*np.pi)])
         a3 = opt.minimize(self.phase_phi1_phi2_error, [np.deg2rad(135), np.deg2rad(140),0.5,0.5], args=(harms, chans, self.h),method = 'L-BFGS-B', bounds = [(0.05,1.3*np.pi), (0.05,1.3*np.pi),(0.001,20),(0.001,20)])
-        print a
-        print a2
-        print a3
+        print '######## fmin min_func_phi1_simul ########'
+        print a, self.phi1_min_simul
+        print '######## minimize min_func_phi1_simul #########'
+        print a2, self.phi1_min_simul
+        self.phi1_min_simul = a2['x']
+        print '######## minimize min_func_phi1_phi2_error ########'
+        print a3, self.phi1_min_simul
         if show_fig:
             fig, ax = pt.subplots()
             ax.plot(np.rad2deg(phi1_list), error_list)
@@ -985,3 +1000,91 @@ def plot_wobbly_mirror_results(big_fit_values, t, big_fit, art, mirror_depth, ti
     ax.set_title(title)
     fig.savefig(savefig_name)
     fig.canvas.draw(); fig.show()
+
+def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_length = 20, plot=False):
+    if plot:
+        fig, ax = pt.subplots(nrows = 2, sharey = True)
+        fig2, ax2 = pt.subplots(nrows = 2, sharey = True)
+    start_list = []
+    output_new = inter_obj.output.copy()
+    for i in range(inter_obj.output.shape[0]):
+        #smooth the data
+        tmp = np.convolve(inter_obj.output[i,:], np.ones(window_length)/float(window_length), mode= 'same')
+        #remove dc offset by centering about the peaks
+        #output_new[i,:] = tmp - (np.min(tmp) + np.max(tmp))/2
+        output_new[i,:] = tmp - (np.mean(tmp))
+        if (np.min(inter_obj.output[i,:]) + np.max(inter_obj.output[i,:]))<2.*np.pi:
+            if plot:
+                ax[0].plot(output_new[i,:])
+                ax2[0].plot(output_new[i,start_loc:end_loc])
+                ax2[1].plot(inter_obj.output[i,start_loc:end_loc])
+        start_list.append(np.mean(output_new[i, 0:100]))
+    if plot:
+        tmp = ax[0].get_xlim()
+        ax[0].hlines([np.pi, -np.pi], tmp[0], tmp[1])
+        ax[0].vlines([start_loc, end_loc], -4, 4)
+        ax[1].plot(start_list,'-o')
+        ax[1].set_ylim([-np.pi*1.3, np.pi*1.3])
+        ax2[0].set_ylim([-np.pi*1.3, np.pi*1.3])
+        ax2[0].set_xlim([0, end_loc - start_loc])
+        fig.canvas.draw(); fig.show()
+        fig2.canvas.draw(); fig2.show()
+
+    big_fit = []
+    big_fit_xvals = []
+
+    #remove measurements that are going to mess things up
+    for i in range(inter_obj.output.shape[0]):
+        print i
+        values = inter_obj.output[i, start_loc:end_loc]
+        #for j in range(3):
+        if (-np.min(inter_obj.output[i,:]) + np.max(inter_obj.output[i,:]))<(2.*np.pi*1.5):
+            #if j==0:
+            big_fit.append(values - np.mean(values))
+            big_fit_xvals.append(i)
+
+    return output_new, np.array(big_fit), np.array(big_fit_xvals)
+
+
+
+def wobbly_mirror_contour_plot(output_new, mirror_depth, n_contours=10):
+    fig, ax = pt.subplots()
+    #im = ax.imshow(output_new, cmap = 'RdBu', aspect='auto')#, interpolation = 'nearest')
+    #im.set_clim([-np.pi, np.pi])
+    cont = ax.contour(output_new,np.linspace(-mirror_depth,mirror_depth,10), cmap='RdBu')
+    pt.colorbar(cont)
+    ax.set_xlabel('time a.u')
+    ax.set_ylabel('Interferometer channel')
+    ax.set_title('Contour map of the phase shift due to moving sinusoidal mirror\nMoves up, stops, then moves down')
+    fig.canvas.draw(); fig.show()
+
+
+
+def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth, plot = False):
+    #big_fit = np.array(big_fit); big_fit_values = np.array(big_fit_xvals)
+    fft_freqs = np.fft.fftfreq(big_fit.shape[1], d=(t[1]-t[0]))
+    fft_vals = np.fft.fft(big_fit)/big_fit.shape[1]
+    valid_ones = fft_vals[:,np.argmin(np.abs(fft_freqs - omega_mirror/2./np.pi))]
+    answer_phases = np.unwrap(np.angle(valid_ones))
+    for i in range(len(answer_phases)-1):
+        if (answer_phases[i+1] - answer_phases[i])<0:
+            answer_phases[i+1:]=answer_phases[i+1:]+2.*np.pi
+    [k_guess, phase_guess] = np.polyfit(big_fit_xvals, answer_phases, 1)
+    if plot:
+        fig, ax = pt.subplots(ncols = 2, sharex = True)
+        ax[0].plot(big_fit_xvals, answer_phases ,'o-')
+        ax[1].plot(big_fit_xvals, np.abs(valid_ones)/np.pi,'o-')
+        ax[1].axhline(mirror_depth/2/np.pi)
+        ax[1].set_ylim([0,mirror_depth/2/np.pi*1.2])
+        ax[0].plot(big_fit_xvals, np.polyval([k_guess, phase_guess], big_fit_xvals))
+        fig.canvas.draw(); fig.show()
+
+        fig, ax = pt.subplots(nrows = 21, sharex = True)
+        for i in range(big_fit.shape[0]):
+            ax[i].plot(t, big_fit[i,:])
+            #ax[i].plot(t, mirror_depth * np.cos(omega_mirror*t + np.angle(valid_ones[i])))
+            ax[i].plot(t, mirror_depth * np.cos(omega_mirror*t + k_guess * big_fit_xvals[i] + phase_guess))
+        ax[-1].set_xlim([np.min(t), np.max(t)])
+        fig.canvas.draw(); fig.show()
+
+    return answer_phases, k_guess, phase_guess, 

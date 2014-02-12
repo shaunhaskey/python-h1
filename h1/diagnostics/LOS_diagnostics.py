@@ -1,13 +1,15 @@
 import MDSplus as MDS
 import h1.h1model.plot_functions as h1_plot
 import h1.diagnostics.imax as imax
-import time
+import time, copy, os
 from scipy.interpolate import griddata as scipy_griddata
 import numpy as np
 np.pi2 = 2.*np.pi
 import matplotlib.pyplot as pt
 import h1.mhd_eq.BOOZER as BOOZER
 import cPickle as pickle
+
+
 #Note mayavi.mlab is imported for certain functions
 
 '''
@@ -360,7 +362,7 @@ class LOS():
         CCD_focal_distance : focal distance infront of CCD in (m)
         u_hat : unit vector in vertical direction of CCD side
         v_hat : unit vector along CCD
-        w_hat : unit vector normal to CCD
+        w_hat : unit vector normal to CCD towards plasma
         u_hat x v_hat = w_hat
         must provide either v_hat or w_hat
 
@@ -398,6 +400,23 @@ class LOS():
             self.find_intersections()
 
     def calc_point1_gradient(self,):
+        '''Finds the location for each pixel on the CCD, and
+        calculates the gradient from that point to the focal point
+
+        returned matrices have [y_loc, x_loc]
+        [0,0] is the top left of CCD if looking from camera at plasma
+        [0,-1] is the top right of CCD if looking from camera at plasma
+        [-1,0] is the bottom left of CCD if looking from camera at plasma
+        [-1,-1] is the bottom right of CCD if looking from camera at plasma
+        ===========
+        this means for the pimax setup
+        [0,0] is the bottom right of plasma
+        [0,-1] is the bottom left of plasma
+        [-1,0] is the top right of plasma
+        [-1,-1] is the top left of plasma
+
+        SRH: 12Feb2014
+        '''
         self.LOS_point = np.zeros((self.CCD_pixels_y, self.CCD_pixels_x, 3),dtype=float)
         self.LOS_gradient = self.LOS_point * 0
         for pixel_y in range(self.CCD_pixels_y):
@@ -407,8 +426,11 @@ class LOS():
                 self.LOS_gradient[pixel_y, pixel_x, :] = self.focal_point - self.LOS_point[pixel_y, pixel_x, :]
 
     def find_intersections(self,):
-        '''Find the intersection for each triangle plane
-        SRH: 10July2013
+        '''Find the intersections for each pixel LOS with the plasma,
+        also make a matrix of valid channels that do intersect the
+        plasma, min and max pixel are enforced here
+
+        SRH: 12Feb2014
         '''
         print('finding intersections - V2')
         self.valid_channels = np.zeros((self.CCD_pixels_y,self.CCD_pixels_x),dtype=bool)
@@ -426,6 +448,8 @@ class LOS():
                 #tmp1[tmp1] = np.sum(self.patch.n[tmp1]*np.cross(self.patch.pt2[tmp1,:],R[tmp1,:] - self.patch.tris[tmp1,1,:]),axis=1)>=0
                 #tmp1[tmp1] = np.sum(self.patch.n[tmp1]*np.cross(self.patch.pt3[tmp1,:],R[tmp1,:] - self.patch.tris[tmp1,2,:]),axis=1)>=0
                 #a, intersect_pts = find_intersections2(P0,dP,d,n,pt1,pt2,pt3,tris)
+
+                #Make sure there are at least 2 intersections, rank by distance to figure out which one is the entry and exit
                 if (np.sum(tmp1)) >= 2:# and ((np.sum(tmp1)%2)==0):
                     #mlab.points3d(intersect_pts[:,0], intersect_pts[:,1], intersect_pts[:,2],scale_factor=0.02)
                     intersection_order = np.argsort(t[tmp1])
@@ -474,6 +498,14 @@ class LOS():
         return tmp1, R[tmp1]
 
     def create_interpolation_points(self, n_interp_pts):
+        '''Create the interpolation points within the plasma for each
+        LOS - generates quite large matrices...  Also records the dl
+        for each LOS - this is different between lines of sight
+        because they all have the same number of intervals within the
+        plasma (to make the matrix nice and square...)
+
+        SRH: 12Feb2014
+        '''
         self.n_interp_pts = n_interp_pts
         self.interpolation_pts = np.zeros((self.valid_channels.shape[0], self.valid_channels.shape[1],n_interp_pts,3),dtype=float)
         self.dl = np.zeros((self.valid_channels.shape[0], self.valid_channels.shape[1]),dtype=float)
@@ -500,7 +532,7 @@ class LOS():
             print 'getting patch grid'
             self.patch.get_grid_for_interpolation(no_theta = no_theta, s_increment = s_increment)
 
-        #Original Grid, and Boozer coordinates on that grid
+        #Original Grid, and Boozer coordinates on that grid, each of these are lists
         points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
         cross_sect_s = self.patch.grid_s
         cross_sect_phi = self.patch.grid_phi
@@ -517,6 +549,8 @@ class LOS():
         self.interp_boozer = self.interpolation_pts*0
         print 's_pt1 - '
         #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+
+        #Need to transpose the first tuple so that each gridpoint is a row
         self.s_pt1 = scipy_griddata(np.array(points_tuple).T, np.array(cross_sect_s), np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T).reshape(required_shape)
         #print np.allclose(self.s_pt1, self.s_pt1_V2)
 
@@ -993,6 +1027,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     '''Convenience function containing the required geometry for the
     imax camera
 
+    
     SRH: 12July2013
     '''
     # LOS(CCD, CCD_width, CCD_length)
@@ -1031,37 +1066,56 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
     elif measurements=='pimax4':
         print 'pimax4'
-        CCD_phi = 120.; CCD_R = 1.946
-        CCD_R = 1.99
-        CCD_phi = 119.95; CCD_R=1.97
+        CCD_phi = 119.95; CCD_R=1.97; CCD_z = 5.0/100
         #CCD_R = 1.1475+0.963+0.0175 #2.128m
-        CCD_z = 7.0/100; 
-        CCD_z = 8.0/100;
-        CCD_z = 5.0/100;
-        CCD_z = 5.0/100;
+        
         CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
-        CCD_position = np.array([CCD_x, CCD_y, CCD_z])
+        CCD_position = np.array([CCD_x, CCD_y, CCD_z + elevation])
 
-        l1 = 1./np.cos(np.deg2rad(elevation_angle))
-        l2 = np.tan(np.deg2rad(elevation_angle))
-        print np.sqrt(l1**2 - l2**2)
-        CCD_position = CCD_position + np.array([0,0,elevation])
-        z_component = -np.sin(np.deg2rad(elevation_angle))
-        w_hat = -np.array([CCD_x, CCD_y, 0])
-        w_hat = w_hat / np.sqrt(np.sum(w_hat**2))
-        w_hat = w_hat * np.cos(np.deg2rad(elevation_angle)) + np.array([0,0,-np.sin(np.deg2rad(elevation_angle))])
-        print 'w_hat', np.sum(w_hat**2)
+        #l1 = 1./np.cos(np.deg2rad(elevation_angle))
+        #l2 = np.tan(np.deg2rad(elevation_angle))
+        #print np.sqrt(l1**2 - l2**2)
+        #CCD_position = CCD_position + np.array([0,0,elevation])
+        #z_component = -np.sin(np.deg2rad(elevation_angle))
+        #w_hat = -np.array([CCD_x, CCD_y, 0])
+        #w_hat = w_hat / np.sqrt(np.sum(w_hat**2))
+        #w_hat = w_hat * np.cos(np.deg2rad(elevation_angle)) + np.array([0,0,-np.sin(np.deg2rad(elevation_angle))])
+        #elev_rad = np.deg2rad(elevation_angle)
+        #CCD_phi_rad = np.deg2rad(CCD_phi)
+
+        #w_hat_new = np.array([np.cos(elev_rad)*np.cos(CCD_phi_rad-np.pi), np.cos(elev_rad)*np.sin(CCD_phi_rad-np.pi), -np.sin(elev_rad)])
+        #vector normal to CCD pointing towards plasma
+        spher_th = np.deg2rad(CCD_phi+180.); spher_phi = np.deg2rad(elevation_angle+90.)  
+        w_hat = np.array([np.cos(spher_th)*np.sin(spher_phi), np.sin(spher_th)*np.sin(spher_phi), np.cos(spher_phi)])
+        print 'w_hat', w_hat, np.sum(w_hat**2)
+
+        #vector pointing vertically along the CCD
+        spher_th = np.deg2rad(CCD_phi+180.); spher_phi = np.deg2rad(elevation_angle)  
+        u_hat = np.array([np.cos(spher_th)*np.sin(spher_phi), np.sin(spher_th)*np.sin(spher_phi), np.cos(spher_phi)])
+        print 'u hat', u_hat, np.sqrt(np.sum(u_hat**2))
+
+        #vector pointing horizontally along the CCD
+        v_hat = np.cross(w_hat, u_hat)
+        print 'v_hat', v_hat
+        print 'w_hat x u_hat x v_hat = [0,0,0]', np.allclose(np.cross(np.cross(w_hat, u_hat), v_hat),[0,0,0])
+        if not np.allclose(np.cross(np.cross(w_hat, u_hat), v_hat),[0,0,0]):
+            print 'Something is wrong with the CCD vectors'
+            raise(ValueError)
+
+        #print w_hat, w_hat_new, np.sum(w_hat_new**2)
         #w_hat = -CCD_position/(np.sqrt(np.sum(CCD_position**2)))
         #print np.sum(w_hat**2)
         #print np.sqrt(np.sum((w_hat * l2)**2)), l2
-        u_hat = w_hat * l2 + np.array([0.,0.,l1])
-        print 'u hat', u_hat, np.sqrt(np.sum(u_hat**2))
-        #1/0
-        v_hat2 = np.cross(w_hat, u_hat)
-        #v_hat2 = v_hat2 / (np.sqrt(np.sum(v_hat**2)))
-        v_hat = np.array([-np.cos(np.deg2rad(90.-CCD_phi)), np.sin(np.deg2rad(90.-CCD_phi)),0])
-        print 'v comparisons', v_hat2, v_hat, np.sqrt(np.sum(v_hat2**2)), np.sqrt(np.sum(v_hat**2))
+        #u_hat = w_hat * l2 + np.array([0.,0.,l1])
 
+        #u_hat_new = np.array([np.sin(elev_rad)*np.cos(CCD_phi_rad-np.pi), np.sin(elev_rad)*np.sin(CCD_phi_rad-np.pi), np.cos(elev_rad)])
+        #u_hat_new = np.array([np.sin(np.deg2rad(elevation_angle))*np.cos(np.deg2rad(CCD_phi-180.)), np.sin(np.deg2rad(elevation_angle))*np.sin(np.deg2rad(CCD_phi-180.)), np.cos(np.deg2rad(elevation_angle))])
+
+        #print 'u hat_new', u_hat_new, np.sqrt(np.sum(u_hat_new**2))
+        #1/0
+        #v_hat2 = v_hat2 / (np.sqrt(np.sum(v_hat**2)))
+        #v_hat = np.array([-np.cos(np.deg2rad(90.-CCD_phi)), np.sin(np.deg2rad(90.-CCD_phi)),0])
+        #print 'v comparisons', v_hat2, v_hat, np.sqrt(np.sum(v_hat2**2)), np.sqrt(np.sum(v_hat**2))
         #CCD_focal_distance = 13/1000.
         CCD_focal_distance = 17.3/1000.
         CCD_focal_distance = 17.0/1000.
@@ -1247,3 +1301,104 @@ def interpolate(values, vtx, wts, fill_value=np.nan):
     ret = np.einsum('nj,nj->n', np.take(values, vtx), wts)
     ret[np.any(wts < 0, axis=1)] = fill_value
     return ret
+
+def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, phi_range, n_phi, decimate_pixel, measurements, n_pixels_x, n_pixels_y, min_valid_pixel, max_valid_pixel, fourier_data, cut_values, TFC_intersection = True, save_patch_grid = False, boozer_filename = None):
+    '''Convenience function to get all three orientations in one go
+
+    uses the imax_camera function for each view
+    SRH : 12Feb2014
+    '''
+    if boozer_filename==None:
+        boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(np.round(kh/0.05)*0.05, np.round(kh/0.05)*0.05)
+
+    pickle_filename = '/'.join(boozer_filename.split('/')[:-1])+'/'+'/tomo_patch.pickle'
+    #pickle_filename = 'patch_{:.2f}.pickle'.format(np.round(kh/0.05)*0.05)
+    print pickle_filename, 'exists', os.path.exists(pickle_filename)
+    if use_pickled_data: 
+        if os.path.exists(pickle_filename):
+            patch_filename = pickle_filename
+        else:
+            print 'PATCH FILE DOES NOT EXIST!!!!'
+            patch_filename = None
+    else:
+        patch_filename = None
+    patch_object = None
+
+    camera_details ={'center':{}, 'bottom':{}, 'top':{}}
+    camera_details['center'] = {'camera_elevation':0., 'camera_elevation_angle':0., 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69009.SPE'}
+    camera_details['bottom'] = {'camera_elevation':-14./100, 'camera_elevation_angle':-10.7, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69043.SPE'}
+    #camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
+    #TEST!!!
+    camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.1, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
+
+    answer_objects = []; #cal_image = []
+
+    #For each of the orientations, we find the intersection points for the lines of sight of the camera 
+    #Each view is appended into answer_objects
+    for i, orient in enumerate(orientations):
+        print '####### LOS calcs view : {} #########'.format(orient)
+        camera_elevation = camera_details[orient]['camera_elevation']
+        camera_elevation_angle = camera_details[orient]['camera_elevation_angle']
+        #cal_image.append(camera_details[orient]['cal_image'])
+        CCD_side_length = shot_database[light_type]['{:.2f}'.format(kh)][orient]['CCD_side_length']
+        answer_objects.append(imax_camera(boozer_filename = boozer_filename, plot_pfc = 0, plot_tfc = 0, plot_intersections = 0, plot_patch = 0, plot_LOS = 0, phi_range = phi_range, n_phi = n_phi, decimate_pixel = decimate_pixel, measurements = measurements, patch_pickle = patch_filename, elevation = camera_elevation, elevation_angle = camera_elevation_angle, patch_object = patch_object, n_pixels_x=n_pixels_x, n_pixels_y=n_pixels_y, CCD_L = CCD_side_length, min_pixel=min_valid_pixel, max_pixel=max_valid_pixel))
+        if i==0:
+            patch_object = answer_objects[-1].patch
+    
+    #create a new 'super' answer that has all the orientations in one object as a single camera image...
+    combined_views = copy.deepcopy(answer_objects[-1])
+    blah = ['valid_channels', 'intersection1', 'intersection2', 'LOS_point', 'LOS_gradient']
+    start_indices = [0]; end_indices = [answer_objects[0].valid_channels.shape[0]]
+    for i in range(1,len(answer_objects)): 
+        start_indices.append(end_indices[-1])
+        end_indices.append(answer_objects[i].valid_channels.shape[0]+end_indices[-1])
+    print start_indices, end_indices
+    for i in blah:
+        setattr(combined_views,i, np.vstack((getattr(j,i) for j in answer_objects)))
+
+    # valid_channels = np.vstack((i.valid_channels for i in answer_objects))
+    # intersection1 = np.vstack((i.intersection1 for i in answer_objects))
+    # intersection2 = np.vstack((i.intersection2 for i in answer_objects))
+    # LOS_point = np.vstack((i.LOS_point for i in answer_objects))
+    # LOS_gradient = np.vstack((i.LOS_gradient for i in answer_objects))
+
+    # #stacked_list = [valid_channels2, intersection1_2, intersection2_2, LOS_point2, LOS_gradient2]
+    # blah = ['valid_channels', 'intersection1', 'intersection2', 'LOS_point', 'LOS_gradient']
+    # #for stacked, original in zip(stacked_list, blah):
+    # for name in blah:
+    #     print name,
+    #     tmp = np.vsplit(getattr(combined_views, name), len(combined_views_objects))
+    #     for i in range(len(answer_objects)): print np.allclose(tmp[i], getattr(answer_objects[i], name)),
+    #     print ''
+
+    combined_views.CCD_pixels_y = answer_objects[-1].CCD_pixels_y * len(orientations)
+    combined_views.camera_details = camera_details
+    combined_views.orientations = orientations
+    combined_views.start_indices = start_indices
+    combined_views.end_indices = end_indices
+    # plot_LOS_r_z = 0
+    # if plot_LOS_r_z:
+    #     fig_tmp, ax_tmp = pt.subplots()
+    #     tmp0 = np.sqrt(LOS_point[:,32,0]**2 + LOS_point[:,32,1]**2)
+    #     ax_tmp.plot(np.sqrt(LOS_point[:,32,0]**2 + LOS_point[:,32,1]**2), LOS_point[:,32,2],'.')
+    #     ax_tmp.plot(np.sqrt(intersection1[:,32,0]**2 + intersection1[:,32,1]**2), intersection1[:,32,2],'.')
+    #     ax_tmp.plot(np.sqrt(intersection2[:,32,0]**2 + intersection2[:,32,1]**2), intersection2[:,32,2],'.')
+    #     tmp1 =  np.sqrt((LOS_gradient[:,32,0]*60+LOS_point[:,32,0])**2+(LOS_gradient[:,32,1]*60+LOS_point[:,32,1])**2)
+    #     for i in range(64):
+    #         ax_tmp.plot([tmp1[i], tmp0[i]],[LOS_point[i,32,2]+LOS_gradient[i,32,2]*60,LOS_point[i,32,2]])
+    #     fig_tmp.canvas.draw(); fig_tmp.show()
+
+    #answer = LOS_diag.imax_camera(boozer_filename = boozer_filename, plot_pfc = 1, plot_tfc = 0, plot_intersections = 1, plot_patch = 1, plot_LOS = 1, phi_range = phi_range, n_phi = n_phi, decimate_pixel = decimate_pixel, measurements = measurements, patch_pickle = patch_filename, elevation = camera_elevation, elevation_angle = camera_elevation_angle)
+
+    plot_imax_mask(combined_views, cal_file = None, image_array = np.abs(fourier_data[0,:,:]), cut_values = cut_values)
+
+    if TFC_intersection:
+        #intersections with the TFCs
+        kwargs ={'coil_num':11,'tfc_thickness':70./1000, 'tfc_width':180./1000., 'tfc_radius':390./1000.,'coords': [-0.525,1.09,-0.049]}
+        combined_views.find_intersections_TFC(tfc_kwargs = kwargs, plot_first_intersection = 0, plot_tfc = 0)
+        plot_imax_mask(combined_views, cal_file = None, image_array = np.abs(fourier_data[0,:,:]))
+        kwargs ={'coil_num':12,'tfc_thickness':70./1000, 'tfc_width':180./1000., 'tfc_radius':390./1000.,'coords':[-0.67,1.013,0.037]}
+        combined_views.find_intersections_TFC(tfc_kwargs = kwargs, plot_first_intersection = 0, plot_tfc = 0)
+        plot_imax_mask(combined_views, cal_file = None, image_array = np.abs(fourier_data[0,:,:]))
+
+    return combined_views

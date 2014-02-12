@@ -10,7 +10,7 @@ def extract_SPE_data(filename):
     in_file.seek(1992)
     version, = struct.unpack('f',in_file.read(4))
     if version==3.0:
-        print '3.0 file'
+        print '3.0 SPE file,', 
         in_file.seek(678)
         xml_offset, = struct.unpack('Q',in_file.read(8))
         in_file.seek(xml_offset)
@@ -24,8 +24,9 @@ def extract_SPE_data(filename):
         atts = ['type','count','pixelFormat', 'size', 'stride']#,'metaFormat']
         frame_info = {}
         for i in atts:
-            print i, frame_information.attributes[i].value
+            print i, frame_information.attributes[i].value, 
             frame_info[i] = frame_information.attributes[i].value
+        print ''
         data_info = frame_information.childNodes[0]
         region_info = ['count', 'stride', 'height', 'width', 'calibrations', 'type', 'size']
         frame_info['reg_info'] = {}
