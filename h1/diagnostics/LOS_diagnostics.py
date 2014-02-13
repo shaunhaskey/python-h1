@@ -9,7 +9,6 @@ import matplotlib.pyplot as pt
 import h1.mhd_eq.BOOZER as BOOZER
 import cPickle as pickle
 
-
 #Note mayavi.mlab is imported for certain functions
 
 '''
@@ -399,6 +398,51 @@ class LOS():
             self.patch = patch
             self.find_intersections()
 
+    def save_LOS_data(self, filename, LOS_items_to_save=None):
+        '''Dump important data so that it can be read back in later
+
+        SRH: 12Feb2014
+        '''
+        if LOS_items_to_save==None: LOS_items_to_save = ['valid_channels', 'CCD_pixels_x','CCD_pixels_y', 'intersection1','intersection2', 'patch', 'camera_details', 'orientations', 'start_indices', 'end_indices']
+        save_dict = {}
+        for i in LOS_items_to_save:
+            if i=='patch':
+                tmp = copy.deepcopy(getattr(self, i))
+                if self.patch.boozer_object!=None:
+                    tmp.boozer_object.ds = None
+                save_dict[i] = tmp
+            else:
+                save_dict[i] = getattr(self, i)
+        pickle.dump(save_dict, file(filename,'w'))
+
+        # if single_combo_check:
+        #     filename = '/home/srh112/SSD_mount/kh{:.2f}_geom_data_all_modes.pickle'.format(kh)
+        # else:
+        #     filename = '/home/srh112/SSD_mount/kh{:.2f}_geom_data.pickle'.format(kh)
+
+        # tmp2_dict = {}
+        # for n_cur, m_cur, cur_geom_list in zip(n,m,overall_geom_list):
+        #     for cur_geom, view in zip(cur_geom_list, answer.orientations):
+        #         tmp2_dict['{}_{}_{}'.format(n_cur, m_cur, view)]=cur_geom
+        # for i in tmp.keys():
+        #     if i!='overall_geom_list':
+        #         tmp2_dict[i] = tmp[i]
+        # with file('/home/srh112/SSD_mount/kh{:.2f}_geom_data.pickle'.format(kh),'w') as filehandle:
+        #     np.savez(filehandle,**tmp2_dict)
+
+    def load_LOS_data(self, filename, LOS_items_to_load=None):
+        '''Load LOS data from a pickle file
+
+        SRH : 12Feb2014
+        '''
+        print(' Loading LOS details')
+        if LOS_items_to_load==None: LOS_items_to_load = ['valid_channels', 'CCD_pixels_x','CCD_pixels_y', 'intersection1','intersection2', 'patch', 'camera_details', 'orientations', 'start_indices', 'end_indices']
+        tmp = pickle.load(file(filename,'r'))
+
+        for i in LOS_items_to_load:
+            setattr(self, i,  tmp[i])
+            
+
     def calc_point1_gradient(self,):
         '''Finds the location for each pixel on the CCD, and
         calculates the gradient from that point to the focal point
@@ -432,7 +476,7 @@ class LOS():
 
         SRH: 12Feb2014
         '''
-        print('finding intersections - V2')
+        print(' finding intersections - V2')
         self.valid_channels = np.zeros((self.CCD_pixels_y,self.CCD_pixels_x),dtype=bool)
         self.intersection1 = self.LOS_point * 0
         self.intersection2 = self.LOS_point * 0
@@ -457,7 +501,7 @@ class LOS():
                     self.intersection1[pixel_y, pixel_x] = R[tmp1][intersection_order[0]]
                     self.intersection2[pixel_y, pixel_x] = R[tmp1][intersection_order[1]]
                 if np.sum(tmp1)%2 == 1:
-                    print('Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
+                    print(' Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
         return tmp1, R[tmp1]
 
 
@@ -468,7 +512,7 @@ class LOS():
         SRH: 10July2013
         '''
         if tfc_kwargs==None:tfc_kwargs = {'coil_num':tfc_coil_number}
-        print('finding TFC intersections - V2')
+        print(' finding TFC intersections - V2')
         TFC_intersection = np.zeros((self.CCD_pixels_y,self.CCD_pixels_x),dtype=bool)
         TFC_patch = TFC(**tfc_kwargs)
         TFC_intersection1 = self.LOS_point * 0
@@ -488,7 +532,7 @@ class LOS():
                         TFC_intersection1[pixel_y, pixel_x] = R[tmp1][intersection_order[0]]
                         TFC_intersection2[pixel_y, pixel_x] = R[tmp1][intersection_order[1]]
                 if np.sum(tmp1)%2 == 1:
-                    print('Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
+                    print(' Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
         self.valid_channels *= np.invert(TFC_intersection)
         if plot_first_intersection:
             import mayavi.mlab as mlab
@@ -529,82 +573,67 @@ class LOS():
         SRH: 10July2013
         '''
         if self.patch.obtained_grid != 1:
-            print 'getting patch grid'
+            print ' Getting patch grid'
             self.patch.get_grid_for_interpolation(no_theta = no_theta, s_increment = s_increment)
 
         #Original Grid, and Boozer coordinates on that grid, each of these are lists
         points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
-        cross_sect_s = self.patch.grid_s
-        cross_sect_phi = self.patch.grid_phi
-        cross_sect_theta = self.patch.grid_theta
+        cross_sect_s = self.patch.grid_s; cross_sect_phi = self.patch.grid_phi; cross_sect_theta = self.patch.grid_theta
 
         #valid_channels = self.valid_channels
         #Points that we want to interpolate onto
-        interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten()
-        interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten()
-        interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten()
+        interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten(order = 'C')
+        interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten(order = 'C')
+        interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten(order = 'C')
         required_shape = self.interpolation_pts[self.valid_channels,:,0].shape
 
         #array for holding the Boozer coordinates 
         self.interp_boozer = self.interpolation_pts*0
-        print 's_pt1 - '
-        #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+        print ' Interpolating s attempt1'
 
         #Need to transpose the first tuple so that each gridpoint is a row
-        self.s_pt1 = scipy_griddata(np.array(points_tuple).T, np.array(cross_sect_s), np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T).reshape(required_shape)
-        #print np.allclose(self.s_pt1, self.s_pt1_V2)
+        #First dummy run to check for LOS with too many NaN and change the intersection pts if required
+        self.s_pt1 = scipy_griddata(np.array(points_tuple).T, np.array(cross_sect_s), np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T).reshape(required_shape, order = 'C')
 
-        print('before2 {}'.format(np.sum(np.isnan(self.s_pt1))))
+        print('  Number of nans {}'.format(np.sum(np.isnan(self.s_pt1))))
+        print('  Reducing line of sight bounds to remove nans')
 
         #Modify the intersection points to remove extrapolation
-        self.start_pt = np.argmax(np.isfinite(self.s_pt1),axis = 1)
-        self.end_pt = np.argmax(np.isfinite(self.s_pt1)[:,::-1],axis = 1)
-        #tmp1 = self.interpolation_pts[self.valid_channels,:,:]
-        #tmp2 = self.intersection1[self.valid_channels,:]
-        #tmp3 = self.intersection2[self.valid_channels,:]
-        self.intersection1_old = +self.intersection1
-        self.intersection2_old = +self.intersection2
-        self.interpolation_pts_old = +self.interpolation_pts
-        a = +self.intersection1[self.valid_channels,:]
-        b = +self.intersection2[self.valid_channels,:]
-        c = +self.interpolation_pts[self.valid_channels,:,:]
-        d = +self.valid_channels[self.valid_channels]
-        self.start_list = []; self.end_list = []
-        for i in range(len(self.start_pt)):
+        int1_valid = +self.intersection1[self.valid_channels,:]
+        int2_valid = +self.intersection2[self.valid_channels,:]
+        interp_pts_valid = self.interpolation_pts[self.valid_channels,:,:]
+        valid_valid = +self.valid_channels[self.valid_channels]
+        for i in range(self.s_pt1.shape[0]):
             if float(np.sum(np.isnan(self.s_pt1[i,:])))/self.s_pt1.shape[1] > 0.4:
-                d[i]= False
-                print('bad channel - nan content above 0.4')
+                valid_valid[i]= False
+                print('   removing bad channel - nan content above 0.4')
             else:
                 itemindex,=np.where(np.isfinite(self.s_pt1[i,:]))
-                start_pt = np.min(itemindex)
-                end_pt = np.max(itemindex)
-                self.start_list.append(start_pt)
-                self.end_list.append(end_pt)
-                a[i,:] = (c[i, start_pt,:])*1.
-                b[i,:] = (c[i, end_pt,:])*1.
-            #self.intersection1[self.valid_channels,:][i,:] = self.interpolation_pts[self.valid_channels,:,:][i, self.start_pt[i],:]*1.
-            #self.intersection2[self.valid_channels,:][i,:] = self.interpolation_pts[self.valid_channels,:,:][i, -self.end_pt[i],:]*1.
-        self.intersection1[self.valid_channels,:] = +a
-        self.intersection2[self.valid_channels,:] = +b
-        self.valid_channels[self.valid_channels] = +d
-        #self.intersection1[self.valid_channels,:] = self.interpolation_pts[self.valid_channels,:,:][:,self.start_pt,:]
-        #self.intersection2[self.valid_channels,:] = self.interpolation_pts[self.valid_channels,:,:][:,self.end_pt,:]
+                int1_valid[i,:] = (interp_pts_valid[i, np.min(itemindex),:])*1.
+                int2_valid[i,:] = (interp_pts_valid[i, np.max(itemindex),:])*1.
+
+        #Put the modified values back in their places
+        self.intersection1[self.valid_channels,:] = +int1_valid
+        self.intersection2[self.valid_channels,:] = +int2_valid
+        self.valid_channels[self.valid_channels] = +valid_valid
+
+        #Create interpolation points for the second time around
         self.create_interpolation_points(self.n_interp_pts)
 
-        interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten()
-        interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten()
-        interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten()
+        interp_pts_x = self.interpolation_pts[self.valid_channels,:,0].flatten(order = 'C')
+        interp_pts_y = self.interpolation_pts[self.valid_channels,:,1].flatten(order = 'C')
+        interp_pts_z = self.interpolation_pts[self.valid_channels,:,2].flatten(order = 'C')
         required_shape = self.interpolation_pts[self.valid_channels,:,0].shape
-        print 's_pt2, orig grid shape : ', interp_pts_x.shape, ' new grid shape : ', len(points_tuple[0])
+        print ' Interpolating s pt2, orig grid shape : ', interp_pts_x.shape, ' new grid shape : ', len(points_tuple[0])
         if old_way:
-            self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+            self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape, order = 'C')
         else:
             self.vtx, self.wts = interp_weights(np.array(points_tuple).T, np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T)
-            self.interp_boozer[self.valid_channels,:,0] = interpolate(np.array(cross_sect_s), self.vtx, self.wts).reshape(required_shape)
+            self.interp_boozer[self.valid_channels,:,0] = interpolate(np.array(cross_sect_s), self.vtx, self.wts).reshape(required_shape, order = 'C')
         #print 's check second : ', np.allclose(self.s_tmp2, self.s_tmp2_V2)
 
-        print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,0]))))
-        print 'theta'
+        print('  Number of NaNs after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,0]))))
+        print ' Interpolating Theta'
         if sin_cos_theta:
             if old_way:
                 interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
@@ -612,9 +641,9 @@ class LOS():
             else:
                 interp_data_theta_sin = interpolate(np.sin(cross_sect_theta), self.vtx, self.wts)
                 interp_data_theta_cos = interpolate(np.cos(cross_sect_theta), self.vtx, self.wts)
-            self.interp_boozer[self.valid_channels,:,1] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
+            self.interp_boozer[self.valid_channels,:,1] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape, order = 'C')
         else:
-            print "Using three different interpolations for theta"
+            print "  Using three different interpolations for theta"
             new_cross_sect = (np.array(cross_sect_theta) + 2.*np.pi/3)%(np.pi2)
             new_cross_sect2 = (np.array(cross_sect_theta) + 4.*np.pi/3)%(np.pi2)
             if old_way:
@@ -632,35 +661,30 @@ class LOS():
             tmp_truth = np.abs(tmp2 - tmp3)<0.01
             self.tri_interp_theta[tmp_truth] = +tmp2[tmp_truth]
             close_answers = np.sum((np.abs(tmp2 - tmp3)<0.01) + (np.abs(tmp1 - tmp3)<0.01) + (np.abs(tmp2 - tmp1)<0.01))
-            print 'close answers : {} of {} ({:.2f}%)'.format(close_answers, len(tmp1), float(close_answers)/len(tmp1)*100)
-            self.interp_boozer[self.valid_channels,:,1] = self.tri_interp_theta.reshape(required_shape)
-            #self.tmp_orig = np.arctan2(interp_data_theta_sin, interp_data_theta_cos)
-            #print np.max(new_cross_sect2), np.min(new_cross_sect2)
-        #print np.sum(np.abs(self.tmp1 - self.tmp2)<0.03)
-        #self.tri_interp_truth = np.zeros(answer.tmp1.shape, dtype=bool)
-        print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,1]))))
-        print 'phi'
+            print '  close answers : {} of {} ({:.2f}%)'.format(close_answers, len(tmp1), float(close_answers)/len(tmp1)*100)
+            self.interp_boozer[self.valid_channels,:,1] = self.tri_interp_theta.reshape(required_shape, order = 'C')
+
+        print '  Interpolating Phi'
         if old_way:
             interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
             interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
         else:
             interp_data_phi_sin = interpolate(np.sin(cross_sect_phi), self.vtx, self.wts)
             interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx, self.wts)
-        #print 'Phi check...', np.allclose(interp_data_phi_sin, interp_data_phi_sin_V2),np.allclose(interp_data_phi_cos, interp_data_phi_cos_V2)
-
-        self.interp_boozer[self.valid_channels,:,2] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
-        print('after {}'.format(np.sum(np.isnan(self.interp_boozer[self.valid_channels,:,2]))))
+        self.interp_boozer[self.valid_channels,:,2] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape, order = 'C')
 
 
     def grid_for_wave(self, phi_value=120., z_min = -0.4, z_max = 0.4, r_min = 0.9, r_max = 1.45, n_pts = 100, plot_mask = 0, old_way = False):
         ''' 
         SRH: 22July2013
         '''
+        #Original grid data
         points_tuple = (self.patch.grid_x, self.patch.grid_y, self.patch.grid_z)
         cross_sect_s = self.patch.grid_s
         cross_sect_phi = self.patch.grid_phi
         cross_sect_theta = self.patch.grid_theta
         
+        #New values to interpolate onto
         z_values = np.linspace(z_min,z_max, n_pts)
         r_values = np.linspace(r_min, r_max, n_pts)
         self.r_grid, self.z_grid = np.meshgrid(r_values, z_values)
@@ -668,6 +692,8 @@ class LOS():
         self.y_grid = self.r_grid * np.sin(np.deg2rad(phi_value))
         self.grid_mask = np.ones(self.y_grid.shape,dtype=bool)
         self.edge_points_rz = []; self.edge_points_xyz = []
+
+        #Find intersections to remove invalid locations
         for i in range(self.r_grid.shape[0]):
             dP = np.array([self.x_grid[i,1]-self.x_grid[i,0], self.y_grid[i,1]-self.y_grid[i,0], self.z_grid[i,1]-self.z_grid[i,0]])
             dP = -dP/np.sqrt(np.sum(dP**2))
@@ -693,7 +719,8 @@ class LOS():
                 print('Warning odd number of intersections!!!, {}'.format(np.sum(tmp1)))
         self.edge_points_rz = np.array(self.edge_points_rz)
         self.edge_points_xyz = np.array(self.edge_points_xyz)
-        
+
+        print '  finished finding intersections'
         if plot_mask:
             fig,ax = pt.subplots()
             ax.imshow(np.ma.array(self.grid_mask, mask=self.grid_mask), extent=[r_min,r_max,z_min,z_max], origin='lower')
@@ -701,38 +728,38 @@ class LOS():
             fig.canvas.draw(); fig.show()
 
         self.valid_pts = self.grid_mask==False
-        interp_pts_x = self.x_grid[self.valid_pts].flatten()
-        interp_pts_y = self.y_grid[self.valid_pts].flatten()
-        interp_pts_z = self.z_grid[self.valid_pts].flatten()
-        print interp_pts_x.shape, n_pts**2
+        interp_pts_x = self.x_grid[self.valid_pts].flatten(order = 'C')
+        interp_pts_y = self.y_grid[self.valid_pts].flatten(order = 'C')
+        interp_pts_z = self.z_grid[self.valid_pts].flatten(order = 'C')
         required_shape = self.z_grid[self.valid_pts].shape
         self.s_cross_sect = self.x_grid *0
         self.theta_cross_sect = self.x_grid *0
         self.phi_cross_sect = self.x_grid *0
-        print 's'
+        print '  interpolating s'
         #self.interp_boozer[self.valid_channels,:,0] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
         if old_way: 
-            self.s_cross_sect[self.valid_pts] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape)
+            self.s_cross_sect[self.valid_pts] = scipy_griddata(points_tuple, np.array(cross_sect_s), (interp_pts_x, interp_pts_y, interp_pts_z)).reshape(required_shape, order = 'C')
         else:
             self.vtx2, self.wts2 = interp_weights(np.array(points_tuple).T, np.array((interp_pts_x, interp_pts_y, interp_pts_z)).T)
-            self.s_cross_sect[self.valid_pts] = interpolate(np.array(cross_sect_s), self.vtx2, self.wts2).reshape(required_shape)
+            self.s_cross_sect[self.valid_pts] = interpolate(np.array(cross_sect_s), self.vtx2, self.wts2).reshape(required_shape, order = 'C')
 
-        print('theta')
+        print('  interpolating theta')
         if old_way:
             interp_data_theta_sin = scipy_griddata(points_tuple, np.sin(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
             interp_data_theta_cos = scipy_griddata(points_tuple, np.cos(cross_sect_theta), (interp_pts_x, interp_pts_y, interp_pts_z))
         else:
             interp_data_theta_sin = interpolate(np.sin(cross_sect_theta), self.vtx2, self.wts2)
             interp_data_theta_cos = interpolate(np.cos(cross_sect_theta), self.vtx2, self.wts2)
-        self.theta_cross_sect[self.valid_pts] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape)
-        print('phi')
+        self.theta_cross_sect[self.valid_pts] = np.arctan2(interp_data_theta_sin, interp_data_theta_cos).reshape(required_shape, order = 'C')
+        print('  interpolating phi')
         if old_way:
             interp_data_phi_sin = scipy_griddata(points_tuple, np.sin(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
             interp_data_phi_cos = scipy_griddata(points_tuple, np.cos(cross_sect_phi), (interp_pts_x, interp_pts_y, interp_pts_z))
         else:
             interp_data_phi_sin = interpolate(np.sin(cross_sect_phi), self.vtx2, self.wts2)
             interp_data_phi_cos = interpolate(np.cos(cross_sect_phi), self.vtx2, self.wts2)
-        self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape)
+        self.phi_cross_sect[self.valid_pts] = np.arctan2(interp_data_phi_sin, interp_data_phi_cos).reshape(required_shape, order = 'C')
+
 
     def plot_boozer_LOS(self,y_vals = None, x_vals = None, pub_fig = False, save_fig = None, n_ims = 1, decimate = 20, x_axis_prop=True):
         '''Plot the boozer lines of sight as a proportion of distance along the line of sight
@@ -1023,7 +1050,7 @@ class LOS():
 
 
 
-def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True, min_pixel=None, max_pixel=None, plot_LOS_lines = False):
+def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., right_tilt = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True, min_pixel=None, max_pixel=None, plot_LOS_lines = False):
     '''Convenience function containing the required geometry for the
     imax camera
 
@@ -1065,7 +1092,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
         v_hat = np.cross(w_hat,u_hat)
 
     elif measurements=='pimax4':
-        print 'pimax4'
+        print ' pimax4'
         CCD_phi = 119.95; CCD_R=1.97; CCD_z = 5.0/100
         #CCD_R = 1.1475+0.963+0.0175 #2.128m
         
@@ -1085,19 +1112,20 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
         #w_hat_new = np.array([np.cos(elev_rad)*np.cos(CCD_phi_rad-np.pi), np.cos(elev_rad)*np.sin(CCD_phi_rad-np.pi), -np.sin(elev_rad)])
         #vector normal to CCD pointing towards plasma
-        spher_th = np.deg2rad(CCD_phi+180.); spher_phi = np.deg2rad(elevation_angle+90.)  
+        spher_th = np.deg2rad(CCD_phi+180. - right_tilt); spher_phi = np.deg2rad(elevation_angle+90.)  
+
         w_hat = np.array([np.cos(spher_th)*np.sin(spher_phi), np.sin(spher_th)*np.sin(spher_phi), np.cos(spher_phi)])
-        print 'w_hat', w_hat, np.sum(w_hat**2)
+        print ' w_hat', w_hat, np.sum(w_hat**2)
 
         #vector pointing vertically along the CCD
-        spher_th = np.deg2rad(CCD_phi+180.); spher_phi = np.deg2rad(elevation_angle)  
+        spher_th = np.deg2rad(CCD_phi+180. - right_tilt); spher_phi = np.deg2rad(elevation_angle)  
         u_hat = np.array([np.cos(spher_th)*np.sin(spher_phi), np.sin(spher_th)*np.sin(spher_phi), np.cos(spher_phi)])
-        print 'u hat', u_hat, np.sqrt(np.sum(u_hat**2))
+        print ' u hat', u_hat, np.sqrt(np.sum(u_hat**2))
 
         #vector pointing horizontally along the CCD
         v_hat = np.cross(w_hat, u_hat)
-        print 'v_hat', v_hat
-        print 'w_hat x u_hat x v_hat = [0,0,0]', np.allclose(np.cross(np.cross(w_hat, u_hat), v_hat),[0,0,0])
+        print ' v_hat', v_hat
+        print ' w_hat x u_hat x v_hat = [0,0,0]', np.allclose(np.cross(np.cross(w_hat, u_hat), v_hat),[0,0,0])
         if not np.allclose(np.cross(np.cross(w_hat, u_hat), v_hat),[0,0,0]):
             print 'Something is wrong with the CCD vectors'
             raise(ValueError)
@@ -1161,17 +1189,17 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
     plot_length = 75
     if get_intersections:
         if patch_object != None:
-            print('using the patch object...')
+            print(' Using the patch object...')
             patch = patch_object
         elif patch_pickle == None:
-            print('Generating patch surface...')
+            print(' Generating patch surface...')
             patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=s_ind)
         else:
-            print('Loading patch surface from pickle file...')
+            print(' Loading patch surface from pickle file...')
             patch = pickle.load(file(patch_pickle,'r'))
     else:
         patch = None
-    print CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y
+    print ' CCD_xlength:{}, CCD_ylength:{}, focal_distance:{}, x_pixels:{}, y_pixels:{}'.format(CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y)
 
 
     answer = LOS()
@@ -1325,11 +1353,11 @@ def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, 
     patch_object = None
 
     camera_details ={'center':{}, 'bottom':{}, 'top':{}}
-    camera_details['center'] = {'camera_elevation':0., 'camera_elevation_angle':0., 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69009.SPE'}
-    camera_details['bottom'] = {'camera_elevation':-14./100, 'camera_elevation_angle':-10.7, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69043.SPE'}
+    camera_details['center'] = {'camera_elevation':0., 'camera_elevation_angle':0., 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69009.SPE'}
+    camera_details['bottom'] = {'camera_elevation':-14./100, 'camera_elevation_angle':-10.7, 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69043.SPE'}
     #camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
     #TEST!!!
-    camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.1, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
+    camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.1, 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
 
     answer_objects = []; #cal_image = []
 
@@ -1341,7 +1369,8 @@ def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, 
         camera_elevation_angle = camera_details[orient]['camera_elevation_angle']
         #cal_image.append(camera_details[orient]['cal_image'])
         CCD_side_length = shot_database[light_type]['{:.2f}'.format(kh)][orient]['CCD_side_length']
-        answer_objects.append(imax_camera(boozer_filename = boozer_filename, plot_pfc = 0, plot_tfc = 0, plot_intersections = 0, plot_patch = 0, plot_LOS = 0, phi_range = phi_range, n_phi = n_phi, decimate_pixel = decimate_pixel, measurements = measurements, patch_pickle = patch_filename, elevation = camera_elevation, elevation_angle = camera_elevation_angle, patch_object = patch_object, n_pixels_x=n_pixels_x, n_pixels_y=n_pixels_y, CCD_L = CCD_side_length, min_pixel=min_valid_pixel, max_pixel=max_valid_pixel))
+        right_tilt = camera_details[orient]['right_tilt']
+        answer_objects.append(imax_camera(boozer_filename = boozer_filename, plot_pfc = 0, plot_tfc = 0, plot_intersections = 0, plot_patch = 0, plot_LOS = 0, phi_range = phi_range, n_phi = n_phi, decimate_pixel = decimate_pixel, measurements = measurements, patch_pickle = patch_filename, elevation = camera_elevation, elevation_angle = camera_elevation_angle, right_tilt = right_tilt, patch_object = patch_object, n_pixels_x=n_pixels_x, n_pixels_y=n_pixels_y, CCD_L = CCD_side_length, min_pixel=min_valid_pixel, max_pixel=max_valid_pixel))
         if i==0:
             patch_object = answer_objects[-1].patch
     
@@ -1352,43 +1381,15 @@ def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, 
     for i in range(1,len(answer_objects)): 
         start_indices.append(end_indices[-1])
         end_indices.append(answer_objects[i].valid_channels.shape[0]+end_indices[-1])
-    print start_indices, end_indices
+    print ' Start indices and end indices for each view:', start_indices, end_indices
     for i in blah:
         setattr(combined_views,i, np.vstack((getattr(j,i) for j in answer_objects)))
-
-    # valid_channels = np.vstack((i.valid_channels for i in answer_objects))
-    # intersection1 = np.vstack((i.intersection1 for i in answer_objects))
-    # intersection2 = np.vstack((i.intersection2 for i in answer_objects))
-    # LOS_point = np.vstack((i.LOS_point for i in answer_objects))
-    # LOS_gradient = np.vstack((i.LOS_gradient for i in answer_objects))
-
-    # #stacked_list = [valid_channels2, intersection1_2, intersection2_2, LOS_point2, LOS_gradient2]
-    # blah = ['valid_channels', 'intersection1', 'intersection2', 'LOS_point', 'LOS_gradient']
-    # #for stacked, original in zip(stacked_list, blah):
-    # for name in blah:
-    #     print name,
-    #     tmp = np.vsplit(getattr(combined_views, name), len(combined_views_objects))
-    #     for i in range(len(answer_objects)): print np.allclose(tmp[i], getattr(answer_objects[i], name)),
-    #     print ''
 
     combined_views.CCD_pixels_y = answer_objects[-1].CCD_pixels_y * len(orientations)
     combined_views.camera_details = camera_details
     combined_views.orientations = orientations
     combined_views.start_indices = start_indices
     combined_views.end_indices = end_indices
-    # plot_LOS_r_z = 0
-    # if plot_LOS_r_z:
-    #     fig_tmp, ax_tmp = pt.subplots()
-    #     tmp0 = np.sqrt(LOS_point[:,32,0]**2 + LOS_point[:,32,1]**2)
-    #     ax_tmp.plot(np.sqrt(LOS_point[:,32,0]**2 + LOS_point[:,32,1]**2), LOS_point[:,32,2],'.')
-    #     ax_tmp.plot(np.sqrt(intersection1[:,32,0]**2 + intersection1[:,32,1]**2), intersection1[:,32,2],'.')
-    #     ax_tmp.plot(np.sqrt(intersection2[:,32,0]**2 + intersection2[:,32,1]**2), intersection2[:,32,2],'.')
-    #     tmp1 =  np.sqrt((LOS_gradient[:,32,0]*60+LOS_point[:,32,0])**2+(LOS_gradient[:,32,1]*60+LOS_point[:,32,1])**2)
-    #     for i in range(64):
-    #         ax_tmp.plot([tmp1[i], tmp0[i]],[LOS_point[i,32,2]+LOS_gradient[i,32,2]*60,LOS_point[i,32,2]])
-    #     fig_tmp.canvas.draw(); fig_tmp.show()
-
-    #answer = LOS_diag.imax_camera(boozer_filename = boozer_filename, plot_pfc = 1, plot_tfc = 0, plot_intersections = 1, plot_patch = 1, plot_LOS = 1, phi_range = phi_range, n_phi = n_phi, decimate_pixel = decimate_pixel, measurements = measurements, patch_pickle = patch_filename, elevation = camera_elevation, elevation_angle = camera_elevation_angle)
 
     plot_imax_mask(combined_views, cal_file = None, image_array = np.abs(fourier_data[0,:,:]), cut_values = cut_values)
 

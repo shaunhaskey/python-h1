@@ -1228,6 +1228,12 @@ class SIRT(Tomography):
             self.re_projection = np.dot(self.geom_matrix, self.T)
 
 def single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = None, scaling_factor_s = None):
+    '''
+    finds the weightings for each flux region for a single LOS.
+    boozer_pts is expected to be (s, theta, phi)
+    interp_fact is an optional increase in the number of points for each line of sight to ensure each region is well sampled
+    SRH : 12Feb2014
+    '''
     mode_amps = np.exp(1j*n*boozer_pts[:,2] + 1j*m*boozer_pts[:,1])
     dl_tmp = dl
     s_tmp = boozer_pts[:,0]
@@ -1248,80 +1254,67 @@ def single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scal
         output_list.append(np.sum(mode_amps[bin_allocation==i])*dl)
     return np.array(output_list)
 
-def calculate_inverse_matrix2(LOS_obj, n_segments, s_min =0., s_max = 1.,n_list=None, m_list=None, interp_fact = None, mode_amps_input=None, channel_mask=None, scaling_factor = None, scaling_factor_s = None):
-    '''Calculate the inverse matrix for the calculation on density profile
-    based on a fixed number of segments, and some mode numbers
-    SH: 2013
-    '''
-    print 'calculating geometric matrix and its pseudo inverse'
-    if n_list.__class__ == int:
-        n_list = [n_list]
-        m_list = [m_list]
-    segments = np.linspace(s_min, s_max, n_segments)
-    LOS_obj.segments = segments
-    LOS_obj.segment_midpoints = (segments[1:]+segments[0:-1])/2.
-    n_measurements = np.sum(LOS_obj.valid_channels)
-    geom_mat_list = []
-    for i in n_list:
-        geom_mat_list.append(np.zeros((n_measurements,n_segments-1), dtype=complex))
-    #geom_mat2[channel_count, :] = output_array*1.
-    #s=0, theta = 1, phi = 2
-    pixel_list = []
-    for geom_mat, n, m in zip(geom_mat_list, n_list, m_list):
-        channel_count = 0
-        for pixel_y in range(LOS_obj.CCD_pixels_y):
-            for pixel_x in range(LOS_obj.CCD_pixels_x):
-                if LOS_obj.valid_channels[pixel_y, pixel_x]:
-                    interp_pts = LOS_obj.interpolation_pts[pixel_y, pixel_x,:,:]
-                    boozer_pts = LOS_obj.interp_boozer[pixel_y, pixel_x,:,:]
-                    dl = LOS_obj.dl[pixel_y, pixel_x]
-                    output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
-                    geom_mat[channel_count, :] = output_array*1.
-                    channel_count += 1
-                    #print channel_count
-                    pixel_list.append([pixel_y, pixel_x])
-    geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
-    start = 0
-    for geom_mat in geom_mat_list:
-        end = start + n_segments - 1
-        geom_mat_comb[:, start:end] = +geom_mat
-        start = +end
-    return geom_mat_comb, pixel_list, segments
+# def calculate_inverse_matrix2(LOS_obj, n_segments, s_min =0., s_max = 1.,n_list=None, m_list=None, interp_fact = None, mode_amps_input=None, channel_mask=None, scaling_factor = None, scaling_factor_s = None):
+#     '''Calculate the inverse matrix for the calculation on density profile
+#     based on a fixed number of segments, and some mode numbers
+#     SH: 2013
+#     '''
+#     print 'calculating geometric matrix and its pseudo inverse'
+#     if n_list.__class__ == int:
+#         n_list = [n_list]
+#         m_list = [m_list]
+#     segments = np.linspace(s_min, s_max, n_segments)
+#     LOS_obj.segments = segments
+#     LOS_obj.segment_midpoints = (segments[1:]+segments[0:-1])/2.
+#     n_measurements = np.sum(LOS_obj.valid_channels)
+#     geom_mat_list = []
+#     for i in n_list:
+#         geom_mat_list.append(np.zeros((n_measurements,n_segments-1), dtype=complex))
+#     #geom_mat2[channel_count, :] = output_array*1.
+#     #s=0, theta = 1, phi = 2
+#     pixel_list = []
+#     for geom_mat, n, m in zip(geom_mat_list, n_list, m_list):
+#         channel_count = 0
+#         for pixel_y in range(LOS_obj.CCD_pixels_y):
+#             for pixel_x in range(LOS_obj.CCD_pixels_x):
+#                 if LOS_obj.valid_channels[pixel_y, pixel_x]:
+#                     interp_pts = LOS_obj.interpolation_pts[pixel_y, pixel_x,:,:]
+#                     boozer_pts = LOS_obj.interp_boozer[pixel_y, pixel_x,:,:]
+#                     dl = LOS_obj.dl[pixel_y, pixel_x]
+#                     output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
+#                     geom_mat[channel_count, :] = output_array*1.
+#                     channel_count += 1
+#                     #print channel_count
+#                     pixel_list.append([pixel_y, pixel_x])
+#     geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
+#     start = 0
+#     for geom_mat in geom_mat_list:
+#         end = start + n_segments - 1
+#         geom_mat_comb[:, start:end] = +geom_mat
+#         start = +end
+#     return geom_mat_comb, pixel_list, segments
 
 
-def calculate_inverse_matrix_sep_images(LOS_obj, n_segments, s_min =0., s_max = 1.,n=None, m=None, interp_fact = None, mode_amps_input=None, channel_mask=None, scaling_factor = None, scaling_factor_s = None, radial_s_spacing = False):
-    '''Calculate the inverse matrix for the calculation on density profile
-    based on a fixed number of segments, and some mode numbers
-    SH: 2013
+def calculate_inverse_matrix_sep_images(LOS_obj, n_segments, s_min =0., s_max = 1.,n=None, m=None, interp_fact = None, scaling_factor = None, scaling_factor_s = None, radial_s_spacing = False, dict_of_values= None):
+    '''Calculate the geometry matrix for multiple views, for a given n and m
+
+    SRH: 12Feb2014
     '''
-    print 'calculating geometric matrix and its pseudo inverse'
-    #if n_list.__class__ == int:
-    #    n_list = [n_list]
-    #    m_list = [m_list]
+    #Create the discrete flux surfaces
     segments = np.linspace(s_min, s_max, n_segments)
     if radial_s_spacing: segments = segments**2
     LOS_obj.segments = segments
     LOS_obj.radial_s_spacing = radial_s_spacing
     LOS_obj.segment_midpoints = (segments[1:]+segments[0:-1])/2.
+
+    #Number of valid LOS for each view
     n_measurement_list = [np.sum(LOS_obj.valid_channels[start_ind:end_ind,:]) for start_ind, end_ind in zip(LOS_obj.start_indices, LOS_obj.end_indices)]
-    print 'n_measurement_list', n_measurement_list
-    #valid_channels_split = np.vsplit(LOS_obj.valid_channels, len(LOS_obj.orientations))
-    #interp_pts_split = np.vsplit(LOS_obj.interpolation_pts, len(LOS_obj.orientations))
-    #boozer_pts_split = np.vsplit(LOS_obj.interp_boozer, len(LOS_obj.orientations))
-    #dl_split = LOS_obj.dl[pixel_y, pixel_x]
-    #n_measurements = np.sum(LOS_obj.valid_channels)
 
     geom_mat_list = []
     for i in n_measurement_list: geom_mat_list.append(np.zeros((i,n_segments-1), dtype=complex))
 
-    #for i in n_list:
-    #    geom_mat_list.append(np.zeros((n_measurements,n_segments-1), dtype=complex))
-    #geom_mat2[channel_count, :] = output_array*1.
-    #s=0, theta = 1, phi = 2
-    #pixel_list = []
-
-    #for geom_mat, n, m in zip(geom_mat_list, n_list, m_list):
-    for geom_mat, start_ind, end_ind, n_measurement in zip(geom_mat_list, LOS_obj.start_indices, LOS_obj.end_indices, n_measurement_list):
+    #find the proportion in each region for each LOS that is valid
+    for geom_mat, start_ind, end_ind, n_measurement, view in zip(geom_mat_list, LOS_obj.start_indices, LOS_obj.end_indices, n_measurement_list, LOS_obj.orientations):
         channel_count = 0
         for pixel_y in range(start_ind, end_ind):#LOS_obj.CCD_pixels_y):
             for pixel_x in range(LOS_obj.CCD_pixels_x):
@@ -1332,16 +1325,8 @@ def calculate_inverse_matrix_sep_images(LOS_obj, n_segments, s_min =0., s_max = 
                     output_array = single_channel(boozer_pts, interp_pts, dl, segments, interp_fact, n, m, scaling_factor = scaling_factor, scaling_factor_s = scaling_factor_s)
                     geom_mat[channel_count, :] = output_array*1.
                     channel_count += 1
-                    #print channel_count
-                    #pixel_list.append([pixel_y, pixel_x])
-        print channel_count, n_measurement
         if channel_count!=n_measurement: raise(Exception)
-    #geom_mat_comb = np.zeros((geom_mat_list[0].shape[0],geom_mat_list[0].shape[1]*len(geom_mat_list)) ,dtype=complex)
-    #start = 0
-    #for geom_mat in geom_mat_list:
-    #    end = start + n_segments - 1
-    #    geom_mat_comb[:, start:end] = +geom_mat
-    #    start = +end
+        if dict_of_values!=None:dict_of_values['{}_{}_{}'.format(n, m, view)]=geom_mat
     return geom_mat_list, segments
 
 
@@ -2777,6 +2762,11 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
 
 
 def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  mode_tuples, filename, fourier_data, answer, overall_geom_list, s_values, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = False, plot_wave_animation = False, tomo_DC = None):
+    '''Run the tomographic inversion for the combination of modes in tomo_modes_n, tomo_modes_m
+
+    SRH: 12Feb2014
+    '''
+
     tomo_inv = single(fourier_data, answer.valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, answer.orientations, answer.start_indices, answer.end_indices, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap)[3]
     if plot_old_combo:
         tomo_inv.plot_lots_of_things(tomo_modes_n, tomo_modes_m, answer, cut_values=cut_values)
@@ -2876,6 +2866,8 @@ def create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_
     '''Generates fake measurement data to see how the tomographic reconstruction behaves.
     Data is a gaussian with peak_loc = mean and peak_width=std 
     The phase is a constant value across the peak
+
+    SRH : 12Feb2014
     '''
     
     geom_matrix, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, LOS_object.orientations, tomo_orient, overall_geom_list, LOS_object.valid_channels, LOS_object.start_indices, LOS_object.end_indices, fourier_data, harmonic)
@@ -2909,7 +2901,13 @@ def create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_
 def complex_array_to_rgb(X, theme='dark', rmax=None):
     '''Takes an array of complex number and converts it to an array of [r, g, b],
     where phase gives hue and saturaton/value are given by the absolute value.
-    Especially for use with imshow for complex plots.'''
+    Especially for use with imshow for complex plots.
+
+    Taken from here:
+    http://stackoverflow.com/questions/15207255/is-there-any-way-to-use-bivariate-colormaps-in-matplotlib
+
+    SRH: 12Feb2014
+    '''
     absmax = rmax or np.abs(X).max()
     Y = np.zeros(X.shape + (3,), dtype='float')
     Y[..., 0] = np.angle(X) / (2 * np.pi) % 1
@@ -2923,6 +2921,10 @@ def complex_array_to_rgb(X, theme='dark', rmax=None):
     return Y
 
 def hue_sat_cbar(cbar_wave_ax, rmax = 1):
+    '''Create a colorbar for the hue/sat images
+
+    SRH: 12Feb2014
+    '''
     phase = np.linspace(-np.pi,np.pi,50)
     amp = np.linspace(0,1,50)
     phase_mesh, amp_mesh  = np.meshgrid(phase, amp)
