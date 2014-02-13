@@ -1364,11 +1364,12 @@ def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, 
     patch_object = None
 
     camera_details ={'center':{}, 'bottom':{}, 'top':{}}
-    camera_details['center'] = {'camera_elevation':0., 'camera_elevation_angle':0., 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69009.SPE'}
-    camera_details['bottom'] = {'camera_elevation':-14./100, 'camera_elevation_angle':-10.7, 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69043.SPE'}
+    camera_details['center'] = {'camera_elevation':0., 'camera_elevation_angle':0., 'right_tilt':-0.25, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69009.SPE'}
+    camera_details['bottom'] = {'camera_elevation':-14./100, 'camera_elevation_angle':-10.7, 'right_tilt':-0.25, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69043.SPE'}
     #camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
     #TEST!!!
-    camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.1, 'right_tilt':-0.5, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
+    camera_details['top'] = {'camera_elevation':+14./100, 'camera_elevation_angle':10.1, 'right_tilt':-0.25, 'cal_image':'/home/srh112/Desktop/tomo_stuff/IMAX_H_1_Shots/706_728_imaging_Dec_2010/69026.SPE'}
+
 
     answer_objects = []; #cal_image = []
 
