@@ -2303,7 +2303,6 @@ def imax_geometry(theta_values=None, make_single_plot = 0, make_multiple_plots =
     return gradient, intersect
 
 
-
 def return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, tomo_orient, overall_geom_list, valid_channels, start_indices, end_indices, fourier_data, harmonic):
     tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
     tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
@@ -2315,25 +2314,17 @@ def return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, t
     tomo_measurements = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
     return z, tomo_valid_channels, tomo_measurements
 
-def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval):
-    #tomo_modes_n_indices = [n.index(i) for i in tomo_modes_n]
-    #tomo_modes_m_indices = [m.index(i) for i in tomo_modes_m]
-    z, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, tomo_orient, overall_geom_list, valid_channels, start_indices, end_indices, fourier_data, harmonic)
-    # if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
-    # tomo_view_indices = [orientations.index(i) for i in tomo_orient]
-    # rev_indices = tomo_view_indices
-    # z = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
-    # tomo_valid_channels = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
-    # tomo_measurements = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+#def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval, LOS_obj):
+def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval, LOS_obj):
+    '''Run a single tomographic inversion using the combination of modes in tomo_modes_n, tomo_modes_m and orientatino sin tomo_orient
 
+    SRH : 12Feb2014
+    '''
+    z, tomo_valid_channels, tomo_measurements = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
     if method=='SIRT':
         tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_sirt.run(cycles = cycles)
         cur_tomo = tomo_sirt
-        #error = tomo_sirt.error_sum[-1]
-        #error_mean = tomo_sirt.error_mean[-1]
-        #error_mean_prop = tomo_sirt.error_mean_prop[-1]
-        #return_answer = tomo_sirt
     elif method=='Direct':
         tomo_direct = DirectSolution(z, tomo_measurements, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_direct.run()
@@ -2341,19 +2332,8 @@ def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_mo
     if tomo_eval == tomo_orient:
         error = tomo_recon_error_calc(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
     else:
-        tomo_view_indices = [orientations.index(i) for i in tomo_eval]
-        tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
-        tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
-        z_tmp = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices)) for j in tomo_modes_n_indices))
-        tomo_valid_channels_tmp = np.vstack((valid_channels[start_indices[i]:end_indices[i]] for i in tomo_view_indices))
-        tomo_measurements_tmp = np.vstack((fourier_data[harmonic, start_indices[i]:end_indices[i]] for i in tomo_view_indices))
+        z_tmp, tomo_valid_channels_tmp, tomo_measurements_tmp = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_eval)
         error = tomo_recon_error_calc(z_tmp, cur_tomo.T, tomo_measurements_tmp[tomo_valid_channels_tmp])
-
-
-    #error = cur_tomo.error_sum[-1]
-    #error_mean = cur_tomo.error_mean[-1]
-    #error_mean_prop = cur_tomo.error_mean_prop[-1]
-    #error_rms_ratio = cur_tomo.error_rms_ratio[-1]
     print 'n {}, m{}, error {:.4f} {} of {}'.format(tomo_modes_n, tomo_modes_m, error[0], count, total)
     if return_tomo_inv:
         return tomo_modes_n,tomo_modes_m,error[0],cur_tomo
@@ -2367,10 +2347,10 @@ class try_several_modes_multi():
     def __init__(self,n_list, m_list, tomo_orient,number_modes, answer, overall_geom_list, fourier_data,mode_tuples, lamda=0.5,cycles=300, pool_size = 1, method='SIRT', tomo_DC = None, fixed_mode = None, tomo_eval = None):
         #self.answer = answer
         if tomo_eval == None: tomo_eval = tomo_orient
-        self.overall_geom_list = overall_geom_list
-        self.fourier_data = fourier_data
-        self.mode_tuples = mode_tuples
-        self.valid_channels = answer.valid_channels
+        #self.overall_geom_list = overall_geom_list
+        #self.fourier_data = fourier_data
+        #self.mode_tuples = mode_tuples
+        #self.valid_channels = answer.valid_channels
 
         n_m = [[n_cur,m_cur] for n_cur,m_cur in zip(n_list, m_list)]
         if fixed_mode == None:
@@ -2394,10 +2374,7 @@ class try_several_modes_multi():
             tomo_modes_m_list.append([j[1] for j in i])
             #tomo_orient_list.append(tomo_orient)
         orientations = answer.orientations
-        arglist = [[self.fourier_data, self.valid_channels, self.overall_geom_list, self.mode_tuples, tomo_n, tomo_m, tomo_orient, lamda, orientations, answer.start_indices, answer.end_indices, method, cycles, counter, len(tomo_orient_list),False,1, tomo_DC, tomo_eval] for tomo_n, tomo_m, tomo_orient,counter in zip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list, range(len(tomo_orient_list)))]
-        #print arglist
-
-
+        arglist = [[tomo_n, tomo_m, tomo_orient, lamda, method, cycles, counter, len(tomo_orient_list),False,1, tomo_DC, tomo_eval, answer] for tomo_n, tomo_m, tomo_orient,counter in zip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list, range(len(tomo_orient_list)))]
         if pool_size > 1:
             print "Using multiproc"
             pool = multiprocessing.Pool(processes=pool_size)
@@ -2408,9 +2385,7 @@ class try_several_modes_multi():
             #errors = map(self._single_multiproc_wrapper, itertools.izip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list))
             errors = map(_single_multiproc_wrapper, arglist)
             #errors = self._single_multiproc_wrapper(tomo_modes_n_list[0], tomo_modes_m_list[0], tomo_orient_list[0])
-
         print errors
-
         print '  closing pool and waiting for pool to finish'
         print '  pool finished'
         self.errors = errors
@@ -2761,40 +2736,39 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
     return max_s, max_amp, max_ind
 
 
-def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  mode_tuples, filename, fourier_data, answer, overall_geom_list, s_values, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = False, plot_wave_animation = False, tomo_DC = None):
+def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, filename, answer, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = False, plot_wave_animation = False, tomo_DC = None):
     '''Run the tomographic inversion for the combination of modes in tomo_modes_n, tomo_modes_m
 
     SRH: 12Feb2014
     '''
 
-    tomo_inv = single(fourier_data, answer.valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, answer.orientations, answer.start_indices, answer.end_indices, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap)[3]
+    tomo_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap, answer)[3]
     if plot_old_combo:
         tomo_inv.plot_lots_of_things(tomo_modes_n, tomo_modes_m, answer, cut_values=cut_values)
     if plot_old_reproj_comparison:
         tomo_inv.plot_reprojection_comparison(tomo_modes_n, tomo_modes_m, answer, cut_values=None, multiplier=1.0, pub_fig=1)
     if plot_wave_fields:
-        tomo_inv.plot_wave_field(tomo_modes_n, tomo_modes_m, answer,s_values)
+        tomo_inv.plot_wave_field(tomo_modes_n, tomo_modes_m, answer,answer.s_values)
 
     #tomo_orient_extrap = ['top','center','bottom']#,'top','top']#,'bottom']
-    tomo_view_indices_extrap = [answer.orientations.index(i) for i in tomo_orient_extrap]
+    z_extrap, tomo_valid_channels_extrap, tomo_measurements_extrap = answer.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient_extrap)
 
-    tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
-    tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
-    if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
-    z_extrap = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices_extrap)) for j in tomo_modes_n_indices))
-    if tomo_DC == None:
-        z_extrap = z_extrap
-    else:
+    #tomo_view_indices_extrap = [answer.orientations.index(i) for i in tomo_orient_extrap]
+    #tomo_modes_n_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
+    #tomo_modes_m_indices = [mode_tuples.index([i,j]) for i,j in zip(tomo_modes_n,tomo_modes_m)]
+    #if tomo_modes_n_indices!=tomo_modes_m_indices: raise(Exception)
+    #z_extrap = np.hstack((np.vstack((overall_geom_list[j][i] for i in tomo_view_indices_extrap)) for j in tomo_modes_n_indices))
+    if tomo_DC != None:
         if z_extrap.shape[1]%tomo_DC.T.shape[0]!=0: raise(ValueError)
         n_modes = z_extrap.shape[1]/tomo_DC.T.shape[0]
         z_extrap = np.dot(z_extrap, np.diag(np.hstack((tomo_DC.T for i in range(n_modes)))))
 
-    tomo_valid_channels_extrap = np.vstack((answer.valid_channels[answer.start_indices[i]:answer.end_indices[i]] for i in tomo_view_indices_extrap))
-    tomo_measurements_extrap = np.vstack((fourier_data[harmonic, answer.start_indices[i]:answer.end_indices[i]] for i in tomo_view_indices_extrap))
+    #tomo_valid_channels_extrap = np.vstack((answer.valid_channels[answer.start_indices[i]:answer.end_indices[i]] for i in tomo_view_indices_extrap))
+    #tomo_measurements_extrap = np.vstack((fourier_data[harmonic, answer.start_indices[i]:answer.end_indices[i]] for i in tomo_view_indices_extrap))
     if plot_reprojection_comp1:
         tomo_inv.plot_reprojection_comparison_extrap(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_'+filename)
     if plot_wave_animation:
-        tomo_inv.plot_wave_field_animation(tomo_modes_n, tomo_modes_m, answer,s_values, n_images = 1, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1)
+        tomo_inv.plot_wave_field_animation(tomo_modes_n, tomo_modes_m, answer,answer.s_values, n_images = 1, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1)
     if plot_reprojection_comp2:
         tomo_inv.plot_reprojection_comparison_extrap_diff(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_diff_'+filename)
     return tomo_inv
@@ -2809,10 +2783,10 @@ def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, mode
     #tomo.plot_error_multi_list_single(error_multi_list.errors,filename='kh_{}_helicity_check'.format(kh_string),single_m=-3)
     print tomo_orient
     if run_dI_I:
-        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient,  mode_tuples, filename+'_dI-I', fourier_data, answer, overall_geom_list, s_values, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
+        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
     else:
         tomo_dI = None
-    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient,  mode_tuples, filename+'_norm', fourier_data, answer, overall_geom_list, s_values, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
+    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
     if make_animation:
         tomo_norm.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,s_values, n_images = 32, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation.gif',delay=10)
     mode_output_data = {'T':tomo_norm.T, 'segment_midpoints':answer.segment_midpoints,'n':tomo_modes_n_best,'m':tomo_modes_m_best}
@@ -2838,17 +2812,18 @@ def many_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m,
     os.system('convert -delay {} -loop 0 {} {}'.format(100, '.png '.join(filename_list)+'.png', 'moving_gaussian_{}_noise.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
     #os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
 
-def many_measurements_vary_m(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
+def many_measurements_vary_m_n(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
     filename_list = []
-    for i, m_new in enumerate(range(-8,9)):
-        filename = 'm_{}_n_{}'.format(m_new, tomo_modes_n[0], )
-        create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, [m_new], tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
-        filename_list.append('reproj_diff_m_{}_n_{}'.format(m_new, tomo_modes_n[0]))
+    for m_new in tomo_modes_m:
+        for n_new in tomo_modes_n:
+            filename = 'm_{}_n_{}'.format(m_new, n_new, )
+            create_measurements(n, m, LOS_object, mode_tuples, [n_new], [m_new], tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
+            filename_list.append('reproj_diff_m_{}_n_{}'.format(m_new, tomo_modes_n[0]))
     print filename_list
     for i in filename_list:
         os.system('convert {}.pdf {}.png'.format(i, i))
 
-    os.system('convert -delay {} -loop 0 {} {}'.format(20, '.png '.join(filename_list)+'.png', 'moving_gaussian_{}_noise.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
+    os.system('convert -delay {} -loop 0 {} {}'.format(20, '.png '.join(filename_list)+'.png', 'scan_n_m.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
     #os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
 
 def many_measurements_vary_n(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
@@ -2870,7 +2845,8 @@ def create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_
     SRH : 12Feb2014
     '''
     
-    geom_matrix, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, LOS_object.orientations, tomo_orient, overall_geom_list, LOS_object.valid_channels, LOS_object.start_indices, LOS_object.end_indices, fourier_data, harmonic)
+    #geom_matrix, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, LOS_object.orientations, tomo_orient, overall_geom_list, LOS_object.valid_channels, LOS_object.start_indices, LOS_object.end_indices, fourier_data, harmonic)
+    geom_matrix, tomo_valid_channels, tomo_measurements = LOS_object.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
     from scipy.stats import norm
     s_vals = LOS_object.segment_midpoints
     rv = norm(loc = peak_loc, scale = peak_width)
@@ -2896,7 +2872,7 @@ def create_measurements(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_
     tomo_orient_extrap = tomo_orient
 
     fourier_data[harmonic,:,:] = +new_meas
-    run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  mode_tuples, filename, fourier_data, LOS_object, overall_geom_list, LOS_object.segment_midpoints, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = True, plot_wave_animation = False, tomo_DC = None)
+    run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  filename, LOS_object, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = True, plot_wave_animation = False, tomo_DC = None)
 
 def complex_array_to_rgb(X, theme='dark', rmax=None):
     '''Takes an array of complex number and converts it to an array of [r, g, b],

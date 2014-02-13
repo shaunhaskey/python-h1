@@ -442,6 +442,17 @@ class LOS():
         for i in LOS_items_to_load:
             setattr(self, i,  tmp[i])
             
+    def return_combined_matrices(self,tomo_modes_n, tomo_modes_m, harmonic, tomo_orient):
+        '''Will produce the combined matrices needed for multiple views and or multiple modes
+
+        SRH : 12Feb2014
+        '''
+        comb_geom_mat = np.hstack((np.vstack((self.geom_dict['{}_{}_{}'.format(n_val, m_val, view)] for view in tomo_orient)) for n_val, m_val in zip(tomo_modes_n, tomo_modes_m)))
+        tomo_view_indices = [self.orientations.index(i) for i in tomo_orient]
+        tomo_valid_channels = np.vstack((self.valid_channels[self.start_indices[i]:self.end_indices[i]] for i in tomo_view_indices))
+        tomo_measurements = np.vstack((self.fourier_data[harmonic, self.start_indices[i]:self.end_indices[i]] for i in tomo_view_indices))
+        return comb_geom_mat, tomo_valid_channels, tomo_measurements
+
 
     def calc_point1_gradient(self,):
         '''Finds the location for each pixel on the CCD, and
