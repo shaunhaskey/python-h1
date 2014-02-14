@@ -25,6 +25,7 @@ from StringIO import StringIO
 import h1.mhd_eq.heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
+from scipy.stats import norm
 import itertools
 import multiprocessing
 
@@ -2822,14 +2823,15 @@ def many_measurements_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient,
     fig.set_figwidth(8.48*cm_to_inch)
     fig.set_figheight(8.48*0.75*cm_to_inch)
     count = 0
+    markers = ['.','x']
     for j, peak_loc in enumerate([0.2, 0.4, 0.6, 0.8]):
-        for i, noise_strength in enumerate([0.5,1.5,3]):
+        for i, (noise_strength, cur_marker) in enumerate(zip([0.5,1.5], markers)):
             filename = str(i)
             T_inv, T = create_measurements(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename, plot_diff_images = False)
             filename_list.append('reproj_diff_{}'.format(filename))
-            ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T_inv), label='{:.2f} noise'.format(noise_strength))
+            ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T_inv), label='{:.2f} noise'.format(noise_strength), marker = cur_marker)
             #ax[1,j].plot(np.sqrt(LOS_object.segment_midpoints), np.angle(T_inv))
-        ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T),label='Correct')
+        ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T),label='Correct', marker = '')
         count += 1
         #ax[1,j].plot(np.sqrt(LOS_object.segment_midpoints), np.angle(T))
     
@@ -2842,10 +2844,49 @@ def many_measurements_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient,
     for i in [ax2[1,0]]:i.set_xticks(i.get_xticks()[::2])
     for i in [ax2[0,0]]:i.set_yticks(i.get_yticks()[::2])
     fig.tight_layout(pad = 0.01)
-    fig.savefig('test.pdf')
+    fig.savefig('noise_tollerance.pdf')
     fig.canvas.draw(); fig.show()
 
 
+
+def many_measurements_shift(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = '', shift_left=False, shift_down = False):
+    filename_list = []
+    fig, ax2 = pt.subplots(nrows = 2, ncols = 2, sharex = True, sharey = True)
+    ax = ax2.flatten()
+    cm_to_inch=0.393701
+    fig.set_figwidth(8.48*cm_to_inch)
+    fig.set_figheight(8.48*0.75*cm_to_inch)
+    count = 0
+    markers = ['.','x','+']
+    left_amount = None; down_amount = None
+    for j, peak_loc in enumerate([0.2, 0.4, 0.6, 0.8]):
+        for i, (shift, cur_marker) in enumerate(zip([1,5,10], markers)):
+            filename = str(i)
+            if shift_left: left_amount = shift
+            if shift_down: down_amount = shift
+            T_inv, T = create_measurements(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = 0.001,shift_left = left_amount, shift_down = down_amount, filename = filename, plot_diff_images = False)
+
+            filename_list.append('reproj_diff_{}'.format(filename))
+            ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T_inv), label='{:.2f} shift'.format(shift), marker = cur_marker)
+            #ax[1,j].plot(np.sqrt(LOS_object.segment_midpoints), np.angle(T_inv))
+        ax[count].plot(np.sqrt(LOS_object.segment_midpoints), np.abs(T),label='Correct', marker = '')
+        count += 1
+        #ax[1,j].plot(np.sqrt(LOS_object.segment_midpoints), np.angle(T))
+    
+    ax[0].legend(loc='best')
+    ax[2].set_xlabel('$\sqrt{s}$')
+    ax[3].set_xlabel('$\sqrt{s}$')
+    ax[0].set_ylabel('Amp (a.u)')
+    ax[2].set_ylabel('Amp (a.u)')
+    for i in ax:i.grid()
+    for i in [ax2[1,0]]:i.set_xticks(i.get_xticks()[::2])
+    for i in [ax2[0,0]]:i.set_yticks(i.get_yticks()[::2])
+    fig.tight_layout(pad = 0.01)
+    if shift_left:
+        fig.savefig('shift_left_tollerance.pdf')
+    else:
+        fig.savefig('shift_down_tollerance.pdf')
+    fig.canvas.draw(); fig.show()
 
 
 def many_measurements_vary_m_n(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
@@ -2862,18 +2903,8 @@ def many_measurements_vary_m_n(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orie
     os.system('convert -delay {} -loop 0 {} {}'.format(20, '.png '.join(filename_list)+'.png', 'scan_n_m.gif'.format('{:.2f}'.format(noise_strength).replace('.','_'))))
     #os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
 
-# def many_measurements_vary_n(n, m, LOS_object, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = ''):
-#     filename_list = []
-#     for i, n_new in enumerate(range(-8,9)):
-#         filename = 'm_{}_n_{}'.format(tomo_modes_m[0],n_new )
-#         create_measurements(n, m, LOS_object, mode_tuples, [n_new], tomo_modes_m, tomo_orient, overall_geom_list, fourier_data, harmonic, peak_loc = peak_loc, peak_width = 0.1, noise_strength = noise_strength, filename = filename)
-#         filename_list.append('reproj_diff_m_{}_n_{}'.format(tomo_modes_m[0], n_new))
-#     print filename_list
-#     for i in filename_list:
-#         os.system('convert {}.pdf {}.png'.format(i, i))
-#     os.system('convert -delay {} -loop 0 {} {}'.format(100, '.png '.join(filename_list)+'.png', 'dummy_data_different_n.gif'))
 
-def create_measurements(LOS_object,tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, filename = '', plot_image = False, plot_diff_images = True):
+def create_measurements(LOS_object,tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, peak_loc = 0.5, peak_width = 0.1, noise_strength = 0.00001, shift_left = 0, shift_down = 0, filename = '', plot_image = False, plot_diff_images = True):
     '''Generates fake measurement data to see how the tomographic reconstruction behaves.
     Data is a gaussian with peak_loc = mean and peak_width=std 
     The phase is a constant value across the peak
@@ -2881,11 +2912,7 @@ def create_measurements(LOS_object,tomo_modes_n, tomo_modes_m, tomo_orient, harm
     SRH : 12Feb2014
     '''
     
-    #geom_matrix, tomo_valid_channels, tomo_measurements = return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, LOS_object.orientations, tomo_orient, overall_geom_list, LOS_object.valid_channels, LOS_object.start_indices, LOS_object.end_indices, fourier_data, harmonic)
-    print 'hello'
     geom_matrix, tomo_valid_channels, tomo_measurements = LOS_object.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
-    print 'hello2'
-    from scipy.stats import norm
     s_vals = LOS_object.segment_midpoints
     rv = norm(loc = peak_loc, scale = peak_width)
     amps = rv.pdf(np.sqrt(LOS_object.segment_midpoints))
@@ -2894,14 +2921,27 @@ def create_measurements(LOS_object,tomo_modes_n, tomo_modes_m, tomo_orient, harm
     re_projection = np.dot(geom_matrix, T)
 
     new_meas = np.zeros(tomo_valid_channels.shape, dtype=complex)
+    new_valid_channels = np.zeros(tomo_valid_channels.shape, dtype=bool)
     sig_strength = np.sqrt(np.sum(np.abs(re_projection)**2))
-    noise1 = np.random.normal(0,0.5,len(re_projection))
-    noise2 = np.random.normal(0,0.5,len(re_projection))
-    noise1=noise_strength * noise1*np.sqrt(np.sum(np.abs(re_projection)**2))/np.sqrt(np.sum(np.abs(noise1)**2))
-    noise2=noise_strength * noise1*np.sqrt(np.sum(np.abs(re_projection)**2))/np.sqrt(np.sum(np.abs(noise2)**2))
+    
+    print 'max amp :{}, mean amp:{}'.format(np.max(np.abs(re_projection)), np.mean(np.abs(re_projection)))
+    noise1 = np.random.normal(0,noise_strength,len(re_projection))
+    noise2 = np.random.normal(0,noise_strength,len(re_projection))
+
+    #noise1=noise_strength * noise1*np.sqrt(np.sum(np.abs(re_projection)**2))/np.sqrt(np.sum(np.abs(noise1)**2))
+    #noise2=noise_strength * noise1*np.sqrt(np.sum(np.abs(re_projection)**2))/np.sqrt(np.sum(np.abs(noise2)**2))
     #noise2 = np.random.normal(0,0,len(re_projection))
 
+    valid_channels_bak = LOS_object.valid_channels.copy()
+    fourier_data_tmp = LOS_object.fourier_data.copy()
+
     new_meas[tomo_valid_channels] = re_projection + noise1 + 1j*noise2
+    if shift_left!=None:
+        new_meas[:,:-shift_left] = new_meas[:, shift_left:]
+        new_valid_channels[:, :-shift_left] = +LOS_object.valid_channels[:, shift_left:]
+    if shift_down!=None:
+        new_meas[:-shift_down,:] = new_meas[shift_down:, :]
+        new_valid_channels[:-shift_down, :] = +LOS_object.valid_channels[shift_down:, :]
     #new_meas[new_meas<0]=0
 
     if plot_image:
@@ -2913,13 +2953,14 @@ def create_measurements(LOS_object,tomo_modes_n, tomo_modes_m, tomo_orient, harm
     tomo_orient_extrap = tomo_orient
 
     #fourier_data[harmonic,:,:] = +new_meas
-    fourier_data_tmp = LOS_object.fourier_data.copy()
     LOS_object.fourier_data[harmonic,:,:] = +new_meas    
+    LOS_object.valid_channel = +new_valid_channels
     tomo_inv = run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap,  filename, LOS_object, harmonic = harmonic, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = plot_diff_images, plot_wave_animation = False, tomo_DC = None)
 
 
     #restore the data
     LOS_object.fourier_data = +fourier_data_tmp
+    LOS_object.valid_channels = +valid_channels_bak
     return tomo_inv.T, T
     
 def complex_array_to_rgb(X, theme='dark', rmax=None):
