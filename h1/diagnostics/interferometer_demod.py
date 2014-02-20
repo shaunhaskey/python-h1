@@ -990,23 +990,27 @@ def plot_wobbly_mirror_results(big_fit_values, t, big_fit, art, mirror_depth, ti
 
     for i, offset in enumerate(big_fit_values):
         for j in range(3):
-            ax.plot(t + np.max(t)*j, big_fit[i,:]+offset*2*mirror_depth,'b')
-            ax.plot(t + np.max(t)*j, art[i,:]+offset*2*mirror_depth,'g')
+            ax.plot(t + np.max(t)*j, big_fit[i,:]+(offset+1)*2*mirror_depth,'b')
+            ax.plot(t + np.max(t)*j, art[i,:]+(offset+1)*2*mirror_depth,'k')
     ax.set_xlabel('time (3 periods have been pasted together)')
     ax.set_ylabel('Phase + i x 2.*np.pi where i is channel number')
     #ax.set_ylim([0,21*2.*np.pi])
     ax.hlines(np.arange(0,21)*2.*mirror_depth,ax.get_xlim()[0],ax.get_xlim()[1],linestyles='dashed')
     ax.set_xlim([0,np.max(t)*(j+1)])
     ax.set_title(title)
+    fig.set_rasterized(True)
     fig.savefig(savefig_name)
     fig.canvas.draw(); fig.show()
 
-def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_length = 20, plot=False):
+def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_length = 20, plot=False, use_simul_phase1 = False):
     if plot:
         fig, ax = pt.subplots(nrows = 2, sharey = True)
         fig2, ax2 = pt.subplots(nrows = 2, sharey = True)
     start_list = []
-    output_new = inter_obj.output.copy()
+    if use_simul_phase1:
+        output_new = inter_obj.output_phase_simul.copy()
+    else:
+        output_new = inter_obj.output.copy()
     for i in range(inter_obj.output.shape[0]):
         #smooth the data
         tmp = np.convolve(inter_obj.output[i,:], np.ones(window_length)/float(window_length), mode= 'same')
@@ -1046,21 +1050,54 @@ def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_leng
     return output_new, np.array(big_fit), np.array(big_fit_xvals)
 
 
+###################
+#http://stackoverflow.com/questions/12583970/matplotlib-contour-plots-as-postscript
+from matplotlib.collections import Collection
+from matplotlib.artist import allow_rasterization
+import matplotlib.pyplot as plt
 
-def wobbly_mirror_contour_plot(output_new, mirror_depth, n_contours=10):
+class ListCollection(Collection):
+     def __init__(self, collections, **kwargs):
+         Collection.__init__(self, **kwargs)
+         self.set_collections(collections)
+     def set_collections(self, collections):
+         self._collections = collections
+     def get_collections(self):
+         return self._collections
+     @allow_rasterization
+     def draw(self, renderer):
+         for _c in self._collections:
+             _c.draw(renderer)
+
+def insert_rasterized_contour_plot(c):
+    collections = c.collections
+    for _c in collections:
+        _c.remove()
+    cc = ListCollection(collections, rasterized=True)
+    ax = plt.gca()
+    ax.add_artist(cc)
+    return cc
+
+
+def wobbly_mirror_contour_plot(output_new, mirror_depth, n_contours=10, sample_rate = 10000, figname = None):
     fig, ax = pt.subplots()
     #im = ax.imshow(output_new, cmap = 'RdBu', aspect='auto')#, interpolation = 'nearest')
     #im.set_clim([-np.pi, np.pi])
-    cont = ax.contour(output_new,np.linspace(-mirror_depth,mirror_depth,10), cmap='RdBu')
+    extent = [0, output_new.shape[1]* 1./sample_rate, 0, output_new.shape[0]]
+    print extent
+    cont = ax.contour(output_new,np.linspace(-mirror_depth,mirror_depth,10), cmap='RdBu', extent = extent)
+    insert_rasterized_contour_plot(cont)
+    #fig.tight_layout(pad = 0.01)
     pt.colorbar(cont)
-    ax.set_xlabel('time a.u')
+    ax.set_xlabel('time (s)')
     ax.set_ylabel('Interferometer channel')
-    ax.set_title('Contour map of the phase shift due to moving sinusoidal mirror\nMoves up, stops, then moves down')
+    ax.set_title('Contour map of the phase shift due to moving sinusoidal mirror')
+    if figname!=None: fig.savefig(figname + '.pdf')
     fig.canvas.draw(); fig.show()
 
 
 
-def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth, plot = False):
+def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth, plot = False, figname = None):
     #big_fit = np.array(big_fit); big_fit_values = np.array(big_fit_xvals)
     fft_freqs = np.fft.fftfreq(big_fit.shape[1], d=(t[1]-t[0]))
     fft_vals = np.fft.fft(big_fit)/big_fit.shape[1]
@@ -1069,14 +1106,30 @@ def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth,
     for i in range(len(answer_phases)-1):
         if (answer_phases[i+1] - answer_phases[i])<0:
             answer_phases[i+1:]=answer_phases[i+1:]+2.*np.pi
+    mean_diff = np.mean(np.diff(answer_phases))
+    print mean_diff, np.diff(answer_phases)
+
+    for i in range(len(answer_phases)-1):
+        if (answer_phases[i+1] - answer_phases[i])<(0.8*mean_diff):
+            answer_phases[i+1:]=answer_phases[i+1:]+2.*np.pi
+
     [k_guess, phase_guess] = np.polyfit(big_fit_xvals, answer_phases, 1)
     if plot:
         fig, ax = pt.subplots(ncols = 2, sharex = True)
-        ax[0].plot(big_fit_xvals, answer_phases ,'o-')
-        ax[1].plot(big_fit_xvals, np.abs(valid_ones)/np.pi,'o-')
-        ax[1].axhline(mirror_depth/2/np.pi)
+        
+        ax[0].plot(big_fit_xvals, answer_phases ,'s', label = 'Measured Starting Phase')
+        ax[1].plot(big_fit_xvals, np.abs(valid_ones)/np.pi,'s', label = 'Measured Mirror Depth')
+        ax[1].axhline(mirror_depth/2/np.pi, label = 'Actual Mirror Depth')
         ax[1].set_ylim([0,mirror_depth/2/np.pi*1.2])
-        ax[0].plot(big_fit_xvals, np.polyval([k_guess, phase_guess], big_fit_xvals))
+        ax[0].plot(big_fit_xvals, np.polyval([k_guess, phase_guess], big_fit_xvals), label = 'Linear fit k={:.2f}'.format(k_guess))
+        ax[0].set_ylabel('Phase (rad)')
+        ax[1].set_ylabel('Amplitude ($\pi$)')
+        ax[0].set_xlabel('Interferometer channel')
+        ax[1].set_xlabel('Interferometer channel')
+        for i in ax: i.grid()
+        for i in ax: i.legend(loc='best')
+        fig.tight_layout(pad = 0.01)
+        if figname!=None: fig.savefig(figname+'.pdf')
         fig.canvas.draw(); fig.show()
 
         fig, ax = pt.subplots(nrows = 21, sharex = True)
