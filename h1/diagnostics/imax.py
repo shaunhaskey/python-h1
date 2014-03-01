@@ -23,18 +23,18 @@ import matplotlib.pyplot as pt
 import h1.diagnostics.SPE_reader as SPE_reader
 import copy
 class ImaxData():
-    def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=0, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images', flipud=0, fliplr=0, rot90=0):
+    def __init__(self,shot_list=None, SPE_file = None, single_mdsplus=None, plot_data = 0, get_mirnov_triggers = 0, plot_mirnov_triggers = 0, mdsplus_tree = 'imax', mdsplus_node='.pimax.images', flipud=0, fliplr=0, rot90=0):
         '''Used to extract the imax data, calibrate it, fft it, plot it, and check the performance of the PLL
         
         SRH : 12Feb2014
         '''
         self.shot_list = shot_list
         if SPE_file.__class__!=list and SPE_file!=None:SPE_file = [SPE_file]
-        if single_mdsplus!=0: self.shot_list = [single_mdsplus]
-        if shot_list!=None:
+        if single_mdsplus!=None: self.shot_list = [single_mdsplus]
+        if self.shot_list!=None:
             for i, shot in enumerate(self.shot_list):
                 tmp_data = MDS.Tree(mdsplus_tree,shot).getNode(mdsplus_node).data()[0,:,:]
-                if i==0: self.image_array = np.zeros((len(shot_list),tmp_data.shape[0],tmp_data.shape[1]),dtype=float)
+                if i==0: self.image_array = np.zeros((len(self.shot_list),tmp_data.shape[0],tmp_data.shape[1]),dtype=float)
                 self.image_array[i,:,:] = tmp_data.copy()
         elif SPE_file.__class__==list:
             n_files = len(SPE_file)

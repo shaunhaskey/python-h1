@@ -25,6 +25,7 @@ from StringIO import StringIO
 import h1.mhd_eq.heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
+import scipy.optimize as opt
 from scipy.stats import norm
 import itertools
 import multiprocessing
@@ -204,7 +205,7 @@ class Tomography():
             mpl.rcParams['lines.markersize']=5.0
             mpl.rcParams['savefig.dpi']=150
             fig2.set_figwidth(8.48*2.*cm_to_inch)
-            fig2.set_figheight(8.48*1.5*cm_to_inch)
+            fig2.set_figheight(8.48*1.25*cm_to_inch)
 
         ax2 = []
         import matplotlib.gridspec as gridspec
@@ -1035,6 +1036,61 @@ class DirectSolution(Tomography):
         self.T = np.dot(self.geom_matrix_pinv, valid_meas[measures_to_remove])
         self.re_projection = np.dot(self.geom_matrix, self.T)
         self.error = tomo_recon_error_calc(self.geom_matrix, self.T, valid_meas)
+
+class DirectSolutionFixedPhase(Tomography):
+    def __init__(self, geom_matrix, measurements, valid_channels = None, tomo_DC = None):
+        n_measurements, n_regions = geom_matrix.shape
+        if tomo_DC == None:
+            self.geom_matrix = geom_matrix
+        else:
+            print tomo_DC.T.shape, geom_matrix.shape
+            if geom_matrix.shape[1]%tomo_DC.T.shape[0]!=0: raise(ValueError)
+            n_modes = geom_matrix.shape[1]/tomo_DC.T.shape[0]
+            print n_modes
+            self.geom_matrix = np.dot(geom_matrix, np.diag(np.hstack((tomo_DC.T for i in range(n_modes)))))
+        self.all_measurements = measurements
+        self.method = 'DirectSolutionFixedPhase'
+        if valid_channels!=None:
+            self.measurements = measurements[valid_channels]
+            self.valid_channels = valid_channels
+        else:
+            self.measurements = measurements
+            self.valid_channels = np.ones(measurements.shape, dtype=bool)
+        self.P = np.zeros((n_measurements*2, n_regions*2),dtype=float)
+        #Build a real matrix 
+        self.P[0::2,0::2] = +np.real(self.geom_matrix)
+        self.P[0::2,1::2] = -np.imag(self.geom_matrix)
+        self.P[1::2,0::2] = +np.imag(self.geom_matrix)
+        self.P[1::2,1::2] = +np.real(self.geom_matrix)
+        self.S = np.zeros(n_measurements*2, dtype=float)
+        self.S[0::2] = +np.real(self.measurements)
+        self.S[1::2] = +np.imag(self.measurements)
+        #self.measurements = measurements[self.valid_channels]
+
+    def run(self,):
+        res = opt.minimize(fixed_phase_error, np.pi, method='nelder-mead', args = (self.P, self.S), options={'xtol': 1e-1, 'disp': False})
+        geom_matrix, T, re_projection = fixed_phase_calc(res['x'], self.P, self.S)
+        self.phasing = res['x']
+        self.T = (T*np.cos(self.phasing) + T*1j*np.sin(self.phasing))
+        self.phasing = np.angle(np.sum(self.T))
+        print 'PHASING : ', self.phasing
+        #tmp = np.dot(self.geom_matrix, T)
+        self.re_projection = np.dot(self.geom_matrix, self.T)
+        #self.re_projection = tmp[0::2]+1j*tmp[1::2]
+        #print res
+
+def fixed_phase_calc(phasing, geom_matrix, all_measurements):
+    geom_matrix = geom_matrix[:,::2]*np.cos(phasing) + geom_matrix[:,1::2]*np.sin(phasing)
+    geom_matrix_pinv = np.linalg.pinv(geom_matrix)
+    T = np.dot(geom_matrix_pinv, all_measurements)
+    re_projection = np.dot(geom_matrix, T)
+    return geom_matrix, T, re_projection
+
+def fixed_phase_error(phasing, geom_matrix, all_measurements):
+    geom_matrix, T, re_projection = fixed_phase_calc(phasing, geom_matrix, all_measurements)
+    error = tomo_recon_error_calc(geom_matrix, T, all_measurements)
+    print phasing, error, 'finished'
+    return error[0]
 
 def tomo_recon_error_calc(geom_matrix, tomo_recon, valid_meas):
     '''Function to calculate the reconstruction error given the geom_matrix, reconstruction and measurements
@@ -2330,6 +2386,11 @@ def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count
         tomo_direct = DirectSolution(z, tomo_measurements, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_direct.run()
         cur_tomo = tomo_direct
+    elif method=='DirectFixedPhase':
+        print 'using fixed phase'
+        tomo_direct = DirectSolutionFixedPhase(z, tomo_measurements, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
+        tomo_direct.run()
+        cur_tomo = tomo_direct
     if tomo_eval == tomo_orient:
         error = tomo_recon_error_calc(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
     else:
@@ -2774,7 +2835,7 @@ def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, f
         tomo_inv.plot_reprojection_comparison_extrap_diff(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_diff_'+filename)
     return tomo_inv
 
-def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True):
+def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True, method = 'Direct'):
     kh_string = '{:.2f}'.format(kh).replace('.','_')
     filename = 'kh_{}_'.format(kh_string)
     for i, j in zip(tomo_modes_n_best, tomo_modes_m_best):
@@ -2784,10 +2845,10 @@ def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answ
     #tomo.plot_error_multi_list_single(error_multi_list.errors,filename='kh_{}_helicity_check'.format(kh_string),single_m=-3)
     print tomo_orient
     if run_dI_I:
-        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
+        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
     else:
         tomo_dI = None
-    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = 'Direct', cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
+    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
     if make_animation:
         tomo_norm.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,answer.s_values, n_images = 32, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation.gif',delay=10)
     mode_output_data = {'T':tomo_norm.T, 'segment_midpoints':answer.segment_midpoints,'n':tomo_modes_n_best,'m':tomo_modes_m_best}
@@ -2845,6 +2906,92 @@ def many_measurements_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient,
     for i in [ax2[0,0]]:i.set_yticks(i.get_yticks()[::2])
     fig.tight_layout(pad = 0.01)
     fig.savefig('noise_tollerance.pdf')
+    fig.canvas.draw(); fig.show()
+
+
+def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noise_strength = None, filename = None):
+    if noise_strength == None: noise_strength = 0.0001
+    filename_list = []
+
+    fig = pt.figure()
+    cm_to_inch=0.393701
+    fig.set_figwidth(8.48*cm_to_inch)
+    fig.set_figheight(8.48*0.9*cm_to_inch)
+    import matplotlib.gridspec as gridspec
+    gs = gridspec.GridSpec(20,4)
+    ax2 = []
+    ax2.append(pt.subplot(gs[:9,3]))
+    ax2.append(pt.subplot(gs[9:17,3], sharex = ax2[0],sharey = ax2[0]))
+    ax2.append(pt.subplot(gs[:10,:3]))
+    ax2.append(pt.subplot(gs[10:,:3], sharex = ax2[-1]))
+    #ax2.append(pt.subplot(gs[:8,6], sharex = ax2[-1],sharey = ax2[-1]))
+
+    #ax2.append(pt.subplot(gs[0:2,0:2]))
+    #ax2.append(pt.subplot(gs[2:4,0:2]))#, sharex = ax2[5]))
+    #ax2.append(pt.subplot(gs[4:8,0:2]))
+
+    #cbar_wave_ax = pt.subplot(gs[8,0:2])
+    #cbar_phase_ax = pt.subplot(gs[8,2:4])
+    cbar_amp_ax = pt.subplot(gs[17:,3])
+
+    #fig, ax2 = pt.subplots(nrows = 2, ncols = 2)
+    ax = ax2#.flatten()
+
+
+    tmp_meas = np.abs(LOS_object.fourier_data[harmonic,:,:])*LOS_object.valid_channels
+    tmp_meas[-LOS_object.valid_channels] = np.nan
+    amp_cmap = 'jet'
+    [orig_im_ax, noise_im_ax, amp_ax, phase_ax] = ax
+    orig_im = orig_im_ax.imshow(np.abs(tmp_meas[LOS_object.start_indices[1]:LOS_object.end_indices[1]]),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
+
+    orig_im_ax.set_xlim([160,82])
+
+    orig_im_ax.set_ylim([0,  (LOS_object.end_indices[1] - LOS_object.start_indices[1])*0.9])
+    foo1, foo2, foo3, orig_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, None, tomo_orient, LOS_object)
+    plot_radial_structure(orig_inv.T, np.sqrt(LOS_object.segment_midpoints), tomo_modes_n, tomo_modes_m, prov_ax = [amp_ax, phase_ax], norm = False, extra_txt = 'Orig ', single_mode = None, marker = '.')
+
+    #sig_strength = np.sqrt(np.sum(np.abs(re_projection)**2))
+    fourier_data_tmp = LOS_object.fourier_data.copy()
+    valid_data = LOS_object.fourier_data[harmonic,LOS_object.valid_channels]
+
+    print 'max amp :{}, mean amp:{}'.format(np.max(np.abs(valid_data)), np.mean(np.abs(valid_data)))
+    print 'RMS real :{}, RMS imag:{}'.format(np.sqrt(np.mean((np.real(valid_data))**2)),  np.sqrt(np.mean((np.imag(valid_data))**2)))
+
+    noise1 = np.random.normal(0,noise_strength,LOS_object.fourier_data[harmonic,:,:].shape)
+    noise2 = np.random.normal(0,noise_strength,LOS_object.fourier_data[harmonic,:,:].shape)
+    print 'noise1 rms :{}, std_dev : {}'.format(np.sqrt(np.mean(noise1**2)), noise_strength)
+
+    LOS_object.fourier_data[harmonic,:,:] += (noise1 + 1j*noise2)
+    tmp_meas = np.abs(LOS_object.fourier_data[harmonic,:,:])*LOS_object.valid_channels
+    tmp_meas[-LOS_object.valid_channels] = np.nan
+    amp_cmap = 'jet'
+    noise_im = noise_im_ax.imshow(np.abs(tmp_meas[LOS_object.start_indices[1]:LOS_object.end_indices[1]]),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
+    orig_im.set_clim(noise_im.get_clim())
+    cbar = pt.colorbar(orig_im, cax = cbar_amp_ax, orientation = 'horizontal')
+    cbar.set_ticks([1,2,3,4])
+    cbar.set_label('Amp (a.u.)')
+    phase_ax.set_xlabel('$\sqrt{s}$')
+    for i in [phase_ax, amp_ax]:i.set_yticks(i.get_yticks()[::2])
+    for i in [phase_ax, amp_ax]:i.grid()
+    phase_ax.set_xticks(phase_ax.get_xticks()[::2])
+    orig_im_ax.axes.get_yaxis().set_visible(False)
+    noise_im_ax.axes.get_yaxis().set_visible(False)
+    orig_im_ax.axes.get_xaxis().set_visible(False)
+    noise_im_ax.axes.get_xaxis().set_visible(False)
+    orig_im_ax.set_title('Original')
+    noise_im_ax.set_title('Noisy')
+    
+    tomo_orient_extrap = tomo_orient
+
+    foo1, foo2, foo3, noise_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, None, tomo_orient, LOS_object)
+    plot_radial_structure(noise_inv.T, np.sqrt(LOS_object.segment_midpoints), tomo_modes_n, tomo_modes_m, prov_ax = [amp_ax, phase_ax], norm = False, extra_txt = 'Noisy ', single_mode = None)
+
+    #restore the data
+    LOS_object.fourier_data = +fourier_data_tmp
+    gs.tight_layout(fig, pad = 0.2)
+    if filename!=None:
+        fig.savefig(filename + '.pdf')
+        fig.savefig(filename + '.eps')
     fig.canvas.draw(); fig.show()
 
 
