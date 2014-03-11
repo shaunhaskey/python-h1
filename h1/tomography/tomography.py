@@ -59,7 +59,7 @@ class Tomography():
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
             mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=150
+            mpl.rcParams['savefig.dpi']=300
             fig2.set_figwidth(8.48*2.*cm_to_inch)
             fig2.set_figheight(8.48*1.25*cm_to_inch)
 
@@ -203,7 +203,7 @@ class Tomography():
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
             mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=150
+            mpl.rcParams['savefig.dpi']=300
             fig2.set_figwidth(8.48*2.*cm_to_inch)
             fig2.set_figheight(8.48*1.25*cm_to_inch)
 
@@ -382,6 +382,8 @@ class Tomography():
         cbar3 = pt.colorbar(im1_p,cax = cbar_phase_ax, orientation = 'horizontal')
 
         cbar3.set_ticks(np.round(np.linspace(-np.pi,np.pi,7),1)[0:-1])
+        cbar3.set_ticks([-np.pi,0,np.pi])
+        cbar3.ax.set_xticklabels(['$-\pi$', '$0$','$\pi$'])
         cbar3.set_label('Phase (rad)')
 
         #percent_diff = (np.angle(q) - np.angle(all_measurements))/np.mean(tmp)*100
@@ -431,7 +433,7 @@ class Tomography():
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
             mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=150
+            mpl.rcParams['savefig.dpi']=300
             fig2.set_figwidth(8.48*2.*cm_to_inch)
             fig2.set_figheight(8.48*1.5*cm_to_inch)
 
@@ -692,7 +694,7 @@ class Tomography():
             mpl.rcParams['xtick.labelsize']=8.0
             mpl.rcParams['ytick.labelsize']=8.0
             mpl.rcParams['lines.markersize']=5.0
-            mpl.rcParams['savefig.dpi']=150
+            mpl.rcParams['savefig.dpi']=300
             fig2.set_figwidth(8.48*2.*cm_to_inch)
             fig2.set_figheight(8.48*1.35*cm_to_inch)
 
@@ -862,7 +864,7 @@ class Tomography():
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=150
+        mpl.rcParams['savefig.dpi']=300
         if n.__class__ == int:
             n = [n]
             m = [m]
@@ -2464,7 +2466,7 @@ def plot_error_multi_list2(input_errors, filename = None):
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=150
+        mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight(8.48*0.8*cm_to_inch)
     for i in input_errors:
@@ -2536,7 +2538,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=150
+        mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight(8.48*1.2*cm_to_inch)
 
@@ -2684,7 +2686,7 @@ def compare_reconstruction_method(tomo1, tomo2, LOS_object, n, m, filename = Non
         mpl.rcParams['xtick.labelsize']=8.0
         mpl.rcParams['ytick.labelsize']=8.0
         mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=150
+        mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight(8.48*1.0*cm_to_inch)
     method_txt = tomo1.method
@@ -2776,7 +2778,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
         if cor_run:
             if norm:
                 cur_T = cur_T/norm_fact
-            ax[0].plot(segment_midpoints, np.abs(cur_T), label='{}{},{}'.format(extra_txt, n_cur, m_cur), **plot_dict)
+            ax[0].plot(segment_midpoints, np.abs(cur_T), label='{}({},{})'.format(extra_txt, n_cur, m_cur), **plot_dict)
             max_ind = np.argmax(np.abs(cur_T[:-5]))
             max_s = segment_midpoints[max_ind]
             max_amp = np.max(np.abs(cur_T[:-5]))
@@ -2787,7 +2789,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             while np.mean(angs[start_pt:])<-np.pi: angs += 2.*np.pi
             ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
-            ax[0].legend(loc='best')
+            ax[0].legend(loc='best', prop={'size':6})
             ax[0].set_xlim([0,1])
             ax[1].set_xlim([0,1])
             ax[1].set_ylabel('Phase (rad)')
