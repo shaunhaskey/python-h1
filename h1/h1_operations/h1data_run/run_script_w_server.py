@@ -275,11 +275,11 @@ def start_servers(computer, prog_details, local=0, execute = True):
     doesn't give a login shell - look into better ways of doing this later
     '''
     subproc_list = []
-    gnome_term_list = 
+    gnome_term_list = []
     for tmp_prog_details in prog_details:
         if local==0:
             args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", "ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
-            args = ["ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
+            args = ["ssh", computer, "-t", "bash -l '%s_%d.sh'"%(tmp_prog_details[0], tmp_prog_details[1])]
 
         else:
             if tmp_prog_details[1]==None:
@@ -294,7 +294,7 @@ def start_servers(computer, prog_details, local=0, execute = True):
         else:
             print 'start %s on %s : %d '%(tmp_prog_details[0], computer, tmp_prog_details[1]), args
         gnome_term_list.extend(['--tab','-e'])
-        gnome_term_list.extend('"{}"'.format(' '.join(args)))
+        gnome_term_list.extend(['''{}'''.format(' '.join(args))])
         if execute:
             subproc_list.append(subprocess.Popen(args, stdout=subprocess.PIPE, 
                                                  stderr=subprocess.PIPE, stdin=subprocess.PIPE))
@@ -543,33 +543,42 @@ if __name__=='__main__':
     gnome_list = ['gnome-terminal']
     for i in computer_details.keys():
         if i==local_comp:
-            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=1, execute = True)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=1, execute = False)
         else:
-            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=0, execute = True)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=0, execute = False)
         gnome_list.extend(tmp_list)
-    print gnome_list
-    #subproc = subprocess.Popen(gnome_list, stdout=subprocess.PIPE, 
-    #                           stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    #for i in computer_details.keys():
-    #    computer_details[i]['processes'] = [subproc]
-    #subprocess.call(gnome_string)
 
 
     time.sleep(2)
     #see if any jDispatcherIp and jDispatchMonitors are running and kill them if they are
     print '='*8, 'Killing jDispatcherIp and jDispatchMonitor', '='*8
     kill_servers(local_comp, computer_details[local_comp]['programs'], local=1)
-    time.sleep(5)
+    #time.sleep(5)
 
     #Start a local jDispatcherIp and jDispatchMonitor
     print '='*8, 'Starting jDispatcherIp and jDispatchMonitor', '='*8
     args = ["xterm", "-T", "jDispatcherIp", "-e", "jDispatcherIp", tree]
-    computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
-                                                                      stderr=subprocess.PIPE, stdin=subprocess.PIPE))
-    time.sleep(5)
+    args = ["--tab", "-e", "bash -c 'sleep 4;jDispatcherIp {}'".format(tree)]
+    #computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
+    #                                                                  stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    #subprocess.call(gnome_string)
+    #time.sleep()
+    gnome_list.extend(args)
+    print gnome_list
+    subproc = subprocess.Popen(gnome_list, stdout=subprocess.PIPE, 
+                               stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    for i in computer_details.keys():
+        computer_details[i]['processes'] = [subproc]
+    computer_details[local_comp]['processes'] = [subproc]
+
+    time.sleep(6)
+
     args = ["xterm", "-T", "jDispatchMonitor", "-e", "jDispatchMonitor", "h1svr:8006"]
+    #args = ["--tab", "-e", "bash -c 'sleep 8;jDispatcherMonitor {}'".format('h1svr:8006')]
     computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
                                                                       stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    #gnome_list.extend(args)
+
     #Everything should be running now, give it a bit of time to get going
     time.sleep(3)
 
