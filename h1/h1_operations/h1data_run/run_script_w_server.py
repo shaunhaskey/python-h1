@@ -269,28 +269,40 @@ def finish_checking_cro(proc):
     out, err = proc.communicate()
     return(proc.returncode)
 
-def start_servers(computer, prog_details, local=0):
+def start_servers(computer, prog_details, local=0, execute = True):
     '''If remote, make sure that the file jServer_XXX.sh or mdsip_XXX.sh where XXX is the port number exists
     because this essentially just runs that script. Weird work around for bash -l because ssh with command
     doesn't give a login shell - look into better ways of doing this later
     '''
     subproc_list = []
+    gnome_term_list = 
     for tmp_prog_details in prog_details:
         if local==0:
             args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", "ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
+            args = ["ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
+
         else:
             if tmp_prog_details[1]==None:
                 args = ["xterm", "-T", "%s %s"%(computer, tmp_prog_details[0]),"-e", tmp_prog_details[0]]
+                args = [tmp_prog_details[0]]
             else:
                 args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", tmp_prog_details[0], str(tmp_prog_details[1])]
+                args = [tmp_prog_details[0], str(tmp_prog_details[1])]
             #args = ["xterm", "-T", "%s jServer %d"%(computer,port),"-e", "jServer",str(port)]
         if tmp_prog_details[1]==None:
             print 'start %s on %s '%(tmp_prog_details[0], computer), args
         else:
             print 'start %s on %s : %d '%(tmp_prog_details[0], computer, tmp_prog_details[1]), args
-        subproc_list.append(subprocess.Popen(args, stdout=subprocess.PIPE, 
-                                             stderr=subprocess.PIPE, stdin=subprocess.PIPE))
-    return subproc_list
+        gnome_term_list.extend(['--tab','-e'])
+        gnome_term_list.extend('"{}"'.format(' '.join(args)))
+        if execute:
+            subproc_list.append(subprocess.Popen(args, stdout=subprocess.PIPE, 
+                                                 stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    if execute:
+        return subproc_list, gnome_term_list
+    else:
+        return [], gnome_term_list
+
 
 def kill_everything(computer_details):
     '''kill all the processes that were created as part of this script
@@ -475,6 +487,7 @@ class shot_engine():
 
 if __name__=='__main__':
     #Cro is set to single sweep after data is saved
+    print 'using python-h1 version'
     single_sweep = 1
     include_transmitter_check = 0
     store_rf_data_mdsplus = 1
@@ -526,11 +539,21 @@ if __name__=='__main__':
 
     #start all jServers ands mdsip servers that are required
     print '='*8, 'Starting all jServers on the required computers', '='*8
+
+    gnome_list = ['gnome-terminal']
     for i in computer_details.keys():
         if i==local_comp:
-            computer_details[i]['processes'] = start_servers(i, computer_details[i]['servers'], local=1)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=1, execute = True)
         else:
-            computer_details[i]['processes'] = start_servers(i, computer_details[i]['servers'], local=0)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=0, execute = True)
+        gnome_list.extend(tmp_list)
+    print gnome_list
+    #subproc = subprocess.Popen(gnome_list, stdout=subprocess.PIPE, 
+    #                           stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    #for i in computer_details.keys():
+    #    computer_details[i]['processes'] = [subproc]
+    #subprocess.call(gnome_string)
+
 
     time.sleep(2)
     #see if any jDispatcherIp and jDispatchMonitors are running and kill them if they are
