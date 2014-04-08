@@ -162,25 +162,36 @@ def kill_servers(computer, prog_details, local=0):
     print computer, args
     output,error = subprocess.Popen(args,stdout = subprocess.PIPE, stderr= subprocess.PIPE,env={'LANG':'C'}).communicate()
     output = output.splitlines()
+
+    kill_list = []
     for i in output:
         for tmp_prog_details in prog_details:
             truth = True
             for j in tmp_prog_details:
-                truth = truth and i.find(str(j))>=0
+                truth = truth and i.find(str(j))>=0 and i.find('tee')<0 and i.find('grep')<0
             #if i.find(tmp_prog_details[0])>0 and i.find(str(tmp_prog_details[1]))>0:
             if truth:
-                kill_pid = re.search('\d+',i).group()
-                print computer, tmp_prog_details, kill_pid
-                if local == 0 :
-                    print 'remote kill called'
-                    subprocess.call(['ssh', computer, 'kill -9 %s'%(kill_pid)])
-                #make sure it doesnt try to kill itself
-                elif local==1 and str(os.getpid())!=kill_pid:
-                    print 'local kill called'
-                    print os.getpid(), kill_pid
-                    subprocess.call(['kill', '-9', kill_pid])
-                else:
+                kill_pid = i.split()[1]
+                #kill_pid = re.search('\d+',i).group()
+                #print computer, tmp_prog_details, kill_pid
+                if local==1 and str(os.getpid()) == kill_pid:
                     pass
+                else:
+                    kill_list.append(kill_pid)
+    if local == 0 and len(kill_list) > 0:
+        print 'remote kill called'
+        subprocess.call(['ssh', computer, 'kill -9 {}'.format(' '.join(kill_list))])
+    #make sure it doesnt try to kill itself
+    elif local==1 and len(kill_list) > 0:
+        print 'local kill called'
+        #print os.getpid(), kill_pid
+        #print kill_list
+        args_list = ['kill', '-9']
+        args_list.extend(kill_list)
+        print args_list
+        subprocess.call(args_list)
+    else:
+        pass
 
 
 def start_checking_transmitters(transmitter_numbers):
@@ -269,28 +280,42 @@ def finish_checking_cro(proc):
     out, err = proc.communicate()
     return(proc.returncode)
 
-def start_servers(computer, prog_details, local=0):
+def start_servers(computer, prog_details, local=0, execute = True):
     '''If remote, make sure that the file jServer_XXX.sh or mdsip_XXX.sh where XXX is the port number exists
     because this essentially just runs that script. Weird work around for bash -l because ssh with command
     doesn't give a login shell - look into better ways of doing this later
     '''
     subproc_list = []
+    gnome_term_list = []
     for tmp_prog_details in prog_details:
         if local==0:
             args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", "ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
+            args = ["ssh", computer, "-t", "bash -l '%s_%d.sh'"%(tmp_prog_details[0], tmp_prog_details[1])]
+            term_title = "%s %s %d"%(computer[computer.find('@')+1:], tmp_prog_details[0], tmp_prog_details[1])
         else:
             if tmp_prog_details[1]==None:
                 args = ["xterm", "-T", "%s %s"%(computer, tmp_prog_details[0]),"-e", tmp_prog_details[0]]
+                args = [tmp_prog_details[0]]
+                term_title = "%s %s"%(computer[computer.find('@')+1:], tmp_prog_details[0]),"-e", tmp_prog_details[0]
             else:
                 args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", tmp_prog_details[0], str(tmp_prog_details[1])]
+                args = [tmp_prog_details[0], str(tmp_prog_details[1])]
+                term_title = "%s %s %d"%(computer[computer.find('@')+1:], tmp_prog_details[0], tmp_prog_details[1])
             #args = ["xterm", "-T", "%s jServer %d"%(computer,port),"-e", "jServer",str(port)]
         if tmp_prog_details[1]==None:
             print 'start %s on %s '%(tmp_prog_details[0], computer), args
         else:
             print 'start %s on %s : %d '%(tmp_prog_details[0], computer, tmp_prog_details[1]), args
-        subproc_list.append(subprocess.Popen(args, stdout=subprocess.PIPE, 
-                                             stderr=subprocess.PIPE, stdin=subprocess.PIPE))
-    return subproc_list
+        gnome_term_list.extend(['--tab','-t',term_title,'-e'])
+        gnome_term_list.extend(['''{}'''.format(' '.join(args))])
+        if execute:
+            subproc_list.append(subprocess.Popen(args, stdout=subprocess.PIPE, 
+                                                 stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    if execute:
+        return subproc_list, gnome_term_list
+    else:
+        return [], gnome_term_list
+
 
 def kill_everything(computer_details):
     '''kill all the processes that were created as part of this script
@@ -475,6 +500,7 @@ class shot_engine():
 
 if __name__=='__main__':
     #Cro is set to single sweep after data is saved
+    print 'using python-h1 version'
     single_sweep = 1
     include_transmitter_check = 0
     store_rf_data_mdsplus = 1
@@ -512,6 +538,9 @@ if __name__=='__main__':
     computer_details['prl@prl40']['servers'] = [('jServer',8010),('jServer',8011)]#,("/usr/local/mdsplus/bin/mdsip -s -p 8050 -h /usr/local/mdsplus/etc/mdsip.hosts",None)]
     computer_details['prl@prl45']['servers'] = [('jServer',8010),('mdsip',8004),('jServer',8011), ('jServer',8012)]
     computer_details['h1operator@h1svr']['programs'] = [('/usr/local/mdsplus/bin/jDispatcherIp', tree),('/usr/local/mdsplus/bin/jDispatchMonitor','prl40:8006'), ('run_script.py','python')]
+
+    computer_details['h1operator@h1svr']['programs'] = [('jDispatcherIp', tree),('jDispatchMonitor','h1svr:8006')]#, ('run_script.py','python')]
+
     computer_details['h1operator@h1svr']['servers'] = []
 
     ##################################################################################
@@ -526,29 +555,52 @@ if __name__=='__main__':
 
     #start all jServers ands mdsip servers that are required
     print '='*8, 'Starting all jServers on the required computers', '='*8
+
+    gnome_list = ['gnome-terminal']
     for i in computer_details.keys():
         if i==local_comp:
-            computer_details[i]['processes'] = start_servers(i, computer_details[i]['servers'], local=1)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=1, execute = False)
         else:
-            computer_details[i]['processes'] = start_servers(i, computer_details[i]['servers'], local=0)
+            computer_details[i]['processes'], tmp_list = start_servers(i, computer_details[i]['servers'], local=0, execute = False)
+        gnome_list.extend(tmp_list)
 
-    time.sleep(2)
+
+    #time.sleep(2)
     #see if any jDispatcherIp and jDispatchMonitors are running and kill them if they are
     print '='*8, 'Killing jDispatcherIp and jDispatchMonitor', '='*8
     kill_servers(local_comp, computer_details[local_comp]['programs'], local=1)
-    time.sleep(5)
+    time.sleep(3)
 
     #Start a local jDispatcherIp and jDispatchMonitor
     print '='*8, 'Starting jDispatcherIp and jDispatchMonitor', '='*8
     args = ["xterm", "-T", "jDispatcherIp", "-e", "jDispatcherIp", tree]
-    computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
-                                                                      stderr=subprocess.PIPE, stdin=subprocess.PIPE))
-    time.sleep(5)
+    args = ["--tab", "-t","jDispatcherIp", "-e", "bash -c 'sleep 3;jDispatcherIp {}'".format(tree)]
+    #computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
+    #                                                                  stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    #subprocess.call(gnome_string)
+    #time.sleep()
+    gnome_list.extend(args)
+
     args = ["xterm", "-T", "jDispatchMonitor", "-e", "jDispatchMonitor", "h1svr:8006"]
-    computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
-                                                                      stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+    args = ["--tab", '-t','jDispatchMonitor', "-e", "bash -c 'sleep 7;jDispatchMonitor {}'".format('h1svr:8006')]
+    #computer_details[local_comp]['processes'].append(subprocess.Popen(args, stdout=subprocess.PIPE, 
+    #                                                                  stderr=subprocess.PIPE, stdin=subprocess.PIPE))
+
+    gnome_list.extend(args)
+
+    print gnome_list
+    subproc = subprocess.Popen(gnome_list, stdout=subprocess.PIPE, 
+                               stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+
+    for i in computer_details.keys():
+        computer_details[i]['processes'] = [subproc]
+    computer_details[local_comp]['processes'] = [subproc]
+
+    #time.sleep(6)
+
+
     #Everything should be running now, give it a bit of time to get going
-    time.sleep(3)
+    time.sleep(7)
 
     #loop for running all the shots
     print '='*8, 'Starting shot looper', '='*8
@@ -587,14 +639,33 @@ if __name__=='__main__':
 
     # Start a thread with the server -- that thread will then start one
     # more thread for each request
-    GUI.main()
+    try:
+        GUI.main()
+    except KeyboardInterrupt:
+        print 'killing all subprocesses'
 
+    if killed_all!= 1:
+        TCP_server.shutdown()
+        kill_everything(computer_details)
+        for i in computer_details.keys():
+            if i==local_comp:
+                kill_servers(i, computer_details[i]['servers'], local=1)
+            else:
+                kill_servers(i, computer_details[i]['servers'], local=0)
+        kill_servers(local_comp, computer_details[local_comp]['programs'], local=1)
+        print 'Program finished'
+        
     #tidy up, but check to see if it already happened first
     #this one will probably happen because you have run out of shots
     #might be better to reset 'shot clock' and go back to the beginning
-    if killed_all != 1:
-        print 'killing all subprocesses'
-        kill_everything(computer_details)
-        TCP_server.shutdown()
-        print 'Program finished'
+    # if killed_all != 1:
+    #     print 'killing all subprocesses'
+    #     kill_everything(computer_details)
+    #     for i in computer_details.keys():
+    #         if i==local_comp:
+    #             kill_servers(i, computer_details[i]['servers'], local=1)
+    #         else:
+    #             kill_servers(i, computer_details[i]['servers'], local=0)
+    #     TCP_server.shutdown()
+    #     print 'Program finished'
 
