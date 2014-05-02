@@ -407,7 +407,8 @@ class ImaxData():
         '''Perform an FFT on the image and plot the results if asked to
         '''
         self.fft_values = np.fft.fft(self.image_array_cal, axis = 0)
-
+        #Multiply the non-DC ones by two because we only ever use the +'ve frequencies
+        self.fft_values[1:,:,:]*=2
         #The rest of this function is for plotting!
         n_subplots = self.fft_values.shape[0]/2
         n_cols = int(np.ceil(n_subplots**0.5))

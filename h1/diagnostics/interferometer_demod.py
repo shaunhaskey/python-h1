@@ -469,7 +469,7 @@ class interf_demod(object):
             fig.suptitle('predicted harmonic amps from bessel funcs (x), measured (o) - dividing by Q i exp(i n eps) for odd and C exp(i n eps)for even\nNote first 2 harmonics must agree perfectly because they are used to calc Q(0) and C(0). {}'.format(title_text))
             fig.canvas.draw(); fig.show()
 
-    def calculate_phase(self, phi1, odd, even, use_rfft = 0, clim = [0,5], show_fig = True, save_fig_name = None, times = None):
+    def calculate_phase(self, phi1, odd, even, use_rfft = 0, clim = [0,5], show_fig = True, save_fig_name = None, times = None, cmap = 'hot'):
         '''Calculate the actual phase shift caused by the plasma. Can use the rfft
         SRH: 5Nov2013
         '''
@@ -489,7 +489,7 @@ class interf_demod(object):
         self.output = +output
         if show_fig:
             self.im_fig, self.im_ax = pt.subplots(ncols = 2, sharey=True)
-            self.im =self.im_ax[0].imshow(np.abs(self.output),interpolation = 'nearest', aspect='auto',cmap = 'hot', extent=[self.t[0],self.t[-1],self.output.shape[0],0], origin = 'upper')
+            self.im =self.im_ax[0].imshow(np.abs(self.output),interpolation = 'nearest', aspect='auto',cmap = cmap, extent=[self.t[0],self.t[-1],self.output.shape[0],0], origin = 'upper')
             self.im_ax[0].set_xlabel('time (s)')
             self.im_ax[0].set_ylabel('Interferometer Channel')
             fig, ax = pt.subplots(ncols = 2); 
@@ -501,13 +501,16 @@ class interf_demod(object):
                 ax[1].text(epsilon_used[i], np.mean(self.output,axis = -1)[i], str(i))
             fig.canvas.draw(); fig.show()
         
-        if times==None: times = [0.02,0.04,0.063]
-        colours = ['b','g','k']
+        if times==None: times = [0.02,0.04,0.063, 0.085]
+        times = np.linspace(0.08,0.1,10)
+        colours = np.linspace(0.1, 0.9,len(times))
+        colours = ['{:.2f}'.format(i) for i in colours]
+        #colours = ['b','g','k']
         for col, t in zip(colours, times):
             t_loc = np.argmin(np.abs(self.t - t))
             plot_vals = np.abs(self.output[:,t_loc])<10
             if show_fig:
-                self.im_ax[1].plot(np.abs(self.output[:,t_loc][plot_vals]),np.arange(self.output.shape[0])[plot_vals],'{}x-'.format(col))
+                self.im_ax[1].plot(np.abs(self.output[:,t_loc][plot_vals]),np.arange(self.output.shape[0])[plot_vals],marker = 'x', linestyle = '-', color = col)
                 self.im_ax[0].vlines(t, self.output.shape[0],0, colors = col)
         if show_fig:
             self.im_ax[1].grid()
@@ -519,7 +522,7 @@ class interf_demod(object):
             cbar = pt.colorbar(self.im,ax = self.im_ax[0])
             cbar.set_label('plasma phase shift (rad)')
             if save_fig_name!=None:
-                self.im_fig.suptitle(save_fig_name.rstrip('.png'))
+                self.im_fig.suptitle(save_fig_name.replace('_','-').rstrip('.png'))
                 self.im_fig.savefig(save_fig_name)
             self.im_fig.canvas.draw(); self.im_fig.show()
 

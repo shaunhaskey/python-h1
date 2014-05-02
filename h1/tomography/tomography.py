@@ -245,7 +245,10 @@ class Tomography():
         im = ax2[7].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto')
         tmp = im.get_clim()
         max_val = np.max(np.abs(tmp))
-        im.set_clim([-max_val, max_val])
+        if n==[0] and m==[0]:
+            im.set_clim([0, max_val])
+        else:
+            im.set_clim([-max_val, max_val])
         #cbar_xsection = pt.colorbar(im, ax=[ax2[5],ax2[6],ax2[7]], orientation = 'horizontal', pad = 0.01, aspect = 20./3*2)
         cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
         cbar_xsection.set_label('Real (a. u.)')
@@ -412,7 +415,9 @@ class Tomography():
             gs.tight_layout(fig2, pad = 0.0001)
             #fig2.tight_layout(pad = 0.05)
             fig2.savefig(savefig_name+'.pdf', bbox_inches='tight',pad_inches=0.05)
-            fig2.savefig(savefig_name+'.eps', bbox_inches='tight',pad_inches=0.05)
+            #fig2.savefig(savefig_name+'.eps', bbox_inches='tight',pad_inches=0.05)
+            #fig2.savefig(savefig_name+'.svg', bbox_inches='tight',pad_inches=0.05)
+            #fig2.savefig(savefig_name+'.png', bbox_inches='tight',pad_inches=0.05)
         fig2.canvas.draw(); fig2.show()
 
 
@@ -480,7 +485,10 @@ class Tomography():
         im = ax2[7].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto')
         tmp = im.get_clim()
         max_val = np.max(np.abs(tmp))
-        im.set_clim([-max_val, max_val])
+        if n==[0] and m==[0]:
+            im.set_clim([0, max_val])
+        else:
+            im.set_clim([-max_val, max_val])
         #cbar_xsection = pt.colorbar(im, ax=[ax2[5],ax2[6],ax2[7]], orientation = 'horizontal', pad = 0.01, aspect = 20./3*2)
         cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
         cbar_xsection.set_label('Real (a. u.)')
@@ -854,30 +862,44 @@ class Tomography():
         fig.suptitle('{} top row : s, theta, phi; bottom row : abs, phase, real'.format(self.method))
         fig.canvas.draw(); fig.show()
 
-    def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10, inc_cbar=0, pub_fig = False, save_fig = None, inc_profile=False):
+    def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10, inc_cbar=0, pub_fig = False, save_fig = None, inc_profile = False):
         #Get the boozer locations to interpolate
+        print 'hello'
         cm_to_inch=0.393701
         import matplotlib as mpl
         old_rc_Params = mpl.rcParams
-        mpl.rcParams['font.size']=8.0
-        mpl.rcParams['axes.titlesize']=8.0#'medium'
-        mpl.rcParams['xtick.labelsize']=8.0
-        mpl.rcParams['ytick.labelsize']=8.0
-        mpl.rcParams['lines.markersize']=5.0
-        mpl.rcParams['savefig.dpi']=300
+        mpl.rcParams['font.size'] = 8.0
+        mpl.rcParams['axes.titlesize'] = 8.0#'medium'
+        mpl.rcParams['xtick.labelsize'] = 8.0
+        mpl.rcParams['ytick.labelsize'] = 8.0
+        mpl.rcParams['lines.markersize'] = 5.0
+        mpl.rcParams['savefig.dpi'] = 300
         if n.__class__ == int:
             n = [n]
             m = [m]
         if inc_profile:
             fig = pt.figure()
             ax = []
-            ax.append(pt.subplot2grid((4,1), (0,0), rowspan=2))
-            ax.append(pt.subplot2grid((4,1), (2,0)))
-            ax.append(pt.subplot2grid((4,1), (3,0)))
+            ax.append(pt.subplot2grid((8,6), (0,0), rowspan=4, colspan = 3))
+            ax.append(pt.subplot2grid((8,6), (4,0), rowspan = 2, colspan = 3))
+            ax[-1].grid(True)
+            ax.append(pt.subplot2grid((8,6), (6,0), rowspan = 2, colspan = 3))
+            ax[-1].grid(True)
+            ax_im1 = pt.subplot2grid((8,6), (0,3), rowspan = 7)
+            ax_im2 = pt.subplot2grid((8,6), (0,4), rowspan = 7)
+            ax_im3 = pt.subplot2grid((8,6), (0,5), rowspan = 7)
+            cbar_ax = pt.subplot2grid((8,6), (7,3), rowspan = 1, colspan = 3)
+            aspect = 'auto'
+            
+            #ax_im1.set_aspect(aspect)
+            #ax_im2.set_aspect(aspect)
+            #ax_im3.set_aspect(aspect)
+
+
         else:
             fig, ax = pt.subplots()
             ax = [ax]
-        fig.set_figwidth(8.48*cm_to_inch)
+        fig.set_figwidth(8.48*cm_to_inch*1.6)
         fig.set_figheight(8.48*1.6*cm_to_inch)
         s_vals = (s_values[1:]+s_values[0:-1])/2
         wave_field = 0
@@ -891,35 +913,95 @@ class Tomography():
         t = np.linspace(0,2.*np.pi,n_images,endpoint=False)
         image_list = []
         image_extent = [LOS_object.r_grid[0,0], LOS_object.r_grid[0,-1], LOS_object.z_grid[0,0], LOS_object.z_grid[-1,0]]
+        print 'hello'
         for i, t_cur in enumerate(t):
             wave_field_tmp = wave_field * np.exp(1j*t_cur)
+
             ax[0].cla()
+            ax_im1.cla()
+            ax_im2.cla()
+            ax_im3.cla()
+            start_loc, end_loc = [LOS_object.start_indices[1], LOS_object.end_indices[1]]
+            start_loc = 0; end_loc = self.all_measurements.shape[0]
+            masked_array1 = np.ma.array(np.real(self.all_measurements* np.exp(1j*t_cur))[start_loc:end_loc,:], mask = np.invert(self.valid_channels[start_loc:end_loc,:]))
+
+            
+            center = self.valid_channels.shape[1]/2
+            edge = center/4.
+
+
+            #im_ax1 = ax_im1.imshow(np.real(self.all_measurements* np.exp(1j*t_cur))[start_loc:end_loc,:], cmap = 'jet', aspect = 'auto')
+            tmp_cmap = 'RdBu'
+
+            im_ax1 = ax_im1.imshow(masked_array1, cmap = tmp_cmap, aspect = aspect, origin='upper',interpolation='nearest')
+            if i==0:
+                tmp_im = self.all_measurements * 0
+                tmp_im[self.valid_channels] = self.re_projection
+                max_val = np.max(np.abs(im_ax1.get_clim()))*1.15
+                im_clim = [-max_val, max_val]
+            masked_array2 = np.ma.array(np.real(tmp_im*np.exp(1j*t_cur))[start_loc:end_loc,:], mask = np.invert(self.valid_channels[start_loc:end_loc,:]))
+            masked_array3 = np.ma.array(np.real(self.all_measurements* np.exp(1j*t_cur))[start_loc:end_loc,:] - np.real(tmp_im*np.exp(1j*t_cur))[start_loc:end_loc,:], mask = np.invert(self.valid_channels[start_loc:end_loc,:]))
+            im_ax2 = ax_im2.imshow(masked_array2, cmap = tmp_cmap, aspect = aspect, origin='upper',interpolation='nearest')
+            im_ax3 = ax_im3.imshow(masked_array3, cmap = tmp_cmap, aspect = aspect, origin='upper',interpolation='nearest')
+            ax_im1.set_title('Expt')
+            ax_im2.set_title('Fit')
+            ax_im3.set_title('Error')
+            im_ax2.set_clim(im_clim)
+            im_ax1.set_clim(im_clim)
+            im_ax3.set_clim(im_clim)
+            xval = np.mean([center])
+            L = float(self.valid_channels.shape[0]-40)
+            for j in [ax_im1, ax_im2]: j.vlines(xval, L/2 - L/6, L/2 + L/6)
+            ax_im1.set_xlim([center+edge*0.90, center-edge*1.25])
+            ax_im2.set_xlim([center+edge*0.90, center-edge*1.25])
+            ax_im3.set_xlim([center+edge*0.90, center-edge*1.25])
+            for j in [ax_im1, ax_im2, ax_im3]:
+                j.set_ylim([0,self.valid_channels.shape[0]-40])
+                j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
             im = ax[0].imshow(np.ma.array(np.real(wave_field_tmp), mask = LOS_object.grid_mask), interpolation = 'nearest', extent=image_extent, aspect='auto',origin='lower')
             tmp = im.get_clim()
             max_val = np.max(np.abs(tmp))
             im.set_clim([-max_val, max_val])
+
+
             if inc_cbar and i==0:
                 from mpl_toolkits.axes_grid1 import make_axes_locatable
                 divider = make_axes_locatable(ax[0])
                 cax = divider.append_axes("right", size="10%", pad=0.05)
                 cbar = pt.colorbar(im, cax=cax)
                 cbar.set_label('Wave Amplitude (a.u)')
+
+                #divider = make_axes_locatable(ax[0])
+                #cax = divider.append_axes("right", size="10%", pad=0.05)
+                #cbar = pt.colorbar(im, cax=cax)
+                #cbar.set_label('Wave Amplitude (a.u)')
+                cbar2 = pt.colorbar(im_ax1, cax = cbar_ax, orientation = 'horizontal')
+                cbar2.set_label('LOS Amplitude (a.u)')
+
             if i==0:
                 if inc_profile:
+                    norm = False
+                    if LOS_object.radial_s_spacing:
+                        plot_radial_structure(self.T, np.sqrt(LOS_object.segment_midpoints), n, m, prov_ax = [ax[1],ax[2]], norm = norm, extra_txt = '', single_mode = None, max_phase = 0)
+                        ax[2].set_xlabel('$\sqrt{s}$')
+                    else:
+                        plot_radial_structure(self.T, LOS_object.segment_midpoints, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = '', single_mode = None, max_phase = 0)
+                        ax[2].set_xlabel('s')
                     start = 0
-                    for n_cur, m_cur in zip(n,m):
-                        end = start + increment
-                        cur_T = self.T[start:end]
-                        start = +end
-                        ax[1].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='{},{}'.format(n_cur, m_cur))
-                        ax[2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur))
+                    # for n_cur, m_cur in zip(n,m):
+                    #     end = start + increment
+                    #     cur_T = self.T[start:end]
+                    #     start = +end
+                    #     ax[1].plot(LOS_object.segment_midpoints, np.abs(cur_T), label='{},{}'.format(n_cur, m_cur),'-x')
+                    #     ax[2].plot(LOS_object.segment_midpoints, np.angle(cur_T), label='Arg({},{})'.format(n_cur, m_cur),'-x')
                     ax[1].legend(loc='best')
                     ax[1].set_xlim([0,1])
                     ax[2].set_xlim([0,1])
                     ax[2].set_ylabel('Phase (rad)')
                     ax[1].set_ylabel('Amplitude (a.u)')
-                    ax[2].set_xlabel('s')
-                    ax[2].set_ylim([-np.pi,np.pi])
+                    ax[2].set_xlabel('$\sqrt{s}$')
+                    #ax[2].set_ylim([-np.pi,np.pi])
+                    ax[2].set_ylim([-7,0])
             loc = LOS_object.valid_channels.shape[1]/2
             start_loc, end_loc, style = [LOS_object.start_indices[1], LOS_object.end_indices [1],'k-']
             tmp_reproj = +self.all_measurements
@@ -941,8 +1023,10 @@ class Tomography():
                     #if min_z == None: min_z = +z_val[1]
                     #max_z = +z_val[1]
                     if i==0:
-                        meas_vals.append(self.all_measurements[j - start_loc, loc])
-                        reproj_vals.append(tmp_reproj[j - start_loc, loc])
+                        #meas_vals.append(self.all_measurements[j - start_loc, loc])
+                        #reproj_vals.append(tmp_reproj[j - start_loc, loc])
+                        meas_vals.append(self.all_measurements[j , loc])
+                        reproj_vals.append(tmp_reproj[j , loc])
                         z_vals.append(+z_val[1])
                         scale_fact = 0.05/np.max(np.abs(meas_vals))
             #tmp_fig, tmp_ax = pt.subplots()
@@ -959,6 +1043,8 @@ class Tomography():
             ax[0].set_xlim([1,1.45])
             ax[0].plot([1.4]*len(z_vals),np.array(z_vals))
             ax[0].set_ylim([-0.25,0.25])
+            ax[0].set_aspect('equal')
+            ax[0].set_title('$\kappa_h = 0.83$ LOS projections,\nblue: experiment, green: resconstruction')
             if save_fig!=None:
                 xticks = ax[0].xaxis.get_major_ticks()
                 for tmp_tick in range(0,len(xticks),2):
@@ -967,15 +1053,15 @@ class Tomography():
                     fig.tight_layout()
                     fig.savefig(save_fig+'.pdf')
                     fig.savefig(save_fig+'.eps')
+            fig.savefig('{:02d}.png'.format(i),dpi=200)
             fig.canvas.draw(); fig.show()
-            fig.savefig('{:02d}.png'.format(i))
 
             image_list.append('{:02d}.png'.format(i))
         if save_name!=None:
             image_string = ''
             for i in image_list: image_string+=i + ' '
             print image_string
-            os.system('convert -delay {} -loop 0 {} {}'.format(delay, image_string, save_name))
+            os.system('convert -delay {} -loop 0 {} {}'.format(delay*32/float(n_images), image_string, save_name))
             os.system('zip {} {}'.format(save_name.rstrip('gif')+'zip', image_string))
     def plot_convergence(self):
         fig, ax = pt.subplots(nrows = 2)
@@ -2404,6 +2490,7 @@ def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count
     else:
         return tomo_modes_n,tomo_modes_m,error[0]
 
+
 def _single_multiproc_wrapper(arguments):
     return single(*arguments)
 
@@ -2748,7 +2835,7 @@ def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, 
         print filename
     fig.canvas.draw(); fig.show()
 
-def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid'):
+def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid', max_phase = np.pi):
 
     plot_dict = {'linestyle':linestyle, 'marker':marker}
     if color!=None: plot_dict['color'] = color
@@ -2785,8 +2872,9 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             #ax[0].text(max_s, max_amp, extra_txt)
             angs = np.unwrap(np.angle(cur_T))
             start_pt = angs.shape[0]/3
-            while np.mean(angs[start_pt:])>np.pi: angs += -2.*np.pi
-            while np.mean(angs[start_pt:])<-np.pi: angs += 2.*np.pi
+            while np.mean(angs[start_pt:])>max_phase: angs += -2.*np.pi
+            while np.mean(angs[start_pt:])<(max_phase - 2.*np.pi): angs += 2.*np.pi
+            print np.sum(cur_T), np.abs(np.sum(cur_T)), np.angle(np.sum(cur_T))
             ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
             ax[0].legend(loc='best', prop={'size':6})
@@ -2837,7 +2925,7 @@ def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, f
         tomo_inv.plot_reprojection_comparison_extrap_diff(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_diff_'+filename)
     return tomo_inv
 
-def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True, method = 'Direct'):
+def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True, method = 'Direct', plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, ):
     kh_string = '{:.2f}'.format(kh).replace('.','_')
     filename = 'kh_{}_'.format(kh_string)
     for i, j in zip(tomo_modes_n_best, tomo_modes_m_best):
@@ -2847,12 +2935,14 @@ def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answ
     #tomo.plot_error_multi_list_single(error_multi_list.errors,filename='kh_{}_helicity_check'.format(kh_string),single_m=-3)
     print tomo_orient
     if run_dI_I:
-        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = tomo_DC)
+        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = tomo_DC)
     else:
         tomo_dI = None
-    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, plot_wave_animation = True, tomo_DC = None)
+    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = None)
     if make_animation:
-        tomo_norm.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,answer.s_values, n_images = 32, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation.gif',delay=10)
+        print 'start animation'
+        #tomo_norm.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,answer.s_values, n_images = 24, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation.gif',delay=10)
+        tomo_dI.plot_wave_field_animation(tomo_modes_n_best, tomo_modes_m_best, answer,answer.s_values, n_images = 24, inc_cbar = 1, pub_fig=True, save_fig='wave_bean_'+filename, inc_profile = 1, save_name = filename+'_animation_dI.gif',delay=10)
     mode_output_data = {'T':tomo_norm.T, 'segment_midpoints':answer.segment_midpoints,'n':tomo_modes_n_best,'m':tomo_modes_m_best}
     inv_prof_fname = filename + 'mode_norm.pickle'
     pickle.dump(mode_output_data, file(inv_prof_fname,'w'))
