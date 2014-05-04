@@ -1250,8 +1250,8 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     phi_min =CCD_phi - 30; phi_max = CCD_phi+30;n_phi = 15;no_theta = 35;n_interp_pts = 100
 
     patch =  SurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
-
-    answer = LOS(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
+    answer = LOS()
+    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
         mayavi_fig = mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1), size=(512, 512))
