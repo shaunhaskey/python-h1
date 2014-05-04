@@ -1230,13 +1230,14 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
 
 
+
 def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0):
     '''Convenience function containing the required geometry for the
     interferometer
 
     SRH: 12July2013
     '''
-    CCD_phi = 240; CCD_R = 2.4
+    CCD_phi = 120; CCD_R = 2.4
     CCD_z = 0./100; CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
     CCD_position = np.array([CCD_x, CCD_y, CCD_z])
     v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
@@ -1249,9 +1250,59 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     plot_length = 2./CCD_focal_distance
     phi_min =CCD_phi - 30; phi_max = CCD_phi+30;n_phi = 15;no_theta = 35;n_interp_pts = 100
 
-    patch =  SurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
+    plot_length = 75
+    get_intersections = True
+    patch_pickle = None
+
+    patch_object = None
+    if get_intersections:
+        if patch_object != None:
+            print(' Using the patch object...')
+            patch = patch_object
+        elif patch_pickle == None:
+            print(' Generating patch surface...')
+            patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=-1)
+        else:
+            print(' Loading patch surface from pickle file...')
+            patch = pickle.load(file(patch_pickle,'r'))
+    else:
+        patch = None
+    print ' CCD_xlength:{}, CCD_ylength:{}, focal_distance:{}, x_pixels:{}, y_pixels:{}'.format(CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y)
+
     answer = LOS()
-    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
+    answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None, get_intersections = True)
+
+    if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
+        import mayavi.mlab as mlab
+        mayavi_fig = mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1), size=(512, 512))
+        if plot_patch : answer.patch.plot_mesh()
+        if plot_pfc : h1_plot.plot_pfc()
+        if plot_tfc : h1_plot.plot_tfc([11,12,13])
+        if plot_intersections : answer.plot_intersections()
+        if plot_LOS : answer.plot_LOS(grad_mult = plot_length,plot_arguments={'color':(0,1,1), 'line_width':2.5})
+    return answer
+
+def interferometer_old(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0):
+    '''Convenience function containing the required geometry for the
+    interferometer
+
+    SRH: 12July2013
+    '''
+    CCD_phi = 240; CCD_R = 2.4
+    CCD_z = 0./100; CCD_x = CCD_R*np.cos(np.deg2rad(CCD_phi)); CCD_y = CCD_R*np.sin(np.deg2rad(CCD_phi))
+    CCD_position = np.array([CCD_x, CCD_y, CCD_z])
+    v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
+    u_hat = np.array([0,0,1])
+    CCD_L = 40./100
+    CCD_x = 0.001; CCD_y = CCD_L
+    CCD_pixels_x = 1; CCD_pixels_y = 21
+    CCD_focal_distance = 10000
+    plot_length = 2./CCD_focal_distance
+    phi_min =CCD_phi - 30; phi_max = CCD_phi+30;n_phi = 15;no_theta = 35;n_interp_pts = 100
+
+    patch =  SurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename)
+
+    answer = LOS(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None)
     if plot_LOS or plot_patch or plot_intersections or plot_pfc or plot_tfc:
         import mayavi.mlab as mlab
         mayavi_fig = mlab.figure(1, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1), size=(512, 512))

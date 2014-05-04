@@ -236,7 +236,8 @@ class Tomography():
 
         if include_lines:
             loc = LOS_object.valid_channels.shape[1]/2
-            start_loc, end_loc, style = [LOS_object.start_indices[1], LOS_object.end_indices [1],'k-']
+            ind = 1 if len(LOS_object.start_indices)>1 else 0
+            start_loc, end_loc, style = [LOS_object.start_indices[ind], LOS_object.end_indices [ind],'k-']
             LOS_r, LOS_z, meas_vals, reproj_vals, z_vals = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, None, r_val = np.array([0.5,1.5]))
             ax2[7].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
 
@@ -2658,7 +2659,6 @@ def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, f
 
     SRH: 12Feb2014
     '''
-
     tomo_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap, answer)[3]
     if plot_old_combo:
         tomo_inv.plot_lots_of_things(tomo_modes_n, tomo_modes_m, answer, cut_values=cut_values)
