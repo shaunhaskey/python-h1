@@ -186,7 +186,7 @@ class Tomography():
             fig2.savefig(savefig_name+'.eps')
         fig2.canvas.draw(); fig2.show()
 
-    def plot_reprojection_comparison_extrap_diff(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name = None, include_lines = True, decimate_lines = 10, tomo_DC = None, dI_I = False):
+    def plot_reprojection_comparison_extrap_diff(self, n, m, LOS_object, valid_channels, all_measurements, geom_matrix, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name = None, include_lines = True, decimate_lines = 10, tomo_DC = None, dI_I = False,):
         '''This generates the plots that are in the paper
 
         SRH: 4May2014
@@ -194,42 +194,105 @@ class Tomography():
         #Setup axes and figure
         fig2 = pt.figure()
         if n.__class__ == int: n = [n];m = [m]
-        if pub_fig: gen_funcs.setup_publication_image(fig2, height_prop = 1., fig_height = 8.48*1.25, single_col = True, fig_width = 8.48*2, replacement_kwargs = None)
         ax2 = []
-        gs = gridspec.GridSpec(9,7)
-        ax2.append(pt.subplot(gs[:8,2]))
-        for i in range(3,7): ax2.append(pt.subplot(gs[:8,i], sharex = ax2[0],sharey = ax2[0]))
-        for i,j in zip([0,2,4], [2,4,8]): ax2.append(pt.subplot(gs[i:j,0:2]))
-        cbar_wave_ax, cbar_phase_ax, cbar_amp_ax = [pt.subplot(gs[8,i:j]) for i,j in zip([0,2,4], [2,4,7])]
-        [phase_exp_ax, phase_best_ax, amp_exp_ax, amp_best_ax, error_ax, foo1, foo2, foo3] = ax2
-
+        inc_phase_plots = False if (n==[0] and m==[0]) else True
+        n_cols = 2 + 2*inc_phase_plots + 3 
+        # *n_cols/7
+        if n_cols == 5:
+            width = 2*6/7.
+        else:
+            width = 2
+        if pub_fig: gen_funcs.setup_publication_image(fig2, height_prop = 1., fig_height = 8.48*1.25, single_col = True, fig_width = 8.48*2, replacement_kwargs = None)
+        gs = gridspec.GridSpec(9,n_cols)
+        i = 0; kwargs = {}; image_strip_ax = []
+        if inc_phase_plots:
+            amp_ax = pt.subplot(gs[0:2,0:2])
+            phase_ax = pt.subplot(gs[2:4,0:2])
+            pol_ax = pt.subplot(gs[4:8,0:2])
+            profile_ax = [amp_ax, phase_ax]
+        else:
+            amp_ax = pt.subplot(gs[0:3,0:2])
+            pol_ax = pt.subplot(gs[3:8,0:2])
+            profile_ax = [amp_ax,]
+        #for j in [amp_ax, phase_ax, pol_ax]: ax2.append(j)
+        i += 2
+        if inc_phase_plots:
+            cbar_phase_ax = pt.subplot(gs[8,i:i+2])
+            ax2.append(pt.subplot(gs[:8,i], **kwargs))
+            kwargs = {'sharex': ax2[-1],'sharey' : ax2[-1]}
+            ax2.append(pt.subplot(gs[:8,i+1], **kwargs))
+            i += 2
+            phase_exp_ax, phase_best_ax = [ax2[-2], ax2[-1]]
+            image_strip_ax.append(phase_exp_ax)
+            image_strip_ax.append(phase_best_ax)
+        cbar_amp_ax = pt.subplot(gs[8,i:i+3])
+        for i in range(i,i+3): 
+            ax2.append(pt.subplot(gs[:8,i], **kwargs))
+            if i>=2:kwargs = {'sharex': ax2[-1],'sharey' : ax2[-1]}
+            image_strip_ax.append(ax2[-1])
+        amp_exp_ax, amp_best_ax, error_ax = [ax2[-3], ax2[-2], ax2[-1]]
+        #cbar_phase_ax = pt.subplot(gs[8,4:7])
+        cbar_wave_ax = pt.subplot(gs[8, 0:2])
+        #cbar_wave_ax, cbar_phase_ax, cbar_amp_ax = [pt.subplot(gs[8,i:j]) for i,j in zip([0,2,4], [2,4,7])]
+        #ax2.append(pt.subplot(gs[:8,i]))
+        #for i in range(3,7): ax2.append(pt.subplot(gs[:8,i], sharex = ax2[0],sharey = ax2[0]))
+        #for i,j in zip([0,2,4], [2,4,8]): ax2.append(pt.subplot(gs[i:j,0:2]))
+        #cbar_wave_ax, cbar_phase_ax, cbar_amp_ax = [pt.subplot(gs[8,i:j]) for i,j in zip([0,2,4], [2,4,7])]
+        #[phase_exp_ax, phase_best_ax, amp_exp_ax, amp_best_ax, error_ax, foo1, foo2, foo3] = ax2
         #wave in a poloidal cross section, and radial functions
         norm = False
         s_ax,s_x_label = (np.sqrt(LOS_object.segment_midpoints),'$\sqrt{s}$') if LOS_object.radial_s_spacing else (LOS_object.segment_midpoints, 's')
         extra_txt = '' if dI_I==False else 'dI/I '
-        plot_radial_structure(self.T, s_ax, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = extra_txt, single_mode = None)#max_phase = 0)
-        wave_field = self.calc_wave_field_phasors(n, m, LOS_object, LOS_object.segment_midpoints, tomo_DC = tomo_DC)
+        #plot_radial_structure(self.T, s_ax, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = extra_txt, single_mode = None)#max_phase = 0)
+        plot_radial_structure(self.T, s_ax, n, m, prov_ax = profile_ax, norm = norm, extra_txt = extra_txt, single_mode = None)
+        #wave_field = self.calc_wave_field_phasors(n, m, LOS_object, LOS_object.segment_midpoints, tomo_DC = tomo_DC)
+        wave_field = self.calc_wave_field_phasors(n, m, LOS_object, LOS_object.segment_midpoints, tomo_DC = None)
         wave_field_phasors = np.ma.array(wave_field, mask = LOS_object.grid_mask)
         image_extent = [LOS_object.r_grid[0,0], LOS_object.r_grid[0,-1], LOS_object.z_grid[0,0], LOS_object.z_grid[-1,0]]
         pol_clim = np.max(np.abs(wave_field_phasors))
         pol_clim = [0, +pol_clim] if (n==[0] and m==[0]) else [-pol_clim, +pol_clim]
-        im = ax2[7].imshow(np.real(wave_field_phasors), interpolation = 'nearest', extent=image_extent, aspect='auto')
+        #im = ax2[7].imshow(np.real(wave_field_phasors), interpolation = 'nearest', extent=image_extent, aspect='auto')
+        im = pol_ax.imshow(np.real(wave_field_phasors), interpolation = 'nearest', extent=image_extent, aspect='equal')
         im.set_clim(pol_clim)
         cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
-        cbar_xsection.set_label('Real (a. u.)')
-        ax2[7].set_xlabel('R (m)'); ax2[7].set_ylabel('Z (m)')
-        ax2[5].set_title('Tomographic Reconstruction')
-        ax2[7].set_xlim([1,1.4]); ax2[7].set_ylim([-0.25,0.25])
-        cbar_xsection.set_ticks(np.round(np.linspace(im.get_clim()[0],im.get_clim()[1],7),1)[0:-1])
-        if norm: ax2[5].set_ylim([0,0.12])
-        for i in ax2[5:7]:i.set_xlabel(s_x_label); i.set_xlim([0,1])
+        tmp_extra_txt = extra_txt
+        if extra_txt!='': tmp_extra_txt = '({})'.format(extra_txt)
+        cbar_xsection.set_label('Real{} (a. u.)'.format(tmp_extra_txt,))
+        #cbar_xsection.set_label('Real (a. u.)')
+        #ax2[7].set_xlabel('R (m)'); ax2[7].set_ylabel('Z (m)')
+        pol_ax.set_xlabel('R (m)'); pol_ax.set_ylabel('Z (m)')
+        #ax2[5].set_title('Tomographic Reconstruction')
+        title_count = 0
+        amp_ax.set_title('({}) Tomographic Reconstruction'.format(chr(title_count + 97)))
+        title_count += 1
+        #ax2[7].set_xlim([1,1.4]); ax2[7].set_ylim([-0.25,0.25])
+        pol_ax.set_xlim([1,1.4]); pol_ax.set_ylim([-0.25,0.25])
+        #gen_funcs.cbar_ticks(cbar_xsection, n_ticks = 5)
+        cbar_xsection.set_ticks(np.round(np.linspace(im.get_clim()[0],im.get_clim()[1],6),2)[0:-1])
+        
+        #if norm: ax2[5].set_ylim([0,0.12])
+        if norm: amp_ax.set_ylim([0,0.12])
+        #for i in ax2[5:7]:i.set_xlabel(s_x_label); i.set_xlim([0,1])
+        for i in profile_ax:i.set_xlabel(s_x_label); i.set_xlim([0,1])
         #ax2[5].legend(loc='center left')
-        ax2[5].legend(loc='best')
-        for i in ax2[5:8]: gen_funcs.setup_axis_publication(i, n_yticks = 5)
-        gen_funcs.setup_axis_publication(ax2[5], n_xticks = 5)
-        ax2[5].text(0.85,0.83*ax2[5].get_ylim()[1],'(a)')
-        ax2[7].text(1.35,0.2,'(c)')
-        ax2[6].text(0.85,(ax2[6].get_ylim()[1] - ax2[6].get_ylim()[0])*0.85 + ax2[6].get_ylim()[0],'(b)')
+        #ax2[5].legend(loc='best')
+        amp_ax.legend(loc='best', fontsize = 7)
+        #for i in ax2[5:8]: gen_funcs.setup_axis_publication(i, n_yticks = 5)
+        for i in image_strip_ax: gen_funcs.setup_axis_publication(i, n_yticks = 5)
+        #gen_funcs.setup_axis_publication(ax2[5], n_xticks = 5)
+        for i in profile_ax: gen_funcs.setup_axis_publication(i, n_xticks = 5, n_yticks = 5)
+        gen_funcs.setup_axis_publication(pol_ax, n_xticks = 5, n_yticks = 5)
+        #ax2[5].text(0.85,0.83*ax2[5].get_ylim()[1],'(a)')
+        #ax2[7].text(1.35,0.2,'(c)')
+        #ax2[6].text(0.85,(ax2[6].get_ylim()[1] - ax2[6].get_ylim()[0])*0.85 + ax2[6].get_ylim()[0],'(b)')
+        #title_count = 0
+        #amp_ax.text(0.85,0.83*amp_ax.get_ylim()[1],'({})'.format(chr(title_count + 97)))
+        #title_count += 1
+        if inc_phase_plots: 
+            phase_ax.text(0.85,(phase_ax.get_ylim()[1] - phase_ax.get_ylim()[0])*0.85 + phase_ax.get_ylim()[0],'({})'.format(chr(title_count + 97)))
+            title_count += 1
+        pol_ax.text(1.35,0.2,'({})'.format(chr(title_count + 97)))
+        title_count += 1
         measurements = all_measurements[valid_channels]
         valid_channels = valid_channels
         n_measurements, n_regions = geom_matrix.shape
@@ -239,8 +302,8 @@ class Tomography():
             ind = 1 if len(LOS_object.start_indices)>1 else 0
             start_loc, end_loc, style = [LOS_object.start_indices[ind], LOS_object.end_indices [ind],'k-']
             LOS_r, LOS_z, meas_vals, reproj_vals, z_vals = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, None, r_val = np.array([0.5,1.5]))
-            ax2[7].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
-
+            #ax2[7].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
+            pol_ax.plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
         #Phasors arrays for the image sets
         best_fit = self.all_measurements * 0
         best_fit[self.valid_channels] = self.re_projection
@@ -253,31 +316,48 @@ class Tomography():
 
         im1_a = amp_exp_ax.imshow(np.abs(meas_phasors),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
         im2_a = amp_best_ax.imshow(np.abs(best_phasors),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
-        im1_p = phase_exp_ax.imshow(np.arctan2(meas_phasors.imag,meas_phasors.real),origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
-        im2_p = phase_best_ax.imshow(np.arctan2(best_phasors.imag,best_phasors.real),origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
         amp_diff = error_ax.imshow(np.abs(error_phasors),origin='upper', aspect='auto',interpolation='nearest', cmap=amp_cmap)
+        if inc_phase_plots:
+            im1_p = phase_exp_ax.imshow(np.arctan2(meas_phasors.imag,meas_phasors.real),origin='upper',aspect='auto',interpolation='nearest',cmap='RdBu')
+            im2_p = phase_best_ax.imshow(np.arctan2(best_phasors.imag,best_phasors.real),origin='upper', aspect='auto',interpolation='nearest', cmap='RdBu')
 
-        for i in [im1_p, im2_p]: i.set_clim([-np.pi,np.pi])
+
+        if inc_phase_plots:
+            for i in [im1_p, im2_p]: i.set_clim([-np.pi,np.pi])
         for i in [im1_a, im2_a, amp_diff]: i.set_clim([0,im1_a.get_clim()[1]])
 
         cbar2 = pt.colorbar(im1_a,cax = cbar_amp_ax, orientation = 'horizontal')
         cbar2.set_ticks(np.round(np.linspace(im1_a.get_clim()[0],im1_a.get_clim()[1],7),1)[0:-1])
         cbar2.set_label('Amp (a.u)')
-        cbar3 = pt.colorbar(im1_p,cax = cbar_phase_ax, orientation = 'horizontal')
-        cbar3.set_ticks(np.round(np.linspace(-np.pi,np.pi,7),1)[0:-1])
-        cbar3.set_ticks([-np.pi,0,np.pi])
-        cbar3.ax.set_xticklabels(['$-\pi$', '$0$','$\pi$'])
-        cbar3.set_label('Phase (rad)')
-        amp_exp_ax.set_title('(f)Experiment')
-        amp_best_ax.set_title('(g)Best Fit')
-        phase_exp_ax.set_title('(d)Experiment')
-        phase_best_ax.set_title('(e)Best Fit')
-        error_ax.set_title('(h)Error')
+        
+        if inc_phase_plots:
+            cbar3 = pt.colorbar(im1_p,cax = cbar_phase_ax, orientation = 'horizontal')
+            cbar3.set_ticks(np.round(np.linspace(-np.pi,np.pi,7),1)[0:-1])
+            cbar3.set_ticks([-np.pi,0,np.pi])
+            cbar3.ax.set_xticklabels(['$-\pi$', '$0$','$\pi$'])
+            cbar3.set_label('Phase (rad)')
+            phase_exp_ax.set_title('({})Experiment'.format(chr(title_count+97)))
+            title_count += 1 
+            phase_best_ax.set_title('({})Best Fit'.format(chr(title_count+97)))
+            title_count += 1 
+
+        amp_exp_ax.set_title('({})Experiment'.format(chr(title_count+97)))
+        title_count += 1 
+        amp_best_ax.set_title('({})Best Fit'.format(chr(title_count+97)))
+        title_count += 1 
+        error_ax.set_title('({})Error'.format(chr(title_count+97)))
+        title_count += 1 
         center = valid_channels.shape[1]/2
         edge = center/4.
-        for j in ax2[0:5]:j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
-        for j in ax2:j.grid()
-        for i in ax2[0:5]: i.set_xlim([center+edge*0.85, center-edge*1.2])
+        #for j in ax2[0:5]:j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+        for j in image_strip_ax:
+            j.tick_params(axis='both',which='both',labelbottom='off',labelleft='off')
+            j.set_xlim([center+edge*0.85, center-edge*1.2])
+        #for j in ax2:j.grid()
+        for j in image_strip_ax:j.grid()
+        pol_ax.grid()
+        for i in profile_ax: i.grid()
+        #for i in ax2[0:5]: i.set_xlim([center+edge*0.85, center-edge*1.2])
         amp_exp_ax.set_ylim([0,valid_channels.shape[0]-40])
         if savefig_name!=None:
             gs.tight_layout(fig2, pad = 0.0001)
@@ -332,7 +412,6 @@ class Tomography():
             im.set_clim([-max_val, max_val])
         #cbar_xsection = pt.colorbar(im, ax=[ax2[5],ax2[6],ax2[7]], orientation = 'horizontal', pad = 0.01, aspect = 20./3*2)
         cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
-        cbar_xsection.set_label('Real (a. u.)')
         ax2[7].set_xlabel('R (m)')
         ax2[7].set_ylabel('Z (m)')
         ax2[5].set_title('Tomographic Reconstruction')
@@ -849,10 +928,13 @@ class DirectSolution(Tomography):
         #This allows measurements that only go through one or two surfaces to be removed:
         #Currently disabled
         measures_to_remove = (np.sum(self.geom_matrix>0, axis = 1))>=0
+        #if self.valid_channels.shape[1]==1:measures_to_remove=measures_to_remove[:,np.newaxis]
         print self.geom_matrix.shape[0], np.sum(measures_to_remove)
-        self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix[measures_to_remove,:])
+        #self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix[measures_to_remove,:])
+        #valid_meas = self.all_measurements[self.valid_channels*measures_to_remove]
+        self.geom_matrix_pinv = np.linalg.pinv(self.geom_matrix)
         valid_meas = self.all_measurements[self.valid_channels]
-        self.T = np.dot(self.geom_matrix_pinv, valid_meas[measures_to_remove])
+        self.T = np.dot(self.geom_matrix_pinv, valid_meas)
         self.re_projection = np.dot(self.geom_matrix, self.T)
 
         #self.error = calc_RMSE(self, plot = False)
@@ -2610,6 +2692,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
         fig, ax = pt.subplots(nrows = 2)
     else:
         ax = prov_ax
+    inc_phase = True if len(ax)==2 else False
     #Find biggest mode and norm factor    
     amp_list = []
     if norm:
@@ -2641,14 +2724,15 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             while np.mean(angs[start_pt:])>max_phase: angs += -2.*np.pi
             while np.mean(angs[start_pt:])<(max_phase - 2.*np.pi): angs += 2.*np.pi
             print np.sum(cur_T), np.abs(np.sum(cur_T)), np.angle(np.sum(cur_T))
-            ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
+            if inc_phase: ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
-            ax[0].legend(loc='best', prop={'size':6})
-            ax[0].set_xlim([0,1])
-            ax[1].set_xlim([0,1])
-            ax[1].set_ylabel('Phase (rad)')
+            ax[0].legend(loc='best', fontsize = 7)#prop={'size':6})
             ax[0].set_ylabel('Amplitude (a.u)')
-            ax[1].set_ylim([np.mean(angs[start_pt:])-np.pi,np.mean(angs[start_pt:])+np.pi])
+            ax[0].set_xlim([0,1])
+            if inc_phase:
+                ax[1].set_xlim([0,1])
+                ax[1].set_ylabel('Phase (rad)')
+                ax[1].set_ylim([np.mean(angs[start_pt:])-np.pi,np.mean(angs[start_pt:])+np.pi])
     if prov_ax==None:
         fig.canvas.draw();fig.show()
     return max_s, max_amp, max_ind

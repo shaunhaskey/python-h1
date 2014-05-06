@@ -1,7 +1,8 @@
 import MDSplus as MDS
 import h1.h1model.plot_functions as h1_plot
 import h1.diagnostics.imax as imax
-import time, copy, os
+import copy
+import os
 from scipy.interpolate import griddata as scipy_griddata
 import numpy as np
 np.pi2 = 2.*np.pi
@@ -799,7 +800,6 @@ class LOS():
         if pub_fig:
             cm_to_inch=0.393701
             import matplotlib as mpl
-            old_rc_Params = mpl.rcParams
             mpl.rcParams['font.size']=8.0
             mpl.rcParams['axes.titlesize']=8.0#'medium'
             mpl.rcParams['xtick.labelsize']=8.0
@@ -1231,7 +1231,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
 
 
-def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0):
+def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0, patch_object = None, patch_pickle = None, get_intersections = True):
     '''Convenience function containing the required geometry for the
     interferometer
 
@@ -1245,23 +1245,20 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     CCD_L = 40./100
     CCD_x = 0.001; CCD_y = CCD_L
     n_pixels = 512
-    CCD_pixels_x = 1; CCD_pixels_y = 50
+    CCD_pixels_x = 1; CCD_pixels_y = 21
     CCD_focal_distance = 10000
     plot_length = 2./CCD_focal_distance
     phi_min =CCD_phi - 30; phi_max = CCD_phi+30;n_phi = 15;no_theta = 35;n_interp_pts = 100
 
     plot_length = 75
-    get_intersections = True
-    patch_pickle = None
-
-    patch_object = None
+    
     if get_intersections:
         if patch_object != None:
             print(' Using the patch object...')
             patch = patch_object
         elif patch_pickle == None:
             print(' Generating patch surface...')
-            patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=-1)
+            patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=s_ind)
         else:
             print(' Loading patch surface from pickle file...')
             patch = pickle.load(file(patch_pickle,'r'))
@@ -1269,6 +1266,21 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
         patch = None
     print ' CCD_xlength:{}, CCD_ylength:{}, focal_distance:{}, x_pixels:{}, y_pixels:{}'.format(CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y)
 
+
+    # if get_intersections:
+    #     if patch_object != None:
+    #         print(' Using the patch object...')
+    #         patch = patch_object
+    #     elif patch_pickle == None:
+    #         print(' Generating patch surface...')
+    #         patch =  BoozerSurfacePatch(phi_min, phi_max, n_phi = n_phi, no_theta = no_theta, boozer_filename = boozer_filename, s_ind=-1)
+    #     else:
+    #         print(' Loading patch surface from pickle file...')
+    #         patch = pickle.load(file(patch_pickle,'r'))
+    # else:
+    #     patch = None
+    # print ' CCD_xlength:{}, CCD_ylength:{}, focal_distance:{}, x_pixels:{}, y_pixels:{}'.format(CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y)
+    print patch
     answer = LOS()
     answer.input_data(CCD_position, CCD_x, CCD_y, CCD_focal_distance, CCD_pixels_x, CCD_pixels_y, u_hat, patch, v_hat = v_hat, w_hat = None, CCD_focal_point = None, get_intersections = True)
 
