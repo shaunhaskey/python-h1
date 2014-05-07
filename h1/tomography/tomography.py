@@ -242,7 +242,7 @@ class Tomography():
         #wave in a poloidal cross section, and radial functions
         norm = False
         s_ax,s_x_label = (np.sqrt(LOS_object.segment_midpoints),'$\sqrt{s}$') if LOS_object.radial_s_spacing else (LOS_object.segment_midpoints, 's')
-        extra_txt = '' if dI_I==False else 'dI/I '
+        extra_txt = '' if dI_I==False else '$\mathrm{d}\epsilon/\epsilon$'
         #plot_radial_structure(self.T, s_ax, n, m, prov_ax = [ax2[5],ax2[6]], norm = norm, extra_txt = extra_txt, single_mode = None)#max_phase = 0)
         plot_radial_structure(self.T, s_ax, n, m, prov_ax = profile_ax, norm = norm, extra_txt = extra_txt, single_mode = None)
         #wave_field = self.calc_wave_field_phasors(n, m, LOS_object, LOS_object.segment_midpoints, tomo_DC = tomo_DC)
@@ -257,7 +257,12 @@ class Tomography():
         cbar_xsection = pt.colorbar(im, cax=cbar_wave_ax, orientation = 'horizontal')
         tmp_extra_txt = extra_txt
         if extra_txt!='': tmp_extra_txt = '({})'.format(extra_txt)
-        cbar_xsection.set_label('Real{} (a. u.)'.format(tmp_extra_txt,))
+        if n==[0] and m==[0]:
+            cbar_xsection.set_label('DC emissivity (a. u.)')
+            amp_ax.legend().set_visible(False)
+        else:
+            cbar_xsection.set_label('Real{} (a. u.)'.format(tmp_extra_txt,))
+            amp_ax.legend(loc='best', fontsize = 7)
         #cbar_xsection.set_label('Real (a. u.)')
         #ax2[7].set_xlabel('R (m)'); ax2[7].set_ylabel('Z (m)')
         pol_ax.set_xlabel('R (m)'); pol_ax.set_ylabel('Z (m)')
@@ -276,7 +281,6 @@ class Tomography():
         for i in profile_ax:i.set_xlabel(s_x_label); i.set_xlim([0,1])
         #ax2[5].legend(loc='center left')
         #ax2[5].legend(loc='best')
-        amp_ax.legend(loc='best', fontsize = 7)
         #for i in ax2[5:8]: gen_funcs.setup_axis_publication(i, n_yticks = 5)
         for i in image_strip_ax: gen_funcs.setup_axis_publication(i, n_yticks = 5)
         #gen_funcs.setup_axis_publication(ax2[5], n_xticks = 5)
@@ -938,8 +942,10 @@ class DirectSolution(Tomography):
         self.re_projection = np.dot(self.geom_matrix, self.T)
 
         #self.error = calc_RMSE(self, plot = False)
-        #self.error = tomo_recon_error_calc(self.geom_matrix, self.T, valid_meas)
-        self.error = tomo_recon_error_NRMSE(self.geom_matrix, self.T, valid_meas)
+
+        self.error = tomo_recon_error_calc(self.geom_matrix, self.T, valid_meas)
+        print 'Error details', self.error, tomo_recon_error_calc(self.geom_matrix, self.T*0, valid_meas)
+        #self.error = tomo_recon_error_NRMSE(self.geom_matrix, self.T, valid_meas)
 
 class DirectSolutionFixedPhase(Tomography):
     def __init__(self, geom_matrix, measurements, valid_channels = None, tomo_DC = None):
@@ -1002,7 +1008,8 @@ def tomo_recon_error_calc(geom_matrix, tomo_recon, valid_meas):
     SRH: 7Feb2014
     '''
     reproj = np.dot(geom_matrix, tomo_recon)- valid_meas
-    return [np.sqrt(np.mean(np.real(reproj)**2 + np.imag(reproj)**2) / np.mean(np.real(valid_meas)**2 + np.imag(valid_meas)**2))]
+    #return [np.sqrt(np.mean(np.real(reproj)**2 + np.imag(reproj)**2) / np.mean(np.real(valid_meas)**2 + np.imag(valid_meas)**2))]
+    return [np.sqrt(np.sum(np.real(reproj)**2 + np.imag(reproj)**2))]
 
 def tomo_recon_error_NRMSE(geom_matrix, tomo_recon, valid_meas, plot = False):
     '''Function to calculate the reconstruction error given the geom_matrix, reconstruction and measurements
@@ -2304,12 +2311,19 @@ def return_correct_mode(mode_tuples, tomo_modes_n, tomo_modes_m, orientations, t
     return z, tomo_valid_channels, tomo_measurements
 
 #def single(fourier_data, valid_channels, overall_geom_list, mode_tuples, tomo_modes_n, tomo_modes_m, tomo_orient, lamda, orientations, start_indices, end_indices, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval, LOS_obj):
-def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval, LOS_obj):
+def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count, total, return_tomo_inv, harmonic, tomo_DC, tomo_eval, LOS_obj, decimate = False):
     '''Run a single tomographic inversion using the combination of modes in tomo_modes_n, tomo_modes_m and orientatino sin tomo_orient
 
     SRH : 12Feb2014
     '''
     z, tomo_valid_channels, tomo_measurements = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
+    if decimate!=False:
+        print 'hello decimating', z.shape, decimate
+        z_new = np.zeros((z.shape[0],z.shape[1]/decimate), dtype = complex)
+        for i in range(z.shape[1]/decimate):
+            z_new[:,i] = +np.sum(z[:,i*decimate:i*decimate+decimate], axis = 1)
+        z = z_new
+    print 'hello decimating', z.shape, decimate
     if method=='SIRT':
         tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_sirt.run(cycles = cycles)
@@ -2325,12 +2339,12 @@ def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count
         cur_tomo = tomo_direct
     if tomo_eval == tomo_orient:
         error = tomo_recon_error_calc(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
-        error = tomo_recon_error_NRMSE(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
+        #error = tomo_recon_error_NRMSE(z, cur_tomo.T, tomo_measurements[tomo_valid_channels])
         #error = calc_RMSE(cur_tomo)
     else:
         z_tmp, tomo_valid_channels_tmp, tomo_measurements_tmp = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_eval)
         error = tomo_recon_error_calc(z_tmp, cur_tomo.T, tomo_measurements_tmp[tomo_valid_channels_tmp])
-        error = tomo_recon_error_NRMSE(z_tmp, cur_tomo.T, tomo_measurements_tmp[tomo_valid_channels_tmp])
+        #error = tomo_recon_error_NRMSE(z_tmp, cur_tomo.T, tomo_measurements_tmp[tomo_valid_channels_tmp])
         #error = calc_RMSE(cur_tomo)
     print 'n {}, m{}, error {:.4f} {} of {}'.format(tomo_modes_n, tomo_modes_m, error[0], count, total)
     if return_tomo_inv:
@@ -2522,7 +2536,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
     ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter))
     ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(mjrFormatter2))
     cbar = pt.colorbar(im, ax = ax)
-    cbar.set_label('Tomo Recon Error')
+    cbar.set_label('Residual Error')
     if single_m!=None:
         if single_m.__class__=='int': 
             single_m = [single_m]
@@ -2546,12 +2560,13 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
             min_loc = np.argmin(error_array[:,index])
 
         ax2.set_xlabel('n')
-        ax2.set_ylim([0.25,0.85])
+        #ax2.set_ylim([0.25,0.85])
         x_min, x_max = ax2.get_xlim(); y_min, y_max = ax2.get_ylim()
         ax2.text(x_min+ (x_max-x_min)*0.05, y_min+ (y_max-y_min)*0.9,'(b)')
-        ax2.set_ylabel('Tomo Recon Error')
-        ax2.legend(loc='best')
+        ax2.set_ylabel('Residual Error')
+        ax2.legend(loc='best', fontsize = 7)
         ax2.grid()
+        #ax.grid()
         #ax2.set_title('Reconstruction error for m={} and various n values'.format(single_m))
         #fig2.canvas.draw(); fig2.show()
     # for tick in ax.xaxis.iter_ticks():
@@ -2564,6 +2579,7 @@ def plot_error_multi_list_single(input_errors, filename = None, single_m = None,
     if filename!=None:
         fig.tight_layout(pad=0.1)
         fig.savefig(filename + '.pdf')
+        fig.savefig(filename + '.svg')
         fig.savefig(filename + '.eps')
         print filename
     fig.canvas.draw(); fig.show()
@@ -2842,7 +2858,7 @@ def many_measurements_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient,
     fig.canvas.draw(); fig.show()
 
 
-def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noise_strength = None, filename = None):
+def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noise_strength = None, filename = None, dI_I = False, tomo_DC = None):
     if noise_strength == None: noise_strength = 0.0001
     filename_list = []
 
@@ -2879,7 +2895,7 @@ def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noi
     orig_im_ax.set_xlim([160,82])
 
     orig_im_ax.set_ylim([0,  (LOS_object.end_indices[1] - LOS_object.start_indices[1])*0.9])
-    foo1, foo2, foo3, orig_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, None, tomo_orient, LOS_object)
+    foo1, foo2, foo3, orig_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, tomo_DC, tomo_orient, LOS_object)
     plot_radial_structure(orig_inv.T, np.sqrt(LOS_object.segment_midpoints), tomo_modes_n, tomo_modes_m, prov_ax = [amp_ax, phase_ax], norm = False, extra_txt = 'Orig ', single_mode = None, marker = '.')
 
     #sig_strength = np.sqrt(np.sum(np.abs(re_projection)**2))
@@ -2915,7 +2931,7 @@ def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noi
     
     tomo_orient_extrap = tomo_orient
 
-    foo1, foo2, foo3, noise_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, None, tomo_orient, LOS_object)
+    foo1, foo2, foo3, noise_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, 0.5, 'Direct', 300, 0, 1, True, 1, tomo_DC, tomo_orient, LOS_object)
     plot_radial_structure(noise_inv.T, np.sqrt(LOS_object.segment_midpoints), tomo_modes_n, tomo_modes_m, prov_ax = [amp_ax, phase_ax], norm = False, extra_txt = 'Noisy ', single_mode = None)
 
     #restore the data
@@ -2923,6 +2939,7 @@ def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noi
     gs.tight_layout(fig, pad = 0.2)
     if filename!=None:
         fig.savefig(filename + '.pdf')
+        fig.savefig(filename + '.svg')
         fig.savefig(filename + '.eps')
     fig.canvas.draw(); fig.show()
 
