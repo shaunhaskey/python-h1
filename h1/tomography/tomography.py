@@ -759,6 +759,7 @@ class Tomography():
         '''
         '''
         #Setup the figure
+        extra_txt = '' if dI_I==False else '$\mathrm{d}\epsilon/\epsilon$'
         if inc_profile:
             fig = pt.figure(); ax = []
             ax.append(pt.subplot2grid((8,6), (0,0), rowspan=4, colspan = 3))
@@ -807,13 +808,12 @@ class Tomography():
         error_phasors = meas_phasors - best_phasors
 
         #Plot the wave profile
-        extra_txt = '' if dI_I==False else 'dI/I '
         if inc_profile:
             norm = False
             s_ax,x_label = (np.sqrt(LOS_object.segment_midpoints),'$\sqrt{s}$') if LOS_object.radial_s_spacing else (LOS_object.segment_midpoints, 's')
             plot_radial_structure(self.T, s_ax, n, m, prov_ax = [ax[1],ax[2]], norm = norm, extra_txt = extra_txt, single_mode = None, max_phase = 0)
-            ax[1].legend(loc='best')
-            ax[1].set_xlim([0,1]); ax[2].set_xlim([0,1]); ax[2].set_ylim([-7,0])
+            ax[1].legend(loc='best', fontsize = 7)
+            ax[1].set_xlim([0,1]); ax[2].set_xlim([0,1]); #ax[2].set_ylim([-7,0])
             ax[2].set_ylabel('Phase (rad)'); ax[1].set_ylabel('Amplitude (a.u)'); ax[2].set_xlabel('$\sqrt{s}$')
 
         loc = LOS_object.valid_channels.shape[1]/2
@@ -844,20 +844,21 @@ class Tomography():
             im.set_clim(pol_clim)
             if inc_cbar and i==0:
                 cbar = pt.colorbar(im, cax=cax)
-                cbar.set_label('Wave Amplitude (a.u)')
+                cbar.set_label('$\mathrm{d}\epsilon$ (a.u)')
                 cbar2 = pt.colorbar(cam_im, cax = cbar_ax, orientation = 'horizontal')
                 cbar2.set_label('LOS Amplitude (a.u)')
             ax[0].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
             tmp_val = np.real(np.array(meas_vals)*np.exp(1j*t_cur))*scale_fact
             tmp_val_reproj = np.real(np.array(reproj_vals)*np.exp(1j*t_cur))*scale_fact
 
-            ax[0].plot(tmp_val+1.4, np.array(z_vals),'-')
-            ax[0].plot(tmp_val_reproj+1.4, np.array(z_vals),'-')
-            ax[0].plot([1.4]*len(z_vals),np.array(z_vals))
+            ax[0].plot([1.4]*len(z_vals),np.array(z_vals),)
+            ax[0].plot(tmp_val+1.4, np.array(z_vals),'k-',linewidth = 1.2)
+            ax[0].plot(tmp_val_reproj+1.4, np.array(z_vals),'r-', linewidth=0.8)
             if kh == None: kh = -1
             modifiers = {'set_xlabel':'R (m)', 'set_ylabel':'Z (m)','set_xlim':[1,1.45], 
-                         'set_ylim':[-0.25,0.25], 'set_aspect':'equal', 'set_title': '$\kappa_h = '+'{:.2f}$ '.format(kh) + 'LOS projections,\nblue: experiment, green: resconstruction'}
+                         'set_ylim':[-0.25,0.25], 'set_aspect':'equal', 'set_title': '$\kappa_h = '+'{:.2f}$ '.format(kh) + 'LOS projections,\nblack: experiment, red: resconstruction'}
             gen_funcs.modify_axis(ax[0], modifiers)
+            for tmp_ax in [ax[1],ax[2]]:gen_funcs.setup_axis_publication(tmp_ax, n_yticks = 5)
             if save_fig!=None:
                 xticks = ax[0].xaxis.get_major_ticks()
                 for tmp_tick in range(0,len(xticks),2):
@@ -2357,7 +2358,7 @@ def _single_multiproc_wrapper(arguments):
     return single(*arguments)
 
 class try_several_modes_multi():
-    def __init__(self,n_list, m_list, tomo_orient,number_modes, answer, overall_geom_list, fourier_data,mode_tuples, lamda=0.5,cycles=300, pool_size = 1, method='SIRT', tomo_DC = None, fixed_mode = None, tomo_eval = None):
+    def __init__(self,n_list, m_list, tomo_orient,number_modes, answer, overall_geom_list, fourier_data,mode_tuples, lamda=0.5,cycles=300, pool_size = 1, method='SIRT', tomo_DC = None, fixed_mode = None, tomo_eval = None, harmonic = 1):
         #self.answer = answer
         if tomo_eval == None: tomo_eval = tomo_orient
         #self.overall_geom_list = overall_geom_list
@@ -2387,7 +2388,7 @@ class try_several_modes_multi():
             tomo_modes_m_list.append([j[1] for j in i])
             #tomo_orient_list.append(tomo_orient)
         orientations = answer.orientations
-        arglist = [[tomo_n, tomo_m, tomo_orient, lamda, method, cycles, counter, len(tomo_orient_list),False,1, tomo_DC, tomo_eval, answer] for tomo_n, tomo_m, tomo_orient,counter in zip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list, range(len(tomo_orient_list)))]
+        arglist = [[tomo_n, tomo_m, tomo_orient, lamda, method, cycles, counter, len(tomo_orient_list),False, harmonic, tomo_DC, tomo_eval, answer] for tomo_n, tomo_m, tomo_orient,counter in zip(tomo_modes_n_list, tomo_modes_m_list, tomo_orient_list, range(len(tomo_orient_list)))]
         if pool_size > 1:
             print "Using multiproc"
             pool = multiprocessing.Pool(processes=pool_size)
@@ -2720,7 +2721,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             amp_list.append(np.sum(np.abs(cur_T)))
         norm_fact = np.max(amp_list)
     start = 0
-    for n_cur, m_cur in zip(n,m):
+    for index, (n_cur, m_cur) in enumerate(zip(n,m)):
         cor_run = True
         if single_mode!=None:
             cor_run = single_mode == [n_cur, m_cur]
@@ -2735,20 +2736,25 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             max_s = segment_midpoints[max_ind]
             max_amp = np.max(np.abs(cur_T[:-5]))
             #ax[0].text(max_s, max_amp, extra_txt)
-            angs = np.unwrap(np.angle(cur_T))
-            start_pt = angs.shape[0]/3
-            while np.mean(angs[start_pt:])>max_phase: angs += -2.*np.pi
-            while np.mean(angs[start_pt:])<(max_phase - 2.*np.pi): angs += 2.*np.pi
-            print np.sum(cur_T), np.abs(np.sum(cur_T)), np.angle(np.sum(cur_T))
+            if index == 0:
+                angs = np.unwrap(np.angle(cur_T))
+                start_pt = angs.shape[0]/3
+                while np.mean(angs[start_pt:])>max_phase: angs += -2.*np.pi
+                while np.mean(angs[start_pt:])<(max_phase - 2.*np.pi): angs += 2.*np.pi
+                print np.sum(cur_T), np.abs(np.sum(cur_T)), np.angle(np.sum(cur_T))
+            else:
+                angs = ((np.angle(cur_T)-center_phase + np.pi)%(2.*np.pi)) + center_phase - np.pi
             if inc_phase: ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
             ax[0].legend(loc='best', fontsize = 7)#prop={'size':6})
             ax[0].set_ylabel('Amplitude (a.u)')
             ax[0].set_xlim([0,1])
-            if inc_phase:
+            if inc_phase and index == 0:
                 ax[1].set_xlim([0,1])
                 ax[1].set_ylabel('Phase (rad)')
-                ax[1].set_ylim([np.mean(angs[start_pt:])-np.pi,np.mean(angs[start_pt:])+np.pi])
+                center_phase = np.mean(angs[start_pt:])
+                ax[1].set_ylim([center_phase-np.pi,center_phase+np.pi])
+                
     if prov_ax==None:
         fig.canvas.draw();fig.show()
     return max_s, max_amp, max_ind
@@ -2780,7 +2786,7 @@ def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, f
         tomo_inv.plot_reprojection_comparison_extrap_diff(tomo_modes_n, tomo_modes_m, answer, tomo_valid_channels_extrap, tomo_measurements_extrap, z_extrap, cut_values = None, multiplier = 1., pub_fig = 1, savefig_name='reproj_diff_'+filename, tomo_DC = tomo_DC, dI_I = dI_I)
     return tomo_inv
 
-def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True, method = 'Direct', plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, dI_anim = False ):
+def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answer, cut_values, tomo_DC, make_animation = False, run_dI_I = True, method = 'Direct', plot_reprojection_comp1 = True, plot_reprojection_comp2 = True, dI_anim = False, harmonic = 1):
     kh_string = '{:.2f}'.format(kh).replace('.','_')
     filename = 'kh_{}_'.format(kh_string)
     for i, j in zip(tomo_modes_n_best, tomo_modes_m_best):
@@ -2790,10 +2796,10 @@ def run_inv_and_save(kh, tomo_modes_n_best, tomo_modes_m_best, tomo_orient, answ
     #tomo.plot_error_multi_list_single(error_multi_list.errors,filename='kh_{}_helicity_check'.format(kh_string),single_m=-3)
     print tomo_orient
     if run_dI_I:
-        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = tomo_DC, dI_I = True)
+        tomo_dI = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_dI-I', answer, harmonic = harmonic, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = tomo_DC, dI_I = True)
     else:
         tomo_dI = None
-    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = 1, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = None, dI_I = False)
+    tomo_norm = run_inversion(tomo_modes_n_best, tomo_modes_m_best, tomo_orient, tomo_orient, filename+'_norm',  answer, harmonic = harmonic, cut_values = cut_values, method = method, cycles=300, lamda=0.5, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = plot_reprojection_comp1, plot_reprojection_comp2 = plot_reprojection_comp2, plot_wave_animation = False, tomo_DC = None, dI_I = False)
     if make_animation:
         print 'start animation'
         if dI_anim:
