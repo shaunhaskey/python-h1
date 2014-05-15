@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as pt
 import h1.helper.generic_funcs as gen_funcs
-import numpy as np
+import copy
 import pylab as pl
 from matplotlib.font_manager import FontProperties
 from StringIO import StringIO
@@ -221,7 +221,7 @@ class ModeTable:
                  ))
 
 
-class plot_eigs():
+class plot_continua():
     def __init__(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception):
 
         offs = 2 # allow for inserting both hash flags ahead of the rest. 
@@ -454,3 +454,131 @@ class plot_eigs():
         pl.grid()
         pl.show()
 
+
+
+def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0.850-kv1.000fixed_dir/cas3d_r_n1_free/'):
+    '''Meant to help find the interesting modes
+    '''
+    minscan = 1
+    maxscan = 32
+    #path = '/home/srh112/code/python/cas3d_playground/030_n1_full_full_flat_dens_100_surfaces/test_new_script/'
+    suff = ''
+    get_wkin = 1
+    OPEN=open
+    all_lines = []
+    tmp = []
+    limit_m = None
+
+    outfn = 'out_cas3d'
+    with file(path + outfn,'r') as out_cas3d:
+        buff=out_cas3d.readlines(100000)   # arg is # characters to read, approx.
+
+    XIS=ModeTable(buff=buff,target=[' xis\n','eta'])
+
+
+    for n in range(minscan,maxscan):
+        scfn = path+'scan_{0}.dat'.format(n) + suff
+        wkfn = path+'wkin_{0}.dat'.format(n) + suff
+        xisn = path+'xis1_{0}.dat'.format(n) + suff
+        if get_wkin:
+            try:
+                with OPEN(scfn,"r") as sf: 
+                    scbuff = sf.readlines()
+                with OPEN(wkfn,"r") as wf: 
+                    wkbuff = wf.readlines()
+                with OPEN(xisn,"r") as xf: 
+                    xfbuff = xf.readlines()
+                    for i in xfbuff:
+                        z = i.rstrip('\n').split(' ')
+                        for j in z:
+                            if j!='':tmp.append(float(j))
+
+                for (ln, s_line) in enumerate(scbuff[2:]):
+                    hashes=(s_line[0]+wkbuff[ln+1][0])
+                    hashes_cvt = hashes.replace(' ','0 ').replace('#','1 ')
+                    all_lines.append(hashes_cvt+   # # replaced by 1, space by 0
+                                     s_line[1:-1]  # omit first # and last \n
+                                     +wkbuff[ln+1][1:]) # omit just first # 
+            except IOError, details: 
+                print('File read error - perhaps reduce maxscan to {n}: {d}'
+                      .format(n=n, d=details))
+                break
+
+        else:
+            a = np.loadtxt(scfn).T
+            #a = np.loadtxt(scfn, comments='!',usecols=range(1,10),skiprows=2).T
+            #b = np.loadtxt(wkfn, comments='!',usecols=range(1,8),skiprows=1).T
+            #zip_dim = len(np.shape(a))-1   # if 1D, zipper on the 0th dim, 2d, on the 1st
+            #a = np.append(a,b,zip_dim)
+            if len(np.shape(a)) == 1: a = np.array([a]) # make a 2D array if one line
+
+            if scan_arr == None: scan_arr = a
+            elif len(np.shape(a)) == 2 : scan_arr = np.append(scan_arr, a, 1)
+            else: print('discarding {f}, shape is {s}'.format(f=scfn, s=np.shape(a)))
+
+    if get_wkin: scan_arr = np.loadtxt(StringIO(' '.join(all_lines))).T
+    scan_arr.shape[1]
+    print len(tmp), scan_arr.shape, len(tmp)/scan_arr.shape[1]
+
+    def unique(a):
+        order = np.lexsort(a.T)
+        a = a[order]
+        diff = np.diff(a, axis=0)
+        ui = np.ones(len(a), 'bool')
+        ui[1:] = (np.abs(diff) > 0.01).any(axis=1) 
+        return a[ui]
+
+    mode_shapes = np.abs(np.resize(tmp, (scan_arr.shape[1],len(tmp)/scan_arr.shape[1])))
+    print mode_shapes.shape, scan_arr.shape
+    mode_shapes_copy = copy.deepcopy(mode_shapes)
+    mode_shapes = unique(mode_shapes)
+    std_dev_list = []
+    fig_shapes, ax_shapes = pt.subplots(nrows=2,sharex = True)
+    count = 0
+    good = np.zeros(mode_shapes_copy.shape[0])
+    for i in range(0,mode_shapes.shape[0],2):
+        if ((i%100)==0):print i
+        tmp_data = np.abs(mode_shapes[i,:]).flatten()
+
+        #find original data spot....
+        max_val = np.max(tmp_data)
+        mean_val = np.mean(tmp_data)
+        std_dev = np.std(tmp_data/max_val)
+        std_dev_list.append(std_dev)
+
+
+        if std_dev>0.28:
+            s_axis = np.linspace(0,1,len(tmp_data))
+            orig_index = np.argmin(np.sum(np.abs(mode_shapes_copy - tmp_data),axis=1))
+
+            tmp_lut = XIS.lut[scan_arr[4,orig_index]]
+            mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
+            mode_details = '{},{}'.format(mode_n, mode_m)
+            if limit_m != None:
+                if mode_m!=limit_m:
+                    plot_mode = False
+                else:
+                    plot_mode = True
+            else:
+                plot_mode = True
+            if plot_mode:
+                ax_shapes[0].plot(s_axis,tmp_data)
+                max_loc = np.argmax(tmp_data)
+                ax_shapes[0].text(s_axis[max_loc],np.max(tmp_data),'{:.2}fkHz,{},{}'.format(scan_arr[3,orig_index], int(scan_arr[4,orig_index]), mode_details))
+                count+=1
+                good[orig_index] = 1
+
+    #fig, ax = pt.subplots()
+    good = np.array(good)
+    ax_shapes[1].plot(scan_arr[2,good==0], scan_arr[3,good==0],'.',markersize=4)
+    ax_shapes[1].plot(scan_arr[2,good==1], scan_arr[3,good==1],'o',markersize=7)
+    ax_shapes[1].set_xlabel('s')
+    ax_shapes[1].set_ylabel('freq (kHz)')
+    ax_shapes[0].set_ylabel('CAS3D eig func disp')
+    #fig.canvas.draw(), fig.show()
+    fig_shapes.suptitle('first attempt global mode finder')
+    fig,ax = pt.subplots()
+    ax.hist(std_dev_list)
+    fig.canvas.draw(), fig.show()
+    fig_shapes.canvas.draw(); fig_shapes.show()
+    print count
