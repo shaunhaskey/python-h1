@@ -31,7 +31,8 @@ def setup_axis_publication(ax, n_xticks = None, n_yticks = None):
     if n_xticks!= None: ax.xaxis.set_major_locator(MaxNLocator(n_xticks))
 
 def cbar_ticks(cbar_ax, n_ticks = 5):
-    cbar_ax.locator = MaxNLocator(n_ticks)
+    cbar_ax.locator = MaxNLocator(nbins = n_ticks)
+    cbar_ax.update_ticks()
 
 def create_cbar_ax(original_ax, pad = 3, loc = "right", prop = 5):
     divider = make_axes_locatable(original_ax)

@@ -21,6 +21,7 @@ import multiprocessing
 import h1.helper.generic_funcs as gen_funcs
 import matplotlib.gridspec as gridspec
 
+
 class Tomography():
     '''The main tomographic reconstruction class
     contains many plotting for the specific classes which are sub-classes of this one
@@ -305,9 +306,11 @@ class Tomography():
             loc = LOS_object.valid_channels.shape[1]/2
             ind = 1 if len(LOS_object.start_indices)>1 else 0
             start_loc, end_loc, style = [LOS_object.start_indices[ind], LOS_object.end_indices [ind],'k-']
-            LOS_r, LOS_z, meas_vals, reproj_vals, z_vals = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, None, r_val = np.array([0.5,1.5]))
+            print start_loc, end_loc
+            LOS_r, LOS_z, meas_vals, reproj_vals, z_vals, LOS_r_out, LOS_z_out = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, None, r_val = np.array([0.5,1.5]), decimate = 8)
             #ax2[7].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
-            pol_ax.plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
+            pol_ax.plot((np.array(LOS_r).T)[:,::],(np.array(LOS_z).T)[:,::], style, linewidth=0.3)
+            pol_ax.plot((np.array(LOS_r_out).T)[:,::],(np.array(LOS_z_out).T)[:,::], '-',color = '0.75', linewidth=0.3)
         #Phasors arrays for the image sets
         best_fit = self.all_measurements * 0
         best_fit[self.valid_channels] = self.re_projection
@@ -733,11 +736,13 @@ class Tomography():
             start = +end
         return wave_field
 
-    def LOS_start_end_cut(self,LOS_object, loc, start_loc, end_loc, best_fit, r_val = None):
+    def LOS_start_end_cut(self,LOS_object, loc, start_loc, end_loc, best_fit, r_val = None, decimate = 1):
         if r_val == None: r_val = np.array([0.5,1.4])
         meas_vals = []; z_vals = []; reproj_vals = []
-        LOS_r = []; LOS_z = []
-        for j in range(start_loc, end_loc):
+        LOS_r = []; LOS_z = []; LOS_r_out = []; LOS_z_out = []
+        gradient_list = []; offset_list = []
+        index_list = []
+        for j in range(start_loc, end_loc, decimate):
             if LOS_object.valid_channels[j,loc]:
                 point1_z = LOS_object.intersection1[j,loc,2] 
                 point2_z = LOS_object.intersection2[j,loc,2]
@@ -752,8 +757,25 @@ class Tomography():
                 meas_vals.append(self.all_measurements[j , loc])
                 if best_fit!=None: reproj_vals.append(best_fit[j , loc])
                 z_vals.append(+z_val[1])
+                gradient_list.append(gradient)
+                offset_list.append(offset)
+                index_list.append(j)
                 #scale_fact = 0.05/np.max(np.abs(meas_vals))
-        return LOS_r, LOS_z, meas_vals, reproj_vals, z_vals
+                #meas_vals_out.append(self.all_measurements[j , loc])
+                #if best_fit!=None: reproj_vals_out.append(best_fit[j , loc])
+                #z_vals_out.append(+z_val[1])
+                #scale_fact = 0.05/np.max(np.abs(meas_vals))
+        offset_poly = np.polyfit(index_list, offset_list,2)
+        grad_poly = np.polyfit(index_list, gradient_list,2)
+        for j in range(start_loc, end_loc, decimate):
+            if not LOS_object.valid_channels[j,loc]:
+                gradient = np.polyval(grad_poly,j)
+                offset = np.polyval(offset_poly,j)
+                #r_val = np.array([0.5,1.4])
+                z_val = gradient*r_val + offset
+                LOS_r_out.append(r_val)
+                LOS_z_out.append(z_val)
+        return LOS_r, LOS_z, meas_vals, reproj_vals, z_vals, LOS_r_out, LOS_z_out
 
     def plot_wave_field_animation(self, n, m, LOS_object,s_values, n_images = 10, save_name = None, delay = 10, inc_cbar=0, pub_fig = False, save_fig = None, inc_profile = False,kh = None, tomo_DC = None, dI_I = False):
         '''
@@ -818,7 +840,7 @@ class Tomography():
 
         loc = LOS_object.valid_channels.shape[1]/2
         start_loc, end_loc, style = [LOS_object.start_indices[1], LOS_object.end_indices [1],'k-']
-        LOS_r, LOS_z, meas_vals, reproj_vals, z_vals = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, best_fit, r_val = None)
+        LOS_r, LOS_z, meas_vals, reproj_vals, z_vals, LOS_r_out, LOS_z_out = self.LOS_start_end_cut(LOS_object, loc, start_loc, end_loc, best_fit, r_val = None, decimate = 1)
         scale_fact = 0.05/np.max(np.abs(meas_vals))
 
         #Make the animated parts
@@ -848,6 +870,7 @@ class Tomography():
                 cbar2 = pt.colorbar(cam_im, cax = cbar_ax, orientation = 'horizontal')
                 cbar2.set_label('LOS Amplitude (a.u)')
             ax[0].plot((np.array(LOS_r).T)[:,::8],(np.array(LOS_z).T)[:,::8], style, linewidth=0.3)
+            #ax[0].plot((np.array(LOS_r_out).T)[:,::8],(np.array(LOS_z_out).T)[:,::8], '-', color = '0.75', linewidth=0.3)
             tmp_val = np.real(np.array(meas_vals)*np.exp(1j*t_cur))*scale_fact
             tmp_val_reproj = np.real(np.array(reproj_vals)*np.exp(1j*t_cur))*scale_fact
 
@@ -2922,7 +2945,8 @@ def add_noise(LOS_object, tomo_modes_n, tomo_modes_m, tomo_orient, harmonic, noi
     noise_im = noise_im_ax.imshow(np.abs(tmp_meas[LOS_object.start_indices[1]:LOS_object.end_indices[1]]),origin='upper',aspect='auto',interpolation='nearest', cmap=amp_cmap)
     orig_im.set_clim(noise_im.get_clim())
     cbar = pt.colorbar(orig_im, cax = cbar_amp_ax, orientation = 'horizontal')
-    cbar.set_ticks([1,2,3,4])
+    gen_funcs.cbar_ticks(cbar, n_ticks = 4)
+    #cbar.set_ticks([1,2,3,4])
     cbar.set_label('Amp (a.u.)')
     phase_ax.set_xlabel('$\sqrt{s}$')
     for i in [phase_ax, amp_ax]:i.set_yticks(i.get_yticks()[::2])
