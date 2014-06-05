@@ -1,13 +1,8 @@
 import h1.mhd_eq.BOOZER as BOOZER
-import os
 import time
 import scipy.optimize as optimize
 import numpy as np
 import matplotlib.pyplot as pt
-import pickle
-from mayavi import mlab
-import h1.mhd_eq.heliac_worker_funcs as heliac
-import h1.mhd_eq.heliac_vmec_utils as hv_utils
 
 class probe_array():
     def __init__(self,):
@@ -18,7 +13,53 @@ class probe_array():
         print 'hello'
         kernel = -1.; a = 1.#2.*np.pi/3
         self.boozer_phi, self.boozer_theta, self.distance = find_coil_locs(self.cart_x, self.cart_y, self.cart_z, booz_obj, kernel, a,func)
+        
+    def plot_fig(self, ax = None, ax2 = None, mask = None, ax2_xaxis=None):
+        no_ax = True if  ax == None else False
+        if no_ax: fig, ax = pt.subplots(nrows = 1, ncols = 1, sharex = False, sharey = False)
+        if mask == None: mask = np.ones(len(self.boozer_phi), dtype = bool)
+        if ax2_xaxis==None: ax2_xaxis = np.unwrap(np.deg2rad(self.boozer_phi[mask]))
+        #ax.imshow(np.abs(vals), interpolation = 'nearest',cmap = 'binary', origin = 'upper',extent = [m_list[0],m_list[-1],n_list[-1],n_list[0]])
+        im = ax.pcolormesh(self.m_rec, self.n_rec, np.abs(self.vals), cmap = 'binary')
+        #ax.plot(m_real, n_real,'bo')
+        #pt.colorbar(im, ax = ax)
+        max_ind = np.argsort(np.abs(self.vals.flatten()))
+        txt = ''
+        for i in range(-1,-5,-1):txt+='({},{})'.format(self.n_rec.flatten()[max_ind[i]],self.m_rec.flatten()[max_ind[i]])
+        print txt
+        ax.text(1,-8,txt, color = 'r')
+        if ax2!=None:
+            n = self.n_rec.flatten()[max_ind[-1]]
+            m = self.m_rec.flatten()[max_ind[-1]]
+            new_booz_th = np.linspace(np.min(self.boozer_theta[mask]),np.max(self.boozer_theta[mask]),300)
+            new_booz_phi = np.interp(new_booz_th, self.boozer_theta[mask], self.boozer_phi[mask])
+            kernel = 1j*m*np.deg2rad(self.boozer_theta[mask]) + 1j*n*np.deg2rad(self.boozer_phi[mask])
+            ax2.plot(ax2_xaxis, np.real(self.vals.flatten()[max_ind[-1]]*np.exp(kernel)), 'b--')
+            kernel = 1j*m*np.deg2rad(new_booz_th) + 1j*n*np.deg2rad(new_booz_phi)
+            ax2.plot(np.deg2rad(new_booz_th), np.real(self.vals.flatten()[max_ind[-1]]*np.exp(kernel)), 'b-.')
+        if no_ax: fig.canvas.draw();fig.show()
 
+    def perform_fit(self, data, mask = None):
+        n_list = np.arange(-10,11)
+        m_list = np.arange(-10,11)
+        self.vals = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=complex)
+        self.n_rec = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=int)
+        self.m_rec = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=int)
+        if mask == None: mask = np.ones(len(self.boozer_phi), dtype = bool)
+        for i, n in enumerate(n_list):
+            for j, m in enumerate(m_list):
+                self.vals[i,j] = np.sum(data * np.exp(-1j*m*np.deg2rad(self.boozer_theta[mask]) - 0*1j*n*np.deg2rad(self.boozer_phi[mask])))/np.sum(mask)
+                self.n_rec[i,j] = +n
+                self.m_rec[i,j] = +m
+
+    def dummy_data(self,):
+        probe_locations_theta = np.deg2rad(self.boozer_theta)
+        probe_locations_phi = np.deg2rad(self.boozer_phi)
+        n_real = 8
+        m_real = 4
+        data = np.exp(1j*m_real*probe_locations_theta + 1j*n_real*probe_locations_phi)
+        self.perform_fit(data)
+        self.plot_fig()
 
     def test_fit(self,):
         probe_locations_theta1 = [np.linspace(0,2.*np.pi,10, endpoint = False), np.linspace(0,2.*np.pi,10, endpoint = False), np.linspace(0,2.*np.pi,10, endpoint = False)]
@@ -175,6 +216,27 @@ class PMA2(probe_array):
                              #[0.790, 4.962, 0.326],
                              [0.806, 4.962, 0.336],
                              [0.934, 4.962, 0.383]])
+
+        self.cyl = np.array([[1.114, 4.962, 0.355],
+                             [1.185, 4.962, 0.289],
+                             [1.216, 4.962, 0.227],
+                             [1.198, 4.962, 0.137],
+                             [1.129, 4.962, 0.123],
+                             [1.044, 4.962, 0.128],
+                             [0.963, 4.962, 0.112],
+                             [0.924, 4.962, 0.087],
+                             [0.902, 4.962, 0.052],
+                             [0.900, 4.962, -0.008],
+                             [0.925, 4.962, -0.073],
+                             [0.964, 4.962, -0.169],
+                             [0.897, 4.962, -0.238],
+                             [0.821, 4.962, -0.221],
+                             [0.696, 4.962, -0.106],
+                             [0.652, 4.962, 0.036],
+                             [0.676, 4.962, 0.193],
+                             [0.790, 4.962, 0.326],
+                             [0.806, 4.962, 0.336],
+                             [0.934, 4.962, 0.383]])
         #Convert to Cartesian
         self.cart_x = self.cyl[:,0]*np.cos(self.cyl[:,1])
         self.cart_y = self.cyl[:,0]*np.sin(self.cyl[:,1])
@@ -278,26 +340,26 @@ class boozer_object:
             self.distance = np.sqrt((coil_loc[0]-self.x)**2+(coil_loc[1]-self.y)**2+(coil_loc[2]-self.z)**2)
             return self.distance
 
-hma = HMA()
-kh = 0.35
-filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
-hma.loc_boozer_coords(filename)
-hma.test_fit()
+# hma = HMA()
+# kh = 0.35
+# filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
+# hma.loc_boozer_coords(filename)
+# hma.test_fit()
 
-pma1 = PMA1()
-kh = 0.6
-filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
-pma1.loc_boozer_coords(filename)
-pma1.test_fit()
+# pma1 = PMA1()
+# kh = 0.6
+# filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
+# pma1.loc_boozer_coords(filename)
+# pma1.test_fit()
 
-pma2 = PMA2()
-kh = 0.6
-filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
-pma2.loc_boozer_coords(filename)
-pma2.test_fit()
+# pma2 = PMA2()
+# kh = 0.6
+# filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
+# pma2.loc_boozer_coords(filename)
+# pma2.test_fit()
 
-fig, ax = pt.subplots(nrows = 2, ncols = 1, sharex = False, sharey = False)
-for i, style in zip([hma, pma1, pma2], ['x','o','d']):
-    ax[0].plot(i.boozer_phi%(360.), i.boozer_theta%(360.), style)
-    ax[1].plot(i.distance, style)
-fig.canvas.draw();fig.show()
+# fig, ax = pt.subplots(nrows = 2, ncols = 1, sharex = False, sharey = False)
+# for i, style in zip([hma, pma1, pma2], ['x','o','d']):
+#     ax[0].plot(i.boozer_phi%(360.), i.boozer_theta%(360.), style)
+#     ax[1].plot(i.distance, style)
+# fig.canvas.draw();fig.show()
