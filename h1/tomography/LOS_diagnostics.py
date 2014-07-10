@@ -1242,7 +1242,7 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     CCD_position = np.array([CCD_x, CCD_y, CCD_z])
     v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
     u_hat = np.array([0,0,1])
-    CCD_L = 40./100
+    CCD_L = 50./100
     CCD_x = 0.001; CCD_y = CCD_L
     n_pixels = 512
     CCD_pixels_x = 1; CCD_pixels_y = 21

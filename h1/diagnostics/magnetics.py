@@ -7,20 +7,25 @@ import matplotlib.pyplot as pt
 class probe_array():
     def __init__(self,):
         pass
-    def loc_boozer_coords(self, filename):
-        booz_obj2 = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
-        booz_obj = boozer_object(booz_obj2)
-        print 'hello'
-        kernel = -1.; a = 1.#2.*np.pi/3
-        self.boozer_phi, self.boozer_theta, self.distance = find_coil_locs(self.cart_x, self.cart_y, self.cart_z, booz_obj, kernel, a,func)
+    def loc_boozer_coords(self, filename=None, boozer_phi = None, boozer_theta = None, distance = None):
+        if filename == None:
+            self.boozer_phi = boozer_phi
+            self.boozer_theta = boozer_theta
+            self.distance = distance
+        else:
+            booz_obj2 = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
+            booz_obj = boozer_object(booz_obj2)
+            kernel = -1.; a = 1.#2.*np.pi/3
+            self.boozer_phi, self.boozer_theta, self.distance = find_coil_locs(self.cart_x, self.cart_y, self.cart_z, booz_obj, kernel, a,func)
         
-    def plot_fig(self, ax = None, ax2 = None, mask = None, ax2_xaxis=None):
+    def plot_fig(self, ax = None, ax2 = None, mask = None, ax2_xaxis=None, ax3 = None):
         no_ax = True if  ax == None else False
         if no_ax: fig, ax = pt.subplots(nrows = 1, ncols = 1, sharex = False, sharey = False)
         if mask == None: mask = np.ones(len(self.boozer_phi), dtype = bool)
         if ax2_xaxis==None: ax2_xaxis = np.unwrap(np.deg2rad(self.boozer_phi[mask]))
         #ax.imshow(np.abs(vals), interpolation = 'nearest',cmap = 'binary', origin = 'upper',extent = [m_list[0],m_list[-1],n_list[-1],n_list[0]])
         im = ax.pcolormesh(self.m_rec, self.n_rec, np.abs(self.vals), cmap = 'binary')
+        im.set_clim([0,0.75])
         #ax.plot(m_real, n_real,'bo')
         #pt.colorbar(im, ax = ax)
         max_ind = np.argsort(np.abs(self.vals.flatten()))
@@ -33,22 +38,31 @@ class probe_array():
             m = self.m_rec.flatten()[max_ind[-1]]
             new_booz_th = np.linspace(np.min(self.boozer_theta[mask]),np.max(self.boozer_theta[mask]),300)
             new_booz_phi = np.interp(new_booz_th, self.boozer_theta[mask], self.boozer_phi[mask])
-            kernel = 1j*m*np.deg2rad(self.boozer_theta[mask]) + 1j*n*np.deg2rad(self.boozer_phi[mask])
+            kernel = 1j*m*np.deg2rad(self.boozer_theta[mask]) + self.inc_phi*1j*n*np.deg2rad(self.boozer_phi[mask])
             ax2.plot(ax2_xaxis, np.real(self.vals.flatten()[max_ind[-1]]*np.exp(kernel)), 'b--')
-            kernel = 1j*m*np.deg2rad(new_booz_th) + 1j*n*np.deg2rad(new_booz_phi)
-            ax2.plot(np.deg2rad(new_booz_th), np.real(self.vals.flatten()[max_ind[-1]]*np.exp(kernel)), 'b-.')
+            kernel_interp = 1j*m*np.deg2rad(new_booz_th) + self.inc_phi * 1j*n*np.deg2rad(new_booz_phi)
+            ax2.plot(np.deg2rad(new_booz_th), np.real(self.vals.flatten()[max_ind[-1]]*np.exp(kernel_interp)), 'b-.')
+            #if ax3!=None: ax3.plot(self.m_rec[0,:], np.abs(self.vals[0,:]),'-bo')
+            if ax3!=None: 
+                foo1 = self.vals.flatten()[max_ind[-1]]* np.exp(kernel)
+                foo1 = foo1/np.abs(foo1)
+                ax3.plot(np.real(foo1), np.imag(foo1),'bo')
+                for j in range(foo1.shape[0]): 
+                    ax3.text(np.real(foo1[j]), np.imag(foo1[j]),str(j+1))
+
         if no_ax: fig.canvas.draw();fig.show()
 
-    def perform_fit(self, data, mask = None):
+    def perform_fit(self, data, mask = None, inc_phi = True):
         n_list = np.arange(-10,11)
         m_list = np.arange(-10,11)
+        self.inc_phi = inc_phi
         self.vals = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=complex)
         self.n_rec = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=int)
         self.m_rec = np.zeros((n_list.shape[0], m_list.shape[0]),dtype=int)
         if mask == None: mask = np.ones(len(self.boozer_phi), dtype = bool)
         for i, n in enumerate(n_list):
             for j, m in enumerate(m_list):
-                self.vals[i,j] = np.sum(data * np.exp(-1j*m*np.deg2rad(self.boozer_theta[mask]) - 0*1j*n*np.deg2rad(self.boozer_phi[mask])))/np.sum(mask)
+                self.vals[i,j] = np.sum(data * np.exp(-1j*m*np.deg2rad(self.boozer_theta[mask]) - self.inc_phi*1j*n*np.deg2rad(self.boozer_phi[mask])))/np.sum(mask)
                 self.n_rec[i,j] = +n
                 self.m_rec[i,j] = +m
 
@@ -117,8 +131,8 @@ def find_coil_locs(x_coil, y_coil, z_coil, booz_obj,kernel,a,opt_func):
         min_locations_phi.append(q[1]*180/np.pi)
         min_locations_theta.append(q[0]*180/np.pi)
     print 'finished all coils in : %.4fs'%(time.time() - start_time)
-    print min_locations_phi
-    print min_locations_theta
+    #print min_locations_phi
+    #print min_locations_theta
     min_locations_phi = np.array(min_locations_phi)
     min_locations_theta = np.array(min_locations_theta)
     for j in range(1,len(min_locations_phi)):
@@ -182,9 +196,40 @@ class PMA1(probe_array):
                              [0.696, 0.7732, -0.106],
                              [0.652, 0.7732, 0.036],
                              [0.676, 0.7732, 0.193],
-                             #[0.790, 0.7732, 0.326],
+                             [0.790, 0.7732, 0.326],
                              [0.806, 0.7732, 0.336],
                              [0.934, 0.7732, 0.383]])
+        self.cart_x = self.cyl[:,0]*np.cos(self.cyl[:,1])
+        self.cart_y = self.cyl[:,0]*np.sin(self.cyl[:,1])
+        self.cart_z = self.cyl[:,2]
+        self.cart = np.array([self.cart_x, self.cart_y, self.cart_z]).T
+
+class PMA1_reduced(probe_array):
+    '''Returns the locations of the PMA1 
+    [R(m), phi(rad), z(m)], [x(m), y(m), z(m)]
+    '''
+    def __init__(self,):
+        self.cyl = np.array([[1.114, 0.7732, 0.355],
+                             [1.185, 0.7732, 0.289],
+                             [1.216, 0.7732, 0.227],
+                             [1.198, 0.7732, 0.137],
+                             #[1.129, 0.7732, 0.123],
+                             #[1.044, 0.7732, 0.128],
+                             [0.963, 0.7732, 0.112],
+                             [0.924, 0.7732, 0.087],
+                             [0.902, 0.7732, 0.052],
+                             [0.900, 0.7732, -0.008],
+                             #[0.925, 0.7732, -0.073],
+                             #[0.964, 0.7732, -0.169],
+                             #[0.897, 0.7732, -0.238],
+                             #[0.821, 0.7732, -0.221],
+                             [0.696, 0.7732, -0.106],
+                             #[0.652, 0.7732, 0.036],
+                             #[0.676, 0.7732, 0.193],
+                             #[0.790, 0.7732, 0.326],
+                             #[0.806, 0.7732, 0.336],
+                             #[0.934, 0.7732, 0.383]
+                             ])
         self.cart_x = self.cyl[:,0]*np.cos(self.cyl[:,1])
         self.cart_y = self.cyl[:,0]*np.sin(self.cyl[:,1])
         self.cart_z = self.cyl[:,2]

@@ -97,14 +97,6 @@ class ImaxData():
         fig,ax = pt.subplots(nrows=n_harmonics,ncols=2)
         if n_harmonics == 1: ax = ax[np.newaxis,:]
         cm_to_inch=0.393701
-        #import matplotlib as mpl
-        #old_rc_Params = mpl.rcParams
-        #mpl.rcParams['font.size']=8.0
-        #mpl.rcParams['axes.titlesize']=8.0#'medium'
-        #mpl.rcParams['xtick.labelsize']=8.0
-        #mpl.rcParams['ytick.labelsize']=8.0
-        #mpl.rcParams['lines.markersize']=5.0
-        #mpl.rcParams['savefig.dpi']=300
         fig.set_figwidth(8.48*cm_to_inch)
         fig.set_figheight((8.48*(0.5*n_harmonics)+0.1)*cm_to_inch)
         amp_im_list = []

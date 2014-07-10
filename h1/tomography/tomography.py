@@ -2341,13 +2341,13 @@ def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count
     SRH : 12Feb2014
     '''
     z, tomo_valid_channels, tomo_measurements = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
+    print 'z_shape', z.shape
     if decimate!=False:
         print 'hello decimating', z.shape, decimate
         z_new = np.zeros((z.shape[0],z.shape[1]/decimate), dtype = complex)
         for i in range(z.shape[1]/decimate):
             z_new[:,i] = +np.sum(z[:,i*decimate:i*decimate+decimate], axis = 1)
         z = z_new
-    print 'hello decimating', z.shape, decimate
     if method=='SIRT':
         tomo_sirt = SIRT(z, tomo_measurements, lamda, valid_channels = tomo_valid_channels, tomo_DC = tomo_DC)
         tomo_sirt.run(cycles = cycles)

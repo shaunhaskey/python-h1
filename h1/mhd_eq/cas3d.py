@@ -8,14 +8,15 @@ from StringIO import StringIO
 
 
 class cas3d_results():
-    def __init__(self, directory, single_eig = True):
+    def __init__(self, directory, single_eig = True, output_filename = 'out_cas3d'):
         self.directory = directory
         self.single_eig = single_eig
-
-    def plot_eigenvalues(self, ax = None, ylims = None, max_harms = None):
-        with file(self.directory + '/out_cas3d', 'r') as file_handle:
+        self.output_filename = output_filename
+    def plot_eigenvalues(self, ax = None, ylims = None, max_harms = None, sqrt_s = False, multiplier = 1):
+        with file(self.directory + '/'+ self.output_filename, 'r') as file_handle:
             file_lines = file_handle.readlines()
         harmonic_strings = ['largest xis harmonics', 'largest eta harmonics', 'largest mu  harmonics']
+        harmonic_strings = ['largest xis harmonics']
         coeff_strings = ['Fourier coefficients of     xis', 'Fourier coefficients of     eta','Fourier coefficients of      mu']
         titles = [r'$\xi^s$', r'$\xi^\eta$', r'$\xi^\mu$']
         own_plots = True if ax == None else False
@@ -29,12 +30,13 @@ class cas3d_results():
             max_ind = np.argmin(np.abs(svals - 0.95))
             if max_harms == None: max_harms = len(m_n_list) - 1
             for j in range(0,max_harms+1):
-                ax[i].plot(svals, coefficient_array[:,j],'-', label = '{}'.format(m_n_list[j]))
+                xax = svals if not sqrt_s else np.sqrt(svals)
+                ax[i].plot(xax, coefficient_array[:,j]*multiplier,'k-', label = '{}'.format(m_n_list[j]))
                 max_loc = np.argmax(np.abs(coefficient_array[:max_ind,j]))
                 max_val = np.abs(np.max(coefficient_array[:max_ind,j]))
                 if max_val>max_val_plot: max_val_plot = max_val
                 text_string = m_n_list[j]
-                ax[i].text(svals[max_loc], coefficient_array[max_loc,j], '{}'.format('{},{}'.format(-text_string[1], -text_string[0])))
+                #ax[i].text(xax[max_loc], coefficient_array[max_loc,j]*multiplier, '{}'.format('{},{}'.format(-text_string[1], -text_string[0])))
 
 
             ax[i].grid()
@@ -55,14 +57,20 @@ class cas3d_results():
         tmp_data = np.loadtxt(self.directory + '/xis_largest01-10.dat')
         fig, ax = pt.subplots()
         for j in range(1,tmp_data.shape[1]):
-            ax.plot(tmp_data[:,0], tmp_data[:,j],'.-')
+            xax = tmp_data[:,0] if not sqrt_s else np.sqrt(tmp_data[:,0])
+            xlabel = 's' if not sqrt_s else '$\sqrt{s}$'
+            #ax.plot(tmp_data[:,0], tmp_data[:,j],'.-')
+            ax.plot(xax, tmp_data[:,j],'.-')
+        ax.set_xlabel(xlabel)
+        #ax.set_ylabel(r'$\xi^s$')
+        ax.set_ylabel(r'Normal displacement (a.u)')
         fig.suptitle(self.directory.replace('_','\_'))
         fig.canvas.draw();fig.show()
         
     def return_harmonics(self, file_lines, harmonic_string):
         #find the start point of the interesting stuff
         found = 0; i=0
-        while found==0 and i<=len(file_lines):
+        while found==0 and i<len(file_lines):
             if file_lines[i].find(harmonic_string)>=0:
                 start_point = i; found = 1
             i+=1
@@ -91,53 +99,58 @@ class cas3d_results():
             current_loc+=1
         return np.array(svals), np.array(coefficient_array)
 
-    def plot_ne_Te_P(self,ne = True, Te = False, P = True, fname_ne = 'perturbed_ne_f.dat', fname_Te = 'perturbed_te_f.dat', fname_P = 'perturbed_pressure_f.dat', max_harms = None, ax = None, ylims = None, divide = False):
+    def plot_ne_Te_P(self,ne = True, Te = False, P = True, fname_ne = 'perturbed_density.dat', fname_Te = 'perturbed_temperature.dat', fname_P = 'perturbed_pressure.dat', max_harms = None, ax = None, ylims = None, divide = False, sqrt_s = False, multiplier = 1):
         #fname_ne = 'perturbed_ne_f.dat'
         #fname_Te = 'perturbed_pressure_f.dat'
         #fname_P = 'perturbed_ne_f.dat'
         fnames = []; yax = []
         divisors = []
+        pert_quants = []
         if ne: 
             fnames.append(fname_ne)
             yax.append('Perturbed ne (a.u)')
             divisors.append(self.rho)
+            pert_quants.append('ne1')
         if Te: 
             fnames.append(fname_Te)
             yax.append('Perturbed Te (a.u)')
             divisors.append(self.Te)
+            pert_quants.append('Te1')
         if P: 
             fnames.append(fname_P)
             yax.append('Perturbed P (a.u)')
             divisors.append(self.P)
+            pert_quants.append('P1')
         #yax = ['Perturbed Pressure', 'Perturbed Density']
         own_plots = True if ax == None else False
         if ylims == None: ylims = [None] * len(yax)
         if own_plots: fig, ax = pt.subplots(nrows = len(fnames), sharex = True)
-        for fname, yname, ax_cur, ylim, div in zip(fnames, yax, ax, ylims, divisors):
+        for fname, yname, ax_cur, ylim, div, pert_name in zip(fnames, yax, ax, ylims, divisors, pert_quants):
             max_val_plot = 0.
             a = np.loadtxt(self.directory + '/'+fname, comments='#')
-            s = a[:,0]
-            max_ind = np.argmin(np.abs(s - 0.95))
+            self.s_cur = a[:,0]
+            max_ind = np.argmin(np.abs(self.s_cur - 0.95))
             if max_harms == None: max_harms = a.shape[1]-1
+            setattr(self, pert_name, a[:,1:])
             for i in range(1, max_harms+1):
                 try:
+                    x_ax = np.sqrt(self.s_cur) if sqrt_s else self.s_cur
                     self.identifiers[0].tolist().index(i)
                     plot_val = a[:,i] if not divide else a[:,i]/div
-                    ax_cur.plot(s, plot_val)
-                    max_val = np.max(np.abs(plot_val[:max_ind]))
+                    ax_cur.plot(x_ax, plot_val*multiplier, 'b-')
+                    max_val = np.max(np.abs(plot_val[:max_ind]))*multiplier
                     max_loc = np.argmax(np.abs(plot_val[:max_ind]))
                     if max_val>max_val_plot: max_val_plot = max_val
                     text_string = str(i)
-
                     text_string = self.m_n_list[0][self.identifiers[0].tolist().index(i)]
-                    ax_cur.text(s[max_loc], plot_val[max_loc], '{},{}'.format(-text_string[1], -text_string[0]))
+                    #ax_cur.text(s[max_loc], plot_val[max_loc]*multiplier, '{},{}'.format(-text_string[1], -text_string[0]))
                     #ax_cur.text(s[max_loc], a[max_loc,i], str(i))
                     #print 'errors....', 
                 except ValueError:
                     print 'errors....'
                     pass
 
-            ax_cur.set_xlabel('s')
+            #ax_cur.set_xlabel('s')
             ax_cur.set_ylabel(yname)
             print 'hello'
             #if ylim!=None: ax_cur.set_ylim(ylim)
@@ -146,6 +159,7 @@ class cas3d_results():
         if own_plots: fig.canvas.draw(); fig.show()
 
     def eq_quants_pnt(self, fname = 'equilibrium_profiles_pnt.dat', ax = None,):
+        print self.directory + '/equilibrium_profiles_pnt.dat'
         data = np.loadtxt(self.directory + '/equilibrium_profiles_pnt.dat', comments='#')
         labels = ['P', 'dP/ds','rho','drho/ds','Te','dTe/ds']
         names = ['P', 'dPds','rho','drhods','Te','dTeds']
@@ -222,7 +236,7 @@ class ModeTable:
 
 
 class plot_continua():
-    def __init__(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception):
+    def __init__(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d'):
 
         offs = 2 # allow for inserting both hash flags ahead of the rest. 
         m_ind = 2 + offs # the column containing the mode index
@@ -259,7 +273,7 @@ class plot_continua():
             OPEN=gzip.GzipFile
         else: OPEN = open
 
-        outfn = path+'out_cas3d'+suff
+        outfn = path+output_log+suff
         try:
             outcas3d = OPEN(outfn,'r')
             buff=outcas3d.readlines(100000)   # arg is # characters to read, approx.
@@ -439,7 +453,7 @@ class plot_continua():
             lined[legline] = origline
 
 
-        pl.title(path)
+        pl.title(path.replace('_','-'))
         pl.xlabel('s (flux)')
         pl.ylabel('frequency')
         am = ' '.join([ str(a) for a in allmodes])
@@ -470,7 +484,7 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
     limit_m = None
 
     outfn = 'out_cas3d'
-    with file(path + outfn,'r') as out_cas3d:
+    with file(path + '/'+outfn,'r') as out_cas3d:
         buff=out_cas3d.readlines(100000)   # arg is # characters to read, approx.
 
     XIS=ModeTable(buff=buff,target=[' xis\n','eta'])
