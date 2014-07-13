@@ -24,7 +24,27 @@ import atexit
 
 #Cro is set to single sweep after data is saved
 single_sweep = 0
-verbose=1
+verbose= 1
+
+#key should be the same as the label next to the checkbox
+#key must also exist in disable_buttons below to set the default value
+#item is a list of nodes that are to be disabled/enabled for that particular key
+disable_nodes = {'mirnov' : ['.mirnov.ACQ132_7', 
+                     '.mirnov.ACQ132_8', 
+                     '.mirnov.ACQ132_9', 
+                     '.mirnov.HMA_AMPS'],
+         'electron_density': ['.electr_dens.camac.TR612_7',
+                              '.electr_dens.camac.TR612_8',
+                              '.electr_dens.camac.TR612_9',
+                              '.electr_dens.camac.TR612_10'],
+         'alex_camera':['.mirnov.cam_alex'],
+         'greg_camera':['.mirnov.pimax']}
+
+#Default values for the disable_nodes above
+disable_buttons = {'mirnov': True,
+                   'electron_density': True,
+                   'alex_camera':True,
+                   'greg_camera':True}
 
 class GUI_control():
     def __init__(self):
@@ -46,16 +66,23 @@ class GUI_control():
         self.l_executing.modify_font(pango.FontDescription("sans 48"))
         self.l_current.modify_font(pango.FontDescription("sans 48"))
 
+        self.check_buttons = {}
+        for i in disable_nodes:
+            self.check_buttons[i] = gtk.CheckButton(i)
+
         self.button = gtk.Button("Reinitialise Shot")
         self.vbox.pack_start(self.button, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_phase, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_executing, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_current, expand=True, fill=True, padding=0)
+        for i in self.check_buttons.keys(): self.vbox.pack_start(self.check_buttons[i], expand=True, fill=True, padding=0)
 
         self.button.connect("clicked", self.reinit, None)
         self.window.add(self.vbox)
         self.vbox.show()
         self.button.show()
+        for i in self.check_buttons.keys(): self.check_buttons[i].set_active(True)
+        for i in self.check_buttons.keys(): self.check_buttons[i].show()
         self.l_phase.show()
         self.l_executing.show()
         self.l_current.show()
@@ -173,7 +200,7 @@ def kill_servers(computer, prog_details, local=0):
             if truth:
                 kill_pid = i.split()[1]
                 #kill_pid = re.search('\d+',i).group()
-                #print computer, tmp_prog_details, kill_pid
+                print computer, tmp_prog_details, kill_pid
                 if local==1 and str(os.getpid()) == kill_pid:
                     pass
                 else:
@@ -366,6 +393,16 @@ class shot_cycle():
         '''
         self.cycle = 'INIT'
         gobject.idle_add(self.update_label,)
+
+        #Disable nodes in the tree as requested with the check boxes
+        T = MDSplus.Tree('h1data', -1)
+        for i in disable_nodes.keys():
+            for j in disable_nodes[i]:
+                N = T.getNode(j)
+                #Need to check the status of the relevant checkbutton and set it accordingly
+                #print i, j, disable_buttons[i]
+                N.setOn(self.GUI.check_buttons[i].get_active())
+
         if self.include_transmitter_check:
             if (self.shot_count == 0) and (self.initial_trans_check):
                 print 'starting transmitter check'
@@ -408,6 +445,8 @@ class shot_cycle():
         '''Perform all the required tasks to store a shot
         SRH: 19July2013
         '''
+        #SRH MINISTER VISIT
+        #time.sleep(18)
         self.cycle = 'STORE'
         gobject.idle_add(self.update_label,)
         if self.include_transmitter_check:
