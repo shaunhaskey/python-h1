@@ -1,13 +1,9 @@
 from StringIO import StringIO
 import matplotlib.patches as mpatches
-import matplotlib.pyplot as pt
-import sys, re,os, copy,datetime, fpformat
-import pylab as pl
+import re,os, copy,datetime, fpformat
 import numpy as np
 import matplotlib as mpl
-import shutil
-import datetime, os, tempfile, shutil, gzip, subprocess
-from multiprocessing import Queue, Process, Pool
+import tempfile, subprocess,shutil
 
 class heliac:
     def __init__(self, filename,Nfp):
@@ -403,7 +399,18 @@ def iota_dave_fit(r,kappa):
 
 def generate_heliac_input_files(template_filename, base_output_directory,r0_offset = 0, r1_offset = 0.25, phi_values = [0,30,60,90], kh_values = [0.1,0.2,0.3], n_surfaces = 10, descur_surfaces=24, descur_points_per_surface=100,trace_increment=0.125, template_type = None):
     '''Generate the heliac input file
-    SH: 2Apr2013
+
+    base_output_directory: place to put the files
+    r0_offset, r1_offset : inner and outer launch radius for the traces
+    phi_values: puncture plot locations
+    kh_values: kh values to generate the input files for
+    n_surfaces: number of traces
+    descur_surfaces: 
+    descur_poinst_per_surface:
+    trace_increment: 
+    template_type : None (use template_filename), simple, jason, dave
+
+    SH: 14July2014
     '''
     # linear k_h parameterisation of axis location in the phi=0 plane, for k_v=1
     get_axis_r = lambda kappa_h: 1.22646966 + kappa_h*0.024363175
@@ -411,12 +418,7 @@ def generate_heliac_input_files(template_filename, base_output_directory,r0_offs
 
     # how to use these depends on input file (# of coils described) - make better.
 
-
-    PFC_windings=36
-    OVC_windings=8
-    HC_windings=4
-    current=500000.0/36
-
+    PFC_windings=36; OVC_windings=8;HC_windings=4;current=500000.0/36
 
     #descur_surfaces = 24
     #descur_points_per_surface = 100
@@ -442,12 +444,10 @@ def generate_heliac_input_files(template_filename, base_output_directory,r0_offs
     kappa_values = {'h':{},'v':{}}
 
     ## fix k_v = 1 so we can use the pre-calculated axis r,z
-    kappa_values['v']['values'] = [1.0]
-    kappa_values['h']['values']=kh_values 
+    kappa_values['h']['values']=kh_values; kappa_values['v']['values'] = [1.0]
     phi_values_strings=[]
     for i in phi_values: phi_values_strings.append('%.2f'%i)
-    phi_values_str = ','.join(phi_values_strings)
-    #print phi_values_str
+    phi_values_str = ','.join(['%.2f'%i for i in phi_values])
     ibline_value_str = '1'
     output_filename_list = []
     for kappa_h in kappa_values['h']['values']:
@@ -579,6 +579,8 @@ def do_heliac(input_data):
     print os.getpid(), 'finished heliac'
 
 
+
+
 heliac_simple = r''' &INPUT
   NEQ=2,       IDL=1,      ITERM=0,      IBAUD=110,
   RMIN=0.60,   RMAX=1.6,   ZMIN=-0.6,    ZMAX=0.6,
@@ -661,10 +663,11 @@ Kappa helical = <<kappa helical>>, Kappa (outer) vertical = <<kappa vertical>>
 1    1.2640    0.0000     0.0101000015    1.354 9
 1    0.0100    0.000      0.25160000 320    0.0700 6 V3 inner surface for iota
 1    0.0800    0.000      .125320000 380    0.1200 4 V3 outer surface for iota
-(I1,2F10.5,F10.5,I8,I2,I4,F10.5,I3)
-0    0.0950    0.000       .125   96000 3  40     0.1200 0 V3 FORMAT 24/100 planes 10cm
+0    <<r0>>    <<z>>     <<step_size>><<steps>> 3<<save_inc>>    <<r1>><<N>> gHg <<timestamp>>
 '''
 #0    <<r0>>    <<z>>     <<step_size>><<steps>> 3<<save_inc>>    <<r1>><<N>> gHg <<timestamp>>
+#(I1,2F10.5,F10.5,I8,I2,I4,F10.5,I3)
+#0    0.0950    0.000       .125   96000 3  40     0.1200 0 V3 FORMAT 24/100 planes 10cm
 
 heliac_comp = r''' &INPUT
   NEQ=2,       IDL=1,      ITERM=0,      IBAUD=110,
@@ -882,10 +885,10 @@ Kappa helical = <<kappa helical>>, Kappa (outer) vertical = <<kappa vertical>>
 1    1.1380    -.236     0.250360000 320    1.138001 taken from old matching one
 1    1.1370    -.236     0.250180000 320    1.137001 single surf
 1    1.2000    -.236     0.250360000 320    1.460052 dgp 060403
-(I1,2F10.5,F10.5,I8,I2,I4,F10.5,I3)
-0    0.0950    0.000       .125   96000 3  40     0.1200 0 V3 FORMAT 24/100 planes 10cm
+0    <<r0>>    <<z>>     <<step_size>><<steps>> 3<<save_inc>>    <<r1>><<N>> gHg <<timestamp>>
 '''
-#0    <<r0>>    <<z>>     <<step_size>><<steps>> 3<<save_inc>>    <<r1>><<N>> gHg <<timestamp>>
+#(I1,2F10.5,F10.5,I8,I2,I4,F10.5,I3)
+#0    0.0950    0.000       .125   96000 3  40     0.1200 0 V3 FORMAT 24/100 planes 10cm
 #0    <<r0>>    <<z>>     0.250360000 320    <<r1>><<N>> gHg <<timestamp>>
 
 
