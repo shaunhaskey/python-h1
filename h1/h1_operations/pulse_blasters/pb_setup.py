@@ -8,6 +8,7 @@ import MDSplus
 
 #include a delta option
 #maybe specify a particular shot for it to read in instead of a file?
+#multipliers must have the form ;(12msdL;15msdH)x30;
 
 dict_multiplier = {'ns':1, 'us':1000, 'ms':1000000, 's':1000000000}
 dict_string = {'l':'0', 'h':'1'}
@@ -102,6 +103,33 @@ def plot_lists(output, ax_list):
         time_list.append(i[1])
         level_list.append(int(i[2]))
     ax_list[output[0][0]-1].plot(time_list, level_list, 'o-')
+
+def look_for_multipliers(line):
+    '''
+    must have the form ;(12msdL;15msdH)x30;
+    '''
+
+    while line.find('(')>=0:
+        start_loc = line.find('(')
+        beginning = line[:start_loc].rstrip(';')+';'
+        end_loc = line.find(')')
+        if line[end_loc:].find(';')>=0:
+            end_mult = end_loc + line[end_loc:].find(';')
+            end = line[end_mult:].lstrip(';')
+            last_item = False
+        else:
+            end_mult = end_loc + line[end_loc:].find('\n')
+            end = line[end_mult:].lstrip(';')
+            last_item = True
+        mult_text = line[start_loc+1:end_loc].lstrip(';').rstrip(';') + ';'
+        mult_num = int(line[end_loc+1:end_mult].lstrip('x'))
+        print mult_text, mult_num
+        line = beginning + mult_text*mult_num
+        if last_item:
+            line = line.rstrip(';') + end
+        else:
+            line = line + end
+        print line
 
 #READ INPUT FILE AND MAKE LIST OF COMMANDS
 

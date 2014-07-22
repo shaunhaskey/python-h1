@@ -419,7 +419,9 @@ class plot_continua():
             lab_text = np.array([ltemp.split('&')[0] for ltemp in lab_temp])
             lab_order = [ltemp.split('&')[1] for ltemp in lab_temp]
             lab_inds = np.argsort(lab_order)           # sort by increasing code
-            leg_sh = ax.legend(np.array(handles)[lab_inds], lab_text[lab_inds],prop=leg_props, fancybox=True) #SH
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+            leg_sh = ax.legend(np.array(handles)[lab_inds], lab_text[lab_inds],prop=leg_props, fancybox=True,loc='center left', bbox_to_anchor=(1, 0.5)) #SH
         except None, details:    
             print 'hello'
             if verbose: print('label ordering failed - {d}'.format(details))
@@ -470,7 +472,7 @@ class plot_continua():
 
 
 
-def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0.850-kv1.000fixed_dir/cas3d_r_n1_free/'):
+def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0.850-kv1.000fixed_dir/cas3d_r_n1_free/', output_log = 'out_cas3d'):
     '''Meant to help find the interesting modes
     '''
     minscan = 1
@@ -483,8 +485,8 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
     tmp = []
     limit_m = None
 
-    outfn = 'out_cas3d'
-    with file(path + '/'+outfn,'r') as out_cas3d:
+    #outfn = 'out_cas3d'
+    with file(path + '/'+output_log,'r') as out_cas3d:
         buff=out_cas3d.readlines(100000)   # arg is # characters to read, approx.
 
     XIS=ModeTable(buff=buff,target=[' xis\n','eta'])

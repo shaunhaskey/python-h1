@@ -58,13 +58,15 @@ class heliac:
         interesting_text_list = interesting_text.split('\n')[3:-1]
         out_string = ''
         for i in interesting_text_list[1:]:
-            out_string += i[0:16+6]+' '+i[85:85+6]+'\n'
+            out_string += i[0:16+7]+' '+i[85:85+6]+'\n'
+        #print out_string
         tmp=np.loadtxt(StringIO(out_string))
         if len(tmp.shape)==1: tmp = tmp[np.newaxis,:]
         self.trace_list_order = map(int, tmp[:,0])
         self.psi_list = tmp[:,1]
         self.R_list = tmp[:,2]
         self.Ra_list = tmp[:,3]
+        #print self.Ra_list
         self.iota_list = -tmp[:,4]
 
         # And now we're done with the datafile.
@@ -397,7 +399,7 @@ def iota_dave_fit(r,kappa):
     return temp
 
 
-def generate_heliac_input_files(template_filename, base_output_directory,r0_offset = 0, r1_offset = 0.25, phi_values = [0,30,60,90], kh_values = [0.1,0.2,0.3], n_surfaces = 10, descur_surfaces=24, descur_points_per_surface=100,trace_increment=0.125, template_type = None):
+def generate_heliac_input_files(template_filename, base_output_directory,r0_offset = 0, r1_offset = 0.25, phi_values = [0,30,60,90], kh_values = [0.1,0.2,0.3], n_surfaces = 10, descur_surfaces=24, descur_points_per_surface=100,trace_increment=0.125, template_type = None, launch_rel_mag = True):
     '''Generate the heliac input file
 
     base_output_directory: place to put the files
@@ -453,8 +455,11 @@ def generate_heliac_input_files(template_filename, base_output_directory,r0_offs
     for kappa_h in kappa_values['h']['values']:
         for kappa_v in kappa_values['v']['values']:
             axis_r = get_axis_r(kappa_h); axis_z = get_axis_z(kappa_h)
-
-            launch_r0_str = "%.4f" %(axis_r + r0_offset); launch_r1_str = "%.4f" %(axis_r + r1_offset)
+            if launch_rel_mag:
+                launch_r0_str = "%.4f" %(r0_offset); launch_r1_str = "%.4f" %(r1_offset)
+                axis_z = 0.
+            else:
+                launch_r0_str = "%.4f" %(axis_r + r0_offset); launch_r1_str = "%.4f" %(axis_r + r1_offset)
             if axis_z <0:
                 sign_str = "-"
             else:

@@ -16,10 +16,8 @@ import os, tempfile,shutil,pickle, itertools
 import subprocess, copy
 import numpy as np
 
-
-
 def run_many_descur(input_data, method_styles=['<','o','s','d'], r_styles = ['r','b','k','y'], surface_styles = ['-','--','-.'], points_per_surface_styles = ['k','b','r'],ax=None):
-    kh_value, desc_points_per_surface_list, desc_surfaces, traces, method_list, mu_list, heliac_base_dir, nu,output_pickle = input_data
+    kh_value, desc_points_per_surface_list, desc_surfaces, traces, method_list, mu_list, heliac_base_dir, nu,output_pickle,max_Ra = input_data
     print input_data
     results = dict.fromkeys(desc_points_per_surface_list, 
                             dict.fromkeys(desc_surfaces, {}))
@@ -35,8 +33,12 @@ def run_many_descur(input_data, method_styles=['<','o','s','d'], r_styles = ['r'
         os.chdir(temp_dir)
         curr_heliac = heliac.heliac(heliac_filename+'.plt',3)
         curr_heliac.read_trace_output2(heliac_filename+'.trace')
-        start_trace = np.max(curr_heliac.trace_list_order)
-
+        if max_Ra!=None:
+            tmp_loc = np.argmin(np.abs(curr_heliac.Ra_list-max_Ra))
+            start_trace = curr_heliac.trace_list_order[tmp_loc]
+            print 'Forcing smaller start trace because of max_Ra'
+        else:
+            start_trace = np.max(curr_heliac.trace_list_order)
         #start_trace = generate_descur_input(heliac_filename, 'in_descur',force_trace=None)
         trace_list = range(start_trace - traces, start_trace + 1)
         non_heliac_dependent_params = itertools.product(trace_list, method_list, mu_list)
@@ -53,11 +55,16 @@ def run_many_descur(input_data, method_styles=['<','o','s','d'], r_styles = ['r'
             process=subprocess.Popen(executable,stdin = subprocess.PIPE,stdout=subprocess.PIPE)
             process.communicate('%d\nV\n0\nin_descur\nY\n'%(method))
 
-            with open('outcurve','r') as fin:
-                lines = fin.readlines();
-            success = 0
-            for i in lines:
-                if i.find('MB')>0 and i.find('NB')>0: success=1
+            success = 0; read_in_success = 0
+            try:
+                with open('outcurve','r') as fin:
+                    lines = fin.readlines();
+                    read_in_success = 1
+            except:
+                print "Unable to open outcurve"
+            if read_in_success:
+                for i in lines:
+                    if i.find('MB')>0 and i.find('NB')>0: success=1
             if success==1:
                 x = hv_utils.DescurPlotout('plotout')
                 RMS_error=[]
@@ -206,6 +213,7 @@ def run_vmec2(x):
             p = np.polyfit(s, iota,4)
         else:
             final_loc = curr_heliac.trace_list_order.index(force_trace)
+            final_ra = curr_heliac.Ra_list[final_loc]
             iota = curr_heliac.iota_list[:final_loc]
             psi = curr_heliac.psi_list[:final_loc]
             psi_norm = psi/np.max(psi)
@@ -241,7 +249,7 @@ def run_vmec2(x):
             print 'vmec already finshed successfully for this directory!!'
         else:
             #os.system('rm iAmFinishedVMEC')
-            os.system('/home/srh112/bin/xvmec2000 ' + input_filename+' >VMEC.out 2>VMEC.err')
+            os.system('/home/srh112/bin/xvmec2000_nc ' + input_filename+' >VMEC.out 2>VMEC.err')
             VMEC_output_filename = 'wout_'+input_filename.lstrip('input.')+'.nc'
             vmec_count += 1
             try:
@@ -249,7 +257,9 @@ def run_vmec2(x):
                 if os.stat(VMEC_output_filename).st_size>200000:
                     print os.getpid(), 'output file bigger than 200K, so assuming run finished ok'
                     with file('iAmFinishedVMEC','w') as f_tmp:
-                        f_tmp.write('%s\n%d\n'%(heliac_filename,force_trace))
+                        tmp_string = '%s\n%d\n'%(heliac_filename,force_trace)
+                        tmp_string += '{:.4f}\n'.format(final_ra)
+                        f_tmp.write(tmp_string)
                     #os.system('touch iAmFinishedVMEC')
                     vmec_success = 1
                 else:
