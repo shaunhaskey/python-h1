@@ -174,6 +174,105 @@ class HMA(probe_array):
         self.cyl = np.array([loc[:,0], np.deg2rad(loc[:,2]), loc[:,1]]).T
         self.cart = np.array([self.cart_x,self.cart_y,self.cart_z]).T
 
+        #These are the outputs from each coil per AMP in the field coil
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        self.hfc_sens = np.array([[ 0.24680044,  0.38671494,  1.99371736],
+                                  [ 1.8162571 ,  0.3139969 ,  1.11030899],
+                                  [ 0.77506133,  0.34716982, -2.05733878],
+                                  [-1.98664767,  0.27446152, -0.63596707],
+                                  [-0.98941079,  0.24829954,  1.57720848],
+                                  [ 0.07520408,  0.43666601,  1.64201736],
+                                  [ 1.48546853,  0.28634358,  0.20937708],
+                                  [ 0.96485716,  0.22613518, -1.01469717],
+                                  [-0.84246615,  0.17836883, -1.27135465],
+                                  [-1.6200651 ,  0.28164495, -0.15445505],
+                                  [-0.64235141,  0.3044398 ,  1.42710179],
+                                  [ 0.14169116,  0.27369179,  1.42189146],
+                                  [ 1.40695573,  0.3618185 ,  0.9818182 ],
+                                  [ 1.67037656,  0.41032717, -0.99520859],
+                                  [-0.09590273,  0.38489415, -1.58732869],
+                                  [-1.60452575,  0.3077779 ,  0.06969922]])
+
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        self.ovc_sens = np.array([[ 0.32148735,  0.14624306,  0.33290093],
+                                  [ 0.47703375,  0.10144618,  0.12750015],
+                                  [ 0.1966587 ,  0.0413601 , -0.45012207],
+                                  [-0.37909552, -0.02401509, -0.31848575],
+                                  [-0.47986755, -0.05278911,  0.11920395],
+                                  [-0.46650299, -0.04302656,  0.18505433],
+                                  [-0.10538589, -0.1053388 ,  0.47133019],
+                                  [ 0.20085195, -0.13279013,  0.43445564],
+                                  [ 0.47393702, -0.0971154 ,  0.12427098],
+                                  [ 0.48078232, -0.07264135, -0.10010139],
+                                  [ 0.33590748, -0.0291113 , -0.37420902],
+                                  [ 0.28142761,  0.05629237, -0.40164629],
+                                  [ 0.08206854,  0.13642537, -0.46844489],
+                                  [-0.17726428,  0.11452079, -0.45364346],
+                                  [-0.37137112,  0.14474828, -0.307499  ],
+                                  [-0.41907554,  0.11838274,  0.24172061]])
+
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        self.pfc_sens = np.array([[ -7.99749218,  -3.05858866,  -4.5654661 ],
+                                  [ -8.65408697,  -3.33189089,   3.81550182],
+                                  [  5.98135272,  -2.95477332,   6.63519082],
+                                  [  6.1890899 ,  -1.94152672,  -6.18416383],
+                                  [ -4.85713685,  -1.59959204,  -7.15566348],
+                                  [ -7.21754124,  -1.69387596,  -2.48902452],
+                                  [ -3.33778916,  -1.62587849,   5.92913341],
+                                  [  3.60105246,  -1.9112014 ,   5.92601954],
+                                  [  7.28507464,  -2.08076584,  -2.91896605],
+                                  [  1.03232588,  -2.26124645,  -8.1866978 ],
+                                  [ -6.73277036,  -2.1534624 ,  -4.88527605],
+                                  [ -9.00798967,  -2.89434804,  -1.71041815],
+                                  [ -7.62557428,  -4.064121  ,   6.87788172],
+                                  [  1.79385294,  -2.74557257,  10.05864949],
+                                  [  8.09985463,  -3.08717648,   5.33294451],
+                                  [  5.49885075,  -3.42119878,  -8.3755888 ]])
+
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        self.tfc_sens = np.array([[ 0.65129772, -7.49218624,  1.62549694],
+                                  [ 1.63950254, -7.99839531, -0.24498995],
+                                  [-0.42725304, -8.41199265, -1.50359276],
+                                  [-1.09843213, -9.00588666,  0.1373979 ],
+                                  [-0.42053863, -9.23841439,  0.80302916],
+                                  [ 0.12297388, -8.88902202,  2.16134651],
+                                  [ 1.48875708, -8.56707863, -0.30746247],
+                                  [-0.11581799, -8.00095416, -1.48414972],
+                                  [-1.2693579 , -7.47963575,  0.15921665],
+                                  [-1.10589928, -6.99862441,  0.72853838],
+                                  [ 0.09033151, -6.78518809,  1.32462539],
+                                  [ 1.10077608, -6.79465548,  0.99386562],
+                                  [ 1.78605707, -6.84787579, -0.42116655],
+                                  [ 1.01115844, -7.21598888, -0.97219593],
+                                  [-0.55493877, -7.52592757, -1.70943072],
+                                  [-1.15746014, -8.02568961,  1.29325897]])
+        
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        self.resistance_comp = np.array([[ 1.12688612,  1.06576173,  1.00143256],
+                                      [ 1.14329642,  1.0242431 ,  1.05996262],
+                                      [ 1.12909609,  1.01320953,  1.05431591],
+                                      [ 1.12499777,  1.01664142,  1.0512358 ],
+                                      [ 1.11117414,  1.00448864,  1.03784448],
+                                      [ 1.12136575,  1.00807551,  1.04840498],
+                                      [ 1.12423223,  1.01082688,  1.05108459],
+                                      [ 1.12519099,  1.01134343,  1.04474993],
+                                      [ 1.12768874,  1.01376638,  1.04724921],
+                                      [ 1.12221355,  1.06012822,  1.00314682],
+                                      [ 1.12394626,  1.06213138,  1.01811234],
+                                      [ 1.12510437,  1.06304063,  0.99999999],
+                                      [ 1.12976077,  1.07367974,  1.00379342],
+                                      [ 1.12298962,  1.06854099,  1.01712037],
+                                      [ 1.12435199,  1.0632905 ,  1.01356087],
+                                      [ 1.1201823 ,  1.06012822,  1.00936083]])
+
+
+
+
 class PMA1(probe_array):
     '''Returns the locations of the PMA1 
     [R(m), phi(rad), z(m)], [x(m), y(m), z(m)]
@@ -384,6 +483,145 @@ class boozer_object:
         if coil_loc!=None:
             self.distance = np.sqrt((coil_loc[0]-self.x)**2+(coil_loc[1]-self.y)**2+(coil_loc[2]-self.z)**2)
             return self.distance
+
+
+
+
+
+
+
+def get_coil_orientation_data():
+    '''
+    Extracts data out of the cro files for the coil orientation
+    measurements using each of the field coil sets individually to
+    give information to figure out the 3 coil orientations on each of
+    the formers.
+
+    SRH: 24 July 2014
+    '''
+
+    def extract_data(coil_set):
+        list_items = ['Amplitude(1)','Amplitude(M)']
+        results = {}
+        for jjj in range(0,48):
+            file_name = '/home/srh112/Desktop/Orientation/{}_{}.txt'.format(coil_set,jjj)
+            with file(file_name,'r') as file_opened:contents = file_opened.read().split('\n')
+            #file_opened = open(file_name, 'r')
+            #contents = file_opened.read().split('\n')
+            #file_opened.close()
+            answer_list = []
+            for iii in range(0,len(list_items)):
+                for i in range(0,len(contents)):
+                    #print contents[i][0:len(list_items[iii])]
+                    if contents[i][0:len(list_items[iii])]==list_items[iii]:
+                        temp_line = contents[i]
+                        start = temp_line.find('Cur ') + 4
+                        end = temp_line[start:].find(',')+start
+                        answer = temp_line[start:end]
+                        if answer[-2:]=='mV':
+                            number_answer = float(answer[:-2])/1000.
+                        elif answer[-1]=='V':
+                            number_answer = float(answer[:-1])
+                        else:
+                            print 'error'
+                        answer_list.append(number_answer)
+            a = np.loadtxt(file_name[:-3]+'csv',skiprows=4,delimiter=',')
+            coil_ptp = np.ptp(a[:,1])
+            field_current = np.ptp(a[:,2])
+            correlation = np.correlate(a[:,1],a[:,2])
+
+            #multiply by 100 to make a resonable answer (I think......)
+            coil_ptp = coil_ptp * correlation / np.abs(correlation) *100/field_current
+            answer_list.append(float(coil_ptp))
+            answer_list.append(float(field_current))
+            answer_list.append(float((np.abs(coil_ptp)-np.abs(answer_list[0]))/answer_list[0]*100))
+            answer_list.append(float((field_current-answer_list[1])/answer_list[1]*100))
+            results[jjj] = answer_list
+        return results
+
+    def rearange_results(hfc_results,ovf_results,pfc_results,tfc_results):
+        coil_number = 1
+        colour = 'blue'
+        reordered_results = {}
+        reordered_results[coil_number]={}
+        reordered_results[coil_number][colour]={}
+
+        for i in range(0,48):
+            reordered_results[coil_number][colour]['pfc']=pfc_results[i]
+            reordered_results[coil_number][colour]['hfc']=hfc_results[i]
+            reordered_results[coil_number][colour]['ovf']=ovf_results[i]
+            reordered_results[coil_number][colour]['tfc']=tfc_results[i]
+            if colour == 'blue':
+                colour = 'black'
+                reordered_results[coil_number][colour]={}
+            elif colour == 'black':
+                colour = 'grey'
+                reordered_results[coil_number][colour]={}
+            elif colour == 'grey':
+                colour = 'blue'
+                coil_number+=1
+                reordered_results[coil_number]={}
+                reordered_results[coil_number][colour]={}
+        return reordered_results
+
+    def print_results(coil_set,results):
+        print '\n\n',coil_set
+        data = np.ones((16,3),dtype=float)
+
+        #Organise data in Blue (x), Black(y), Grey (z)
+        for i in range(1,17):
+            #blue = results[i]['blue'][coil_set][2]
+            #black = results[i]['black'][coil_set][2]
+            #grey = results[i]['grey'][coil_set][2]
+            #data[i-1,0]=black
+            #data[i-1,1]=grey
+            #data[i-1,2]=blue
+            data[i-1,0]=results[i]['blue'][coil_set][2]
+            data[i-1,1]=results[i]['black'][coil_set][2]
+            data[i-1,2]=results[i]['grey'][coil_set][2]
+        hma_tmp = HMA()
+        #This is in Blue (x), Black(y), Grey (z)
+        ResistanceComp = hma_tmp.resistance_comp
+        #ResistanceComp blue, grey, black
+        # ResistanceComp=[[168.6, 189.7212121, 178.2696774],
+        #                 [166.180,179.245, 185.496],
+        #                 [168.270,180.205,187.516],
+        #                 [168.883,180.733,186.883],
+        #                 [170.984,183.065,189.144],
+        #                 [169.430,181.221,188.471],
+        #                 [168.998,180.759,187.958],
+        #                 [168.854,181.855,187.862],
+        #                 [168.480,181.421,187.413],
+        #                 [169.302,189.397,179.217],
+        #                 [169.041,186.613,178.879],
+        #                 [168.867,189.993,178.726],
+        #                 [168.171,189.275,176.955],
+        #                 [169.185,186.795,177.806],
+        #                 [168.980,187.451,178.684],
+        #                 [169.609,188.231,179.217]]
+        #ResistanceComp = np.array(ResistanceComp)
+        #reorder to make black, grey, blue
+        #ResistanceComp_temp = ResistanceComp*1.0
+        #ResistanceComp[:,0] = ResistanceComp_temp[:,2]
+        #ResistanceComp[:,2] = ResistanceComp_temp[:,0]
+        #ResistanceComp = 200./ResistanceComp
+        data = data*ResistanceComp
+        #for i in range(0,16):
+        #    data[i,:]=data[i,:]/(np.sum(data[i,:]**2)**0.5)
+        print data
+        return data
+
+    pfc_results = extract_data('pfc')
+    hfc_results = extract_data('hfc')
+    ovf_results = extract_data('ovf')
+    tfc_results = extract_data('tfc')
+    results = rearange_results(hfc_results,ovf_results,pfc_results,tfc_results)
+
+    data_tfc = print_results('tfc',results)
+    data_pfc = print_results('pfc',results)
+    data_hfc = print_results('hfc',results)
+    data_ovf = print_results('ovf',results)
+    return data_tfc, data_pfc, data_hfc, data_ovf
 
 # hma = HMA()
 # kh = 0.35

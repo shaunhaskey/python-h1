@@ -288,13 +288,13 @@ def extract_VMEC_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.p
 
 
 
-def extract_BOOZER_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.pi):
+def extract_BOOZER_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np.pi, n_phi = 100, n_theta = 100):
     '''extracts x, y, z and B for the surface index s_ind
     using Berhnard's VMEC utilities
     '''
     import h1.mhd_eq.BOOZER as BOOZER
-    theta_boozer = np.linspace(0,2.*np.pi,100)
-    phi_b = np.linspace(phi_min, phi_max,100)
+    theta_boozer = np.linspace(0,2.*np.pi,n_theta)
+    phi_b = np.linspace(phi_min, phi_max,n_phi)
     theta_grid, phi_b_grid = np.meshgrid(theta_boozer, phi_b)
     boozer_tmp = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
     print s_ind
@@ -331,12 +331,11 @@ def extract_BOOZER_fieldline(filename, s_ind=-1, theta_b_start = 0, no_cycles=1,
         print s_ind
         s_ind = np.argmin(np.abs(boozer_tmp.es-s_ind))
         print s_ind, boozer_tmp.es[s_ind]
-        print('iota at this surface: {:.2f}'.format(boozer_tmp.iota_b[s_ind]))
+    print('iota at this surface: {:.2f}'.format(boozer_tmp.iota_b[s_ind]))
     print s_ind, boozer_tmp.es[s_ind], boozer_tmp.rmnc_b.shape
-
     phi_b = np.linspace(phi_b_start, 2.*np.pi*no_cycles+phi_b_start,pts_per_cycle*np.abs(no_cycles))
     print len(phi_b)
-    theta_boozer = phi_b * boozer_tmp.iota_b[s_ind]+theta_b_start
+    theta_boozer = phi_b * boozer_tmp.iota_b[s_ind]+theta_b_start - phi_b[0] * boozer_tmp.iota_b[s_ind]
     theta_boozer = np.mod(theta_boozer, 2.*np.pi)
     phi_boozer = np.mod(phi_b, 2.*np.pi)
     theta_grid = theta_boozer
@@ -452,9 +451,9 @@ def plot_vmec(vmec_filename = '/home/srh112/code/python/h1_eq_generation/results
     pts = mlab.mesh(x[:,:], y[:,:], z[:,:], **vmec_kwargs)
     return x, y, z, B
 
-def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/boozmn_wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, boozer_args=None):
+def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/boozmn_wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, boozer_args=None, n_phi = 100, n_theta = 100):
     #vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
-    x, y, z, B = extract_BOOZER_surface_data(boozer_filename, s_ind=s_ind, phi_min = phi_min, phi_max = phi_max)
+    x, y, z, B = extract_BOOZER_surface_data(boozer_filename, s_ind=s_ind, phi_min = phi_min, phi_max = phi_max, n_phi = n_phi, n_theta = n_theta)
     boozer_kwargs={'opacity':1.0,'scalars':B,'colormap':'hot','representation':'surface' }
     if boozer_args!=None: 
         for i in boozer_args.keys(): boozer_kwargs[i] = boozer_args[i]
