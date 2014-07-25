@@ -1,6 +1,8 @@
 import h1.mhd_eq.BOOZER as BOOZER
-import time
+import time, pickle, os
+
 import scipy.optimize as optimize
+import scipy.interpolate as interp
 import numpy as np
 import matplotlib.pyplot as pt
 
@@ -8,6 +10,8 @@ class probe_array():
     def __init__(self,):
         pass
     def loc_boozer_coords(self, filename=None, boozer_phi = None, boozer_theta = None, distance = None):
+        '''Finds the nearest point on the LCFS to the probes
+        '''
         if filename == None:
             self.boozer_phi = boozer_phi
             self.boozer_theta = boozer_theta
@@ -16,7 +20,66 @@ class probe_array():
             booz_obj2 = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
             booz_obj = boozer_object(booz_obj2)
             kernel = -1.; a = 1.#2.*np.pi/3
-            self.boozer_phi, self.boozer_theta, self.distance = find_coil_locs(self.cart_x, self.cart_y, self.cart_z, booz_obj, kernel, a,func)
+            self.boozer_phi, self.boozer_theta, self.distance, self.cart_nearest = find_coil_locs(self.cart_x, self.cart_y, self.cart_z, booz_obj, kernel, a,func)
+        
+
+    def B_unit_vectors(self, filename=None, BOOZER_obj = None, th_offset = 10):
+        '''
+        This calculates the unit vectors parallel to the field, perp
+        to the field but in the surface and per to the other two for
+        the location closest to probe filename : boozer filename
+        BOOZER_obj: BOOZER object from Bernhards tools if filename is
+        not used th_offset: for calculating the per and in surface -
+        use a field line with th_offset from the original in deg
+        self.b_hat_par : unit vector parallel to B at closest point of
+        LCFS self.b_hat_perp_in_surf : unit vector perpendicular to B
+        but in the surface on the LCFS self.b_hat_perp : =
+        self.b_hat_par cross self.b_hat_in_surf: unit vector ~perp to
+        surface and B
+
+        SRH: 25July2014
+        '''
+        s_ind = -1
+        if BOOZER_obj == None:
+            BOOZER_obj = BOOZER.BOOZER(filename, import_all=True, load_spline=False, save_spline=False, compute_spline_type=0, compute_grid=False, load_grid=False, save_grid=False)
+        booz_obj = boozer_object(BOOZER_obj, s_ind = s_ind)
+        kernel = -1.; a = 1.#2.*np.pi/3
+        self.b_hat_par = np.zeros((self.boozer_theta.shape[0],3))
+        self.b_hat_perp_in_surf = +self.b_hat_par
+        self.b_hat_perp = +self.b_hat_par
+        #Go through each former and calculate the unit vectors
+        for i in range(self.boozer_theta.shape[0]):
+            print 'Calculating unit mag field unit vectors former', i
+            loc1 = self.cart_nearest[i,:]
+            theta_b_start = np.deg2rad(self.boozer_theta[i])
+            phi_b_start = np.deg2rad(self.boozer_phi[i])
+            offset = theta_b_start - phi_b_start * booz_obj.iota_b[s_ind] 
+
+            #find a point slightly further along the field line
+            phi_b_end = phi_b_start + np.deg2rad(0.36)
+            theta_b_end = phi_b_end * booz_obj.iota_b[s_ind] + offset
+            booz_obj.return_values_single2(theta_b_end, phi_b_end, 3, coil_loc = None, kernel=kernel, a=a)
+            loc2 = np.array([+booz_obj.x, +booz_obj.y, +booz_obj.z])
+            #Find b_hat_par using these two points
+            tmp = loc2 - loc1
+            self.b_hat_par[i,:] = tmp/np.sqrt(np.sum(tmp**2))
+
+            #Generate cartesian points on a nearby field line that passes through the same phi_b, and a slightly offset theta_b
+            theta_b_start2 = theta_b_start + np.deg2rad(th_offset)
+            n_pts = 400
+            phi_b_vals2 = np.linspace(phi_b_start-np.deg2rad(10), phi_b_start+np.deg2rad(10), n_pts)
+            offset2 =  theta_b_start2 - phi_b_start * booz_obj.iota_b[s_ind]
+            theta_b_vals2 = phi_b_vals2 * booz_obj.iota_b[s_ind] + offset2
+            vals = np.zeros((n_pts,3),dtype=float)
+            for ii, (th, ph) in enumerate(zip(theta_b_vals2, phi_b_vals2)):
+                booz_obj.return_values_single2(th, ph, 3, coil_loc = None, kernel=kernel, a=a)
+                vals[ii,:] = +booz_obj.x, +booz_obj.y, +booz_obj.z
+            closest = np.argmin(np.sum((loc1[np.newaxis,:] - vals)**2,axis = 1))
+            #Find b_perp_in_surface
+            tmp = vals[closest,:] - loc1
+            self.b_hat_perp_in_surf[i,:] = tmp/np.sqrt(np.sum(tmp**2))
+            #Find b_hat_perp such that b_par cross b_hat_perp_in_surf = b_hat_perp
+            self.b_hat_perp[i,:] = np.cross(self.b_hat_par[i,:], self.b_hat_perp_in_surf[i,:])
         
     def plot_fig(self, ax = None, ax2 = None, mask = None, ax2_xaxis=None, ax3 = None):
         no_ax = True if  ax == None else False
@@ -116,10 +179,19 @@ def func(tmp, booz_obj, coil_loc, kernel, a):
     return tmp2
 
 def find_coil_locs(x_coil, y_coil, z_coil, booz_obj,kernel,a,opt_func):
+    '''This is the worker function that finds the nearest point on the LCFS for the magnetic probes
+
+    x_coil, y_coil, z_coil cartesian coords of the probe
+    kernel, a : convention for the kernel in the Fourier series : -1 and 1 for XFORM_BOOZ
+    opt_func : function to optimise with
+
+    SRH : 25July2014
+    '''
     answer_list = []
     distance_list = []
     min_locations_phi = []
     min_locations_theta = []
+    cart_nearest = np.zeros((len(x_coil), 3),dtype=float)
     start_time= time.time()
     for i in range(0,len(x_coil)):
         coil_loc=[x_coil[i],y_coil[i],z_coil[i]]
@@ -130,6 +202,7 @@ def find_coil_locs(x_coil, y_coil, z_coil, booz_obj,kernel,a,opt_func):
         distance_list.append(booz_obj.distance)
         min_locations_phi.append(q[1]*180/np.pi)
         min_locations_theta.append(q[0]*180/np.pi)
+        cart_nearest[i,:] = [+booz_obj.x, +booz_obj.y, +booz_obj.z]
     print 'finished all coils in : %.4fs'%(time.time() - start_time)
     #print min_locations_phi
     #print min_locations_theta
@@ -142,7 +215,7 @@ def find_coil_locs(x_coil, y_coil, z_coil, booz_obj,kernel,a,opt_func):
             min_locations_theta[j]-=360
     if np.min(min_locations_theta)<-360:
         min_locations_theta = min_locations_theta+360
-    return min_locations_phi, min_locations_theta, distance_list
+    return min_locations_phi, min_locations_theta, distance_list, cart_nearest
 
 
 #Mirnov coil locations
@@ -177,6 +250,8 @@ class HMA(probe_array):
         #These are the outputs from each coil per AMP in the field coil
         #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)
         #The x, y, and z correspond with the markings on the copper amplifier box
+        #These can be calculated using 
+        #data_tfc, data_pfc, data_hfc, data_ovf = get_coil_orientation_data()
         self.hfc_sens = np.array([[ 0.24680044,  0.38671494,  1.99371736],
                                   [ 1.8162571 ,  0.3139969 ,  1.11030899],
                                   [ 0.77506133,  0.34716982, -2.05733878],
@@ -270,9 +345,88 @@ class HMA(probe_array):
                                       [ 1.12435199,  1.0632905 ,  1.01356087],
                                       [ 1.1201823 ,  1.06012822,  1.00936083]])
 
+        #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)b
+        #The x, y, and z correspond with the markings on the copper amplifier box
+        #x(Blue)x, x(Blue)y, x(Blue)z, y(Black)x, y(Black)y, y(Black)z, z(Grey)x, z(Grey)y, z(Grey)z
+        #These are calculated
+        self.orientations = np.array([[-0.37951814, -0.63366333, -0.67411925, -0.67062632,  0.69036927,
+                                       -0.27138645,  0.63735886,  0.34908604, -0.68695897],
+                                      [-0.08975613, -0.32330828, -0.94202739, -0.69549901,  0.69737112,
+                                       -0.17307411,  0.71289898,  0.63964465, -0.28745392],
+                                      [ 0.75160652,  0.50782885, -0.42094834, -0.58286859,  0.81008661,
+                                        -0.06343412,  0.30879094,  0.29303506,  0.90486386],
+                                      [ 0.64745141,  0.21766499,  0.73036198, -0.37317932,  0.92613909,
+                                        0.0548049 , -0.66448767, -0.30803949,  0.68085814],
+                                      [-0.15940493, -0.11874896,  0.98004528, -0.17903826,  0.97975425,
+                                       0.08959302, -0.97084261, -0.16118404, -0.17743827],
+                                      [-0.2947015 , -0.09845791,  0.95050358, -0.13359614,  0.98915426,
+                                       0.06104035, -0.94620457, -0.10899493, -0.30465884],
+                                      [-0.95698105,  0.07282194,  0.28086337,  0.11931591,  0.98112785,
+                                       0.15215736, -0.26448248,  0.17912318, -0.94760957],
+                                      [-0.85667617,  0.38925347, -0.33850801,  0.34206159,  0.91984   ,
+                                       0.19206312,  0.38613445,  0.04874531, -0.92115367],
+                                      [-0.17042621,  0.27052566, -0.94750766,  0.54960613,  0.82420304,
+                                       0.13646411,  0.81785574, -0.49749895, -0.28914836],
+                                      [ 0.24764728, -0.05365377, -0.96736348,  0.6693264 ,  0.73136691,
+                                        0.13078462,  0.70048055, -0.67987037,  0.21703291],
+                                      [ 0.47744309, -0.59119083, -0.65003192,  0.80509303,  0.59067362,
+                                        0.05412854,  0.35195641, -0.54917946,  0.75797666],
+                                      [ 0.28533805, -0.76602688, -0.57600782,  0.90383376,  0.41500728,
+                                        -0.10418013,  0.31885222, -0.49088876,  0.81077832],
+                                      [ 0.27544127, -0.95000384, -0.14705376,  0.91692925,  0.30557746,
+                                        -0.25663819,  0.28874358, -0.06414914,  0.95525496],
+                                      [ 0.34178039, -0.86888468,  0.358086  ,  0.93688932,  0.28516328,
+                                        -0.20228769,  0.0736517 ,  0.40462491,  0.91151199],
+                                      [ 0.34551554, -0.61833074,  0.70589384,  0.93840986,  0.22570764,
+                                        -0.26161613,  0.00243966,  0.75281017,  0.65823316],
+                                      [ 0.0579311 ,  0.41746919,  0.90684258,  0.94575988,  0.26790733,
+                                        -0.18374961, -0.31965957,  0.86830014, -0.37930544]])
 
+        # self.orientations = np.array([[-0.67061775,  0.6903795 , -0.2713816 ,  0.63736427,  0.34908474,
+        #                                -0.68695461, -0.3795242 , -0.63365289, -0.67412565],
+        #                               [-0.69553035,  0.69734506, -0.17305317,  0.71286859,  0.63967937,
+        #                                -0.28745203, -0.08975471, -0.32329578, -0.94203181],
+        #                               [-0.58283844,  0.81010868, -0.06342939,  0.3087998 ,  0.29301691,
+        #                                0.90486671,  0.75162626,  0.50780412, -0.42094292],
+        #                               [-0.37319355,  0.92613511,  0.05477519, -0.664505  , -0.30803528,
+        #                                0.68084313,  0.64742542,  0.21768788,  0.7303782 ],
+        #                               [-0.17899393,  0.9797635 ,  0.08958044, -0.97085302, -0.1611447 ,
+        #                                -0.17741703, -0.15939132, -0.11872601,  0.98005028],
+        #                               [-0.13353376,  0.98916172,  0.06105592, -0.94620434, -0.10892809,
+        #                                -0.30468349, -0.29473054, -0.09845691,  0.95049469],
+        #                               [ 0.11935783,  0.9811237 ,  0.15215122, -0.26443738,  0.1791257 ,
+        #                                 -0.94762169, -0.95698829,  0.0728716 ,  0.28082583],
+        #                               [ 0.3420745 ,  0.91982615,  0.19210646,  0.38615283,  0.04877525,
+        #                                 -0.92114438, -0.85666272,  0.38928246, -0.3385087 ],
+        #                               [ 0.54961079,  0.8241983 ,  0.13647401,  0.81784394, -0.49748584,
+        #                                 -0.28920429, -0.1704678 ,  0.27056424, -0.94748917],
+        #                               [ 0.66929789,  0.73138242,  0.13084376,  0.70048662, -0.67985619,
+        #                                 0.2170577 ,  0.24770712, -0.05362196, -0.96734992],
+        #                               [ 0.80510499,  0.59066228,  0.05407422,  0.35198868, -0.54917063,
+        #                                 0.75796806,  0.47739912, -0.59121036, -0.65004645],
+        #                               [ 0.90382015,  0.41503353, -0.10419356,  0.31887838, -0.49087911,
+        #                                 0.81077388,  0.2853519 , -0.76601885, -0.57601165],
+        #                               [ 0.91692497,  0.30558187, -0.25664825,  0.28874968, -0.06413159,
+        #                                 0.95525429,  0.27544913, -0.95000361, -0.14704052],
+        #                               [ 0.93690413,  0.28514114, -0.20225027,  0.07362835,  0.40461427,
+        #                                 0.9115186 ,  0.3417448 , -0.8688969 ,  0.35809031],
+        #                               [ 0.93843088,  0.22562413, -0.26161277,  0.00249055,  0.75283456,
+        #                                 0.65820507,  0.34545808, -0.61833152,  0.70592127],
+        #                               [ 0.94574479,  0.26798222, -0.18371803, -0.31971219,  0.86829987,
+        #                                 -0.37926172,  0.05788694,  0.41742169,  0.90686726]])
 
+        #Get the frequency response of the coils
+        __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+        tmp = np.loadtxt(os.path.join(__location__, 'hma_axial_bellows.txt'))
+        self.axial_comp_func = interp.interp1d(tmp[:,0], tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2])))
+        tmp = np.loadtxt(os.path.join(__location__, 'hma_transverse_bellows.txt'))
+        self.comp = tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2]))
+        self.transverse_comp_func = interp.interp1d(tmp[:,0], self.comp)
+        tmp = np.loadtxt(os.path.join(__location__, 'hma_no_bellows.txt'))
+        self.comp = tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2]))
+        self.naked_comp_func = interp.interp1d(tmp[:,0], self.comp)
 
+        
 class PMA1(probe_array):
     '''Returns the locations of the PMA1 
     [R(m), phi(rad), z(m)], [x(m), y(m), z(m)]
@@ -388,19 +542,29 @@ class PMA2(probe_array):
         self.cart = np.array([self.cart_x, self.cart_y, self.cart_z]).T
 
 
+#This seems to be left over from the nearest loc LCFS calculations, 
+#Whatever is useful in it should be moved to the BOOZER module
+#or a way of doing the same thing using that module needs to be figured out
+#SRH : 25July2014
 class boozer_object:
-    def __init__(self, input_obj):
+    def __init__(self, input_obj, s_ind = -1):
+        '''This forcibly uses the last surface
+        '''
         self.m = input_obj.ixm_b
         self.n = input_obj.ixn_b
-        self.Rmn = input_obj.rmnc_b[-1,:]
-        self.Zmn = input_obj.zmns_b[-1,:]
-        self.deltaphimn = input_obj.pmns_b[-1,:]
-        self.bmod_mn = input_obj.bmnc_b[-1,:]
+        self.Rmn = input_obj.rmnc_b[s_ind,:]
+        self.Zmn = input_obj.zmns_b[s_ind,:]
+        self.deltaphimn = input_obj.pmns_b[s_ind,:]
+        self.bmod_mn = input_obj.bmnc_b[s_ind,:]
         self.kernelSign = input_obj.kernelSign
         self.phi_b_fact = input_obj.phi_b_fact
+        self.iota_b = input_obj.iota_b
         self.Nfp = 3
 
     def return_values(self, theta_b, phi_b, Nfp):
+        '''Old function - not sure what it is used for. kernel is forced positive, for MC3D?
+        SRH : 25July2014
+        '''
         self.theta_b_grid, self.phi_b_grid = np.meshgrid(theta_b,phi_b)
         self.R = self.theta_b_grid*0; 
         self.Z = self.theta_b_grid*0; 
@@ -483,10 +647,6 @@ class boozer_object:
         if coil_loc!=None:
             self.distance = np.sqrt((coil_loc[0]-self.x)**2+(coil_loc[1]-self.y)**2+(coil_loc[2]-self.z)**2)
             return self.distance
-
-
-
-
 
 
 
@@ -623,6 +783,230 @@ def get_coil_orientation_data():
     data_ovf = print_results('ovf',results)
     return data_tfc, data_pfc, data_hfc, data_ovf
 
+
+
+def euler_orientation(tmp):
+    a1,a2,a3 = tmp
+    c=np.cos
+    s=np.sin
+    z_arr = np.array([[c(a2), -c(a3)*s(a2), s(a2)*s(a3)],
+                      [c(a1)*s(a2), c(a1)*c(a2)*c(a3)-s(a1)*s(a3), -c(a3)*s(a1)-c(a1)*c(a2)*s(a3)],
+                      [s(a1)*s(a2), c(a1)*s(a3)+c(a2)*c(a3)*s(a1), c(a1)*c(a3)-c(a2)*s(a1)*s(a3)]])
+    return np.dot(z_arr, np.eye(3,dtype=float))
+
+def euler_func(tmp, V, B):
+    output_ans = euler_orientation(tmp)
+    diff = np.dot(B, output_ans)-V
+    return np.sqrt(np.sum(diff**2)/np.max(B.shape))
+
+def coil_orientation():
+    field_dictionary = pickle.load(file('/home/srh112/code/python/heliac/field_dictionary.pickle','r'))
+    coil_list = range(0,16)
+    hma = HMA()    
+    #coil_coords = hma.cyl
+    #coil_r_values = coil_coords[:,0]
+    #coil_z_values = coil_coords[:,2]
+    #coil_phi_values = coil_coords[:,1]
+    data_tfc, data_pfc, data_hfc, data_ovf = get_coil_orientation_data()
+    pickup_outputs = {}
+    pickup_outputs['OVC'] =  data_ovf
+    pickup_outputs['TFC'] = data_tfc
+    pickup_outputs['HFC'] = data_hfc
+    pickup_outputs['PFC'] = data_pfc
+    euler_orient_dict2 = {}
+    euler_error_dict2 = {}
+    angles_dict2 = {}
+    orients_tmp = np.zeros((len(coil_list),3*3), dtype = float)
+    for loc, coil in enumerate(coil_list):
+        print 'coil:', coil
+        r_grid = field_dictionary[coil]['HFC'][0]['r_results']
+        z_grid = field_dictionary[coil]['HFC'][0]['z_results']
+        distances = np.sqrt((hma.cyl[coil,0] - r_grid)**2 + (hma.cyl[coil,2] - z_grid)**2)
+        closest = np.argmin(distances)
+        inc_coils = ['OVC','PFC','TFC']
+        V = np.ones((len(inc_coils),3), dtype=float)
+        B = np.ones((len(inc_coils),3), dtype=float)
+        for i, field_coil_tmp in enumerate(inc_coils):
+            for j, axis in enumerate(['Br_results', 'Bth_results', 'Bz_results']):
+                B[i,j] = field_dictionary[coil][field_coil_tmp][0][axis][closest]
+                V[i,j] = pickup_outputs[field_coil_tmp][coil,j]
+            B[i,:] = B[i,:]/(np.sqrt(np.sum(B[i,:]**2)))
+            V[i,:] = V[i,:]/(np.sqrt(np.sum(V[i,:]**2)))
+        q = optimize.fmin(euler_func,[0,0,0],args=(V,B))
+        euler_error_dict2[coil] = euler_func(q,V,B)
+        euler_orient_dict2[coil] = euler_orientation(q)
+        angles_dict2[coil] = q/np.pi*180.
+        print q*180./np.pi
+        for i in range(3):
+            r,th,z = euler_orient_dict2[coil][:,i]
+            orients_tmp[loc,i*3:i*3+3] = [r * np.cos(hma.cyl[coil,1]) - th * np.sin(hma.cyl[coil,1]),
+                                          r * np.sin(hma.cyl[coil,1]) + th *np.cos(hma.cyl[coil,1]),
+                                          z]
+    return orients_tmp
+
+
+def hilbert_trans2(signal, time, applied_frequency):
+    sample_period = (time[-1]-time[0])/len(time)
+    sample_rate = 1./sample_period
+    print sample_period, sample_rate/1.e6,'Mhz', len(time)
+
+    freq = np.fft.fftfreq(len(signal),d=sample_period)
+    freq1 = np.argmin(np.abs(freq-applied_frequency[0]*0.3))
+    freq2 = np.argmin(np.abs(freq-applied_frequency[1]*2))
+
+    fft_window=np.hanning(freq2-freq1)
+
+    mask = np.zeros(len(signal),dtype=complex)
+    mask[freq1:freq2] = fft_window*0.+1.
+
+    signal_fft = np.fft.fft(signal)
+    signal_ifft = np.fft.ifft(signal_fft*mask)
+    phase = (np.arctan2(signal_ifft.imag, signal_ifft.real))*180./np.pi
+    amp = np.abs(signal_ifft)*2
+    for i in range(0,len(phase)):
+        while phase[i] < -180 or  phase[i] > 180:
+            if phase[i] < -180:
+                phase[i] += 360
+            if phase[i] > 180:
+                phase[i] -= 360
+    return phase, amp
+
+def extract_data2(file_names, applied_frequency, cutoff_freqs,ax1,ax2,file_names2=None, downsample=10, csv_loc = 2, overal_shift = 0, min_phase = 0, label_name = '', plot_style='k-', inc_freq = 1, plot_vals = False):
+    #Put a zero value in
+    overall_freq = [0]
+    overall_phase = [90]
+    overall_amplitude = [0]
+    phase_range = [min_phase, min_phase + 360]
+    for i in range(0,len(applied_frequency)):
+        lower_cutoff = cutoff_freqs[i]
+        upper_cutoff = cutoff_freqs[i+1]
+        app_freq = applied_frequency[i]
+        file_name = '/home/srh112/Desktop/Orientation/' + file_names[i]
+        a = np.loadtxt(file_name,skiprows=10,delimiter=',')
+        time = a[0:-1:downsample,0]
+        signal1 = a[0:-1:downsample,1]
+        signal2 = a[0:-1:downsample,csv_loc]
+        phase1, amp1 = hilbert_trans2(signal1, time, app_freq)
+        phase2, amp2 = hilbert_trans2(signal2, time, app_freq)
+        phase_diff = phase1 - phase2
+        for iii in range(0,len(phase_diff)):
+            while phase_diff[iii] < phase_range[0] or  phase_diff[iii] > phase_range[1]:
+                if phase_diff[iii] < phase_range[0]:
+                    phase_diff[iii] += 360
+                if phase_diff[iii] > phase_range[1]:
+                    phase_diff[iii] -= 360
+        helm_corr = 0.0004365
+        #amp_correction = 1./amp1
+        #amp = amp2*1.*amp_correction
+        amp = amp2/(amp1 * helm_corr)#*1.*amp_correction
+
+        if file_names2 != None:
+            file_name2 = '/home/srh112/Desktop/Orientation/' + file_names2[i]
+            a = np.loadtxt(file_name2,skiprows=10,delimiter=',')
+            time = a[0:-1:downsample,0]
+            signal1 = a[0:-1:downsample,1]
+            signal2 = a[0:-1:downsample,2]
+
+            phase1, amp1 = hilbert_trans2(signal1, time, app_freq)
+            phase2, amp2 = hilbert_trans2(signal2, time, app_freq)
+            phase_diff2 = phase1 - phase2
+            phase_diff = phase_diff - phase_diff2
+            for iii in range(0,len(phase_diff)):
+                while phase_diff[iii] < phase_range[0] or  phase_diff[iii] > phase_range[1]:
+                    if phase_diff[iii] < phase_range[0]:
+                        phase_diff[iii] += 360
+                    if phase_diff[iii] > phase_range[1]:
+                        phase_diff[iii] -= 360
+            corr_factor = 1. #this is based on helmholtz field measurement
+            amp_correction = corr_factor/amp1
+            amp2 = amp2*1.*amp_correction
+            amp = amp/amp2
+        phase_diff = phase_diff + overal_shift    
+        for iii in range(0,len(phase_diff)):
+            while phase_diff[iii] < phase_range[0] or  phase_diff[iii] > phase_range[1]:
+                if phase_diff[iii] < phase_range[0]:
+                    phase_diff[iii] += 360
+                if phase_diff[iii] > phase_range[1]:
+                    phase_diff[iii] -= 360
+        #plot_figure(app_freq,phase_diff,amp,ax1,ax2)
+        #x_axis = np.linspace(app_freq[0]/1000.,app_freq[1]/1000.,len(phase_diff))
+        x_axis = np.linspace(app_freq[0],app_freq[1],len(phase_diff))
+        lower_cutoff_loc = np.argmin(np.abs(x_axis-lower_cutoff/1000.))
+        upper_cutoff_loc = np.argmin(np.abs(x_axis-upper_cutoff/1000.))
+        lower_cutoff_loc = np.argmin(np.abs(x_axis-lower_cutoff))
+        upper_cutoff_loc = np.argmin(np.abs(x_axis-upper_cutoff))
+        print lower_cutoff_loc, upper_cutoff_loc
+        for temp_loc in range(lower_cutoff_loc,upper_cutoff_loc):
+            overall_freq.append(x_axis[temp_loc])
+            overall_phase.append(phase_diff[temp_loc])
+            overall_amplitude.append(amp[temp_loc])
+    #ax1.plot(overall_freq,overall_phase,'b--')
+    #ax2.plot(overall_freq,np.array(overall_amplitude)/10000.,'b--')
+    phase_poly_coeffs = np.polyfit(overall_freq, overall_phase, 13)
+    if inc_freq:
+        amp_poly_coeffs = np.polyfit(overall_freq, overall_amplitude, 13)
+        if plot_vals: ax2.plot(overall_freq, overall_amplitude)
+    else:
+        amp_poly_coeffs = np.polyfit(overall_freq, np.array(overall_amplitude)/(np.array(overall_freq)*2.*np.pi), 13)
+        if plot_vals: ax2.plot(overall_freq, np.array(overall_amplitude)/(np.array(overall_freq)*2.*np.pi)/10000.,'x')
+    phase_poly = np.poly1d(phase_poly_coeffs)
+    amp_poly = np.poly1d(amp_poly_coeffs)
+    phase_recon_values = phase_poly(overall_freq)
+    amp_recon_values = amp_poly(overall_freq)
+    if plot_vals:
+        ax1.plot(overall_freq,phase_recon_values, plot_style,label = label_name)
+        ax2.plot(overall_freq,amp_recon_values/10000,plot_style,label =label_name)
+        ax2.set_ylabel('V/Gauss')
+        ax1.set_ylabel('Phase Shift (deg)')
+    #if not inc_freq:
+    #    ax2.plot([overall_freq[0],overall_freq[-1]],[amp_recon_values[0]*0.707/10000,amp_recon_values[0]*0.707/10000],plot_style,label =label_name)
+    
+    return overall_freq, overall_amplitude, overall_phase
+
+def frequency_response():
+    inc_freq = 1
+    non_ax_bell_file_names = ['bellows2_12.csv','bellows2_13.csv','bellows2_14.csv','bellows2_15.csv','bellows2_16.csv','bellows2_17.csv']
+    ax_bell_file_names = ['bellows2_35.csv','bellows2_34.csv','bellows2_33.csv','bellows2_32.csv','bellows2_31.csv','bellows2_30.csv']
+    non_ax_file_names = ['bellows2_23.csv','bellows2_22.csv','bellows2_21.csv','bellows2_20.csv','bellows2_19.csv','bellows2_18.csv']    
+    applied_frequency = [[1000.,13000.],[10000.,100000.],[50000.,300000.], [200000.,600000.], [500000.,1000000.],[800000.,1000000.]]
+    cutoff_freqs = [2000.,12000.,64000.,230000.,540000.,840000.,1000000.]
+    fig, ax = pt.subplots(nrows = 2, sharex = True); ax1, ax2 = ax
+    min_phase = 70
+    __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
+    print __location__
+    tmp = extract_data2(non_ax_bell_file_names, applied_frequency,cutoff_freqs, ax1, ax2, downsample = 1,min_phase=min_phase, label_name = 'transverse w. bellows', plot_style = 'k-', inc_freq = inc_freq)
+    tmp = np.array(tmp).T
+    np.savetxt(os.path.join(__location__, 'hma_transverse_bellows.txt'), tmp[::10,:], header = 'HMA transverse w bellows Freq(Hz), amp (V/G), phase(deg)')
+
+    tmp = extract_data2(ax_bell_file_names, applied_frequency,cutoff_freqs, ax1, ax2, downsample = 1,min_phase=min_phase, label_name = 'axial w. bellows', plot_style = 'b--o', inc_freq = inc_freq)
+    tmp = np.array(tmp).T
+    np.savetxt(os.path.join(__location__, 'hma_axial_bellows.txt'), tmp[::10,:])
+
+    tmp = extract_data2(non_ax_file_names, applied_frequency,cutoff_freqs, ax1, ax2, downsample = 1,min_phase=min_phase, label_name = 'w/o bellows', plot_style = 'r-.', inc_freq = inc_freq)
+    tmp = np.array(tmp).T
+    np.savetxt(os.path.join(__location__, 'hma_no_bellows.txt'), tmp[::10,:])
+
+
+    #ax1.set_xscale('log')
+    ax1.set_ylim([min_phase,min_phase+360])
+    ax1.grid(True, which="both")
+    #ax2.set_xscale('log')
+    ax2.set_yscale('log')
+    #ax2.set_yscale('log')
+    ax2.set_xlabel('Hz')
+    #ax2.set_title('amplitude')
+    #ax2.set_ylim([0.01,10.1])
+    #ax.set_ylim([80,130])
+    ax2.grid(True, which='both')
+
+    ax1.legend(loc = 'best')
+    #ax2.legend(loc = 'best')
+    ax2.set_xlim([4000,600000])
+    ax1.set_xlim([4000,600000])
+    #ax2.set_ylim([0.001,300])
+    ax1.set_ylim([80,300])
+
+    fig.canvas.draw(); fig.show()
 # hma = HMA()
 # kh = 0.35
 # filename  = '/home/srh112/code/python/h1_eq_generation/results7/kh%.3f-kv1.000fixed/boozmn_wout_kh%.3f-kv1.000fixed.nc'%(kh, kh)
@@ -646,3 +1030,5 @@ def get_coil_orientation_data():
 #     ax[0].plot(i.boozer_phi%(360.), i.boozer_theta%(360.), style)
 #     ax[1].plot(i.distance, style)
 # fig.canvas.draw();fig.show()
+
+

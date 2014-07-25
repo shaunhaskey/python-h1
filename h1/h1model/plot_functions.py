@@ -321,7 +321,7 @@ def extract_BOOZER_surface_data(filename, s_ind=-1, phi_min = 0, phi_max = 2.*np
     return x, y, z, B
 
 
-def extract_BOOZER_fieldline(filename, s_ind=-1, theta_b_start = 0, no_cycles=1, pts_per_cycle=1000, phi_b_start = 0, s_is_ind=True):
+def extract_BOOZER_fieldline(filename, s_ind=-1, theta_b_start = 0, no_cycles=1, pts_per_cycle=1000, phi_b_start = 0, s_is_ind=True, phi_b= None):
     '''extracts x, y, z and B for the surface index s_ind
     using Berhnard's VMEC utilities
     '''
@@ -333,9 +333,9 @@ def extract_BOOZER_fieldline(filename, s_ind=-1, theta_b_start = 0, no_cycles=1,
         print s_ind, boozer_tmp.es[s_ind]
     print('iota at this surface: {:.2f}'.format(boozer_tmp.iota_b[s_ind]))
     print s_ind, boozer_tmp.es[s_ind], boozer_tmp.rmnc_b.shape
-    phi_b = np.linspace(phi_b_start, 2.*np.pi*no_cycles+phi_b_start,pts_per_cycle*np.abs(no_cycles))
-    print len(phi_b)
-    theta_boozer = phi_b * boozer_tmp.iota_b[s_ind]+theta_b_start - phi_b[0] * boozer_tmp.iota_b[s_ind]
+    if phi_b == None:
+        phi_b = np.linspace(phi_b_start, 2.*np.pi*no_cycles+phi_b_start,pts_per_cycle*np.abs(no_cycles))
+    theta_boozer = phi_b * boozer_tmp.iota_b[s_ind]+theta_b_start - phi_b_start * boozer_tmp.iota_b[s_ind]
     theta_boozer = np.mod(theta_boozer, 2.*np.pi)
     phi_boozer = np.mod(phi_b, 2.*np.pi)
     theta_grid = theta_boozer
