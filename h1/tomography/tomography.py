@@ -2724,7 +2724,7 @@ def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, 
     fig.canvas.draw(); fig.show()
 
 def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid', max_phase = np.pi):
-
+    
     plot_dict = {'linestyle':linestyle, 'marker':marker}
     if color!=None: plot_dict['color'] = color
     start = 0; increment = len(T)/len(n)
