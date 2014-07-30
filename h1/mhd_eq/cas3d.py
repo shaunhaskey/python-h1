@@ -234,6 +234,289 @@ class ModeTable:
                                 m0=min(self.ms),m1=max(self.ms), 
                  ))
 
+class plot_continua2():
+    def __init__(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d'):
+
+        offs = 2 # allow for inserting both hash flags ahead of the rest. 
+        m_ind = 2 + offs # the column containing the mode index
+        A_sw=5 + offs     # column for the Aflven/sound flag (1/0)
+        A_cpt=A_sw+1 
+        s_ind = 0 + offs
+        f_ind = s_ind+1
+        hash_ind = 0
+        if colorset == None: colorset = ('b,g,r,c,m,y,k,orange,purple,lightgreen,gray'.split(','))
+        if edgecolorset == None: edgecolorset='k,b,darkgreen,r,purple,green,darkgray,darkblue,c,m'.split(',')
+        if dith==None: dith = [0.001, .1]
+        edgecolors = []
+        colors = 10*colorset
+        for i in range(10): 
+            for j in range(len(colorset)): 
+                edgecolors.append(edgecolorset[i])
+        fig, ax = pt.subplots(nrows = 2)
+        ax, ax2 = ax
+        #pl.clf()
+        if path[-1] != '/': path = path + '/'  # add a trailing / if missing
+
+        if suff == '.bz2': 
+            import bz2  # this import will only be attempted if suff='.bz2'
+            OPEN=bz2.BZ2File
+        elif suff == '.gz': 
+            import gzip
+            OPEN=gzip.GzipFile
+        else: OPEN = open
+
+        outfn = path+output_log+suff
+        try:
+            outcas3d = OPEN(outfn,'r')
+            buff=outcas3d.readlines(100000)   # arg is # characters to read, approx.
+        except IOError, details:
+            print('**Warning: out_cas3d file {o} not found - cannot label modes'.format(o=outfn))
+        XIS=ModeTable(buff=buff,target=[' xis\n','eta'])
+        mode_table_info = XIS.info
+
+        try:
+            ETA=ModeTable(buff=XIS.rest,target=[' eta\n', 'mu'])
+            MU=ModeTable(buff=ETA.rest,target=[' mu\n', ' \n'])
+        except exception, details:
+            print('Unable to read other mode tables {d}'.format(d=details))
+            if verbose>0: print('{d}'.format(d=details))
+        else: # here if successful
+            for minfo in [ETA.info,MU.info]:
+                if XIS.info.split(None,1)[1] == minfo.split(None,1)[1]:
+                    minfo = '<as per XIS>'
+                mode_table_info += ', '+minfo
+
+        scan_arr = None
+        all_lines=[]
+        tmp1 = []
+        tmp2 = []
+        tmp3 = []
+        for n in range(minscan,maxscan):
+            scfn = path+'scan_{0}.dat'.format(n) + suff
+            wkfn = path+'wkin_{0}.dat'.format(n) + suff
+            xisn1 = path+'xis1_{0}.dat'.format(n) + suff
+            xisn2 = path+'xis2_{0}.dat'.format(n) + suff
+            xisn3 = path+'xis3_{0}.dat'.format(n) + suff
+
+            if get_wkin:
+                try:
+                    with OPEN(scfn,"r") as sf: 
+                        scbuff = sf.readlines()
+                    with OPEN(wkfn,"r") as wf: 
+                        wkbuff = wf.readlines()
+                    with OPEN(xisn1,"r") as xf: 
+                        xfbuff = xf.readlines()
+                        for i in xfbuff:
+                            z = i.rstrip('\n').split(' ')
+                            for j in z:
+                                if j!='':tmp1.append(float(j))
+                    with OPEN(xisn2,"r") as xf: 
+                        xfbuff = xf.readlines()
+                        for i in xfbuff:
+                            z = i.rstrip('\n').split(' ')
+                            for j in z:
+                                if j!='':tmp2.append(float(j))
+                    with OPEN(xisn3,"r") as xf: 
+                        xfbuff = xf.readlines()
+                        for i in xfbuff:
+                            z = i.rstrip('\n').split(' ')
+                            for j in z:
+                                if j!='':tmp3.append(float(j))
+
+                    for (ln, s_line) in enumerate(scbuff[2:]):
+                        hashes=(s_line[0]+wkbuff[ln+1][0])
+                        hashes_cvt = hashes.replace(' ','0 ').replace('#','1 ')
+                        all_lines.append(hashes_cvt+   # # replaced by 1, space by 0
+                                         s_line[1:-1]  # omit first # and last \n
+                                         +wkbuff[ln+1][1:]) # omit just first # 
+                except IOError, details: 
+                    print('File read error - perhaps reduce maxscan to {n}: {d}'
+                          .format(n=n, d=details))
+                    break
+
+            else:
+                a = np.loadtxt(scfn).T
+                #a = np.loadtxt(scfn, comments='!',usecols=range(1,10),skiprows=2).T
+                #b = np.loadtxt(wkfn, comments='!',usecols=range(1,8),skiprows=1).T
+                #zip_dim = len(np.shape(a))-1   # if 1D, zipper on the 0th dim, 2d, on the 1st
+                #a = np.append(a,b,zip_dim)
+                if len(np.shape(a)) == 1: a = np.array([a]) # make a 2D array if one line
+
+                if scan_arr == None: scan_arr = a
+                elif len(np.shape(a)) == 2 : scan_arr = np.append(scan_arr, a, 1)
+                else: print('discarding {f}, shape is {s}'.format(f=scfn, s=np.shape(a)))
+
+        if get_wkin: scan_arr = np.loadtxt(StringIO(' '.join(all_lines))).T
+        
+        self.mode_shapes = np.abs(np.resize(tmp1, (scan_arr.shape[1],len(tmp1)/scan_arr.shape[1])))
+        self.mode_shapes2 = np.abs(np.resize(tmp2, (scan_arr.shape[1],len(tmp1)/scan_arr.shape[1])))
+        self.mode_shapes3 = np.abs(np.resize(tmp3, (scan_arr.shape[1],len(tmp1)/scan_arr.shape[1])))
+        print len(tmp1), scan_arr.shape, len(tmp1)/scan_arr.shape[1], self.mode_shapes.shape
+
+        if no_hash: 
+            w_no_hash = np.where(scan_arr[hash_ind] == 0)[0]
+            print('Ignoring {h} hashed of {t} instances'.
+                  format(h=len(scan_arr[0])-len(w_no_hash), t=len(scan_arr[0])))
+            scan_arr=scan_arr[:,w_no_hash]
+            self.mode_shapes = self.mode_shapes[w_no_hash,:]
+            self.mode_shapes2 = self.mode_shapes2[w_no_hash,:]
+            self.mode_shapes3 = self.mode_shapes3[w_no_hash,:]
+        mratio = scan_arr[A_cpt]/np.std(scan_arr[A_cpt:A_cpt+3].T,1)
+
+        allmodes = np.unique(scan_arr[m_ind]).astype(int)
+        wA = np.where(scan_arr[A_sw] == 1)[0]
+        Alfvenicmodes = np.unique(scan_arr[m_ind][wA]).astype(int)
+        wMM = np.where(mratio>0.01)[0]
+        mmodes = np.unique(scan_arr[m_ind][wMM]).astype(int)
+
+        def dither(dith=.001, arr=None):
+            return dith*(np.random.random(len(arr))-0.5)
+
+        if debug>0: print('Xis modes {m} found, {a} are classifed as '
+                          'Alfvenic by "sound_test()"'.
+                          format(m=allmodes,a=Alfvenicmodes))
+
+        if pl.is_string_like(modes):
+            if 'alf' in modes.lower(): modes = Alfvenicmodes
+            elif 'pol' in modes.lower(): modes = mmodes
+            else: 
+                try:
+                    modes = eval(modes)
+                except:
+                    raise ValueError,"modes = {m} is not understood".format(m=modes)
+
+        # mode score will be used to allocate colors and position in legend
+        mode_score = np.zeros(max([k for k in XIS.lut.keys()])+1, dtype=int)
+        mode_score[mmodes] += 100  # give M-type modes the highest rank
+        mode_score[Alfvenicmodes] += 50  # give Alf modes a high rank
+        for k in XIS.lut.keys():    # bonus for small n,m
+            mode_score[k] += -(abs(XIS.lut[k]['n']) + abs(XIS.lut[k]['m']))  
+            # alternatively could rank by closeness to resonance?
+        ct = np.arange(len(mode_score))
+        ct[np.argsort(-mode_score)] = np.arange(len(mode_score))
+
+        tot_plot = 0
+        list_of_lines = [] #SH added
+        for (m,mode)in enumerate(modes):
+            wMode = np.where((scan_arr[m_ind][wMM]==mode))[0]
+            tot_plot += len(wMode)
+            if len(wMode) != 0:
+                z=ax.scatter(scan_arr[s_ind][wMM[wMode]]+dither(dith[0],wMode),
+                           scan_arr[f_ind][wMM[wMode]]+dither(dith[1],wMode),
+                           size_scale*np.sqrt(mratio[wMM[wMode]]),marker='o',
+                           c = colors[ct[mode]],edgecolors=edgecolors[ct[mode]],
+                           label='M. mode {mode} {N}/{M} ({m}:{num})&{ord:03d}'.
+                           format(mode=mode,m=ct[mode],num=len(wMode),
+                                  M=XIS.lut[mode]['m'],N=XIS.lut[mode]['n'],
+                                  ord=ct[mode] ))  
+        # add an "order" code &123 at end.
+                list_of_lines.append(z) #SH added
+
+        # the fine dot plots are dithered only in S
+        if rest_same: 
+            tmp, = ax.plot(scan_arr[s_ind]+dither(dith[0],scan_arr[0]), # all modes 
+                       scan_arr[f_ind],sym_all,markersize=ms_all,
+                       label='all ({n})'.format(n=len(scan_arr[0])))
+            list_of_lines.append(tmp)
+        else: 
+            for (m,mode)in enumerate(allmodes): # 
+                wM = np.where((scan_arr[m_ind]==mode))[0]
+                tmp, = ax.plot(scan_arr[s_ind][wM],scan_arr[f_ind][wM],'.',
+                               markersize=msall,color =colors[ct[mode]],
+                               label='allmode {m}'.format(m=mode))
+                list_of_lines.append(tmp)
+
+        for (m,mode)in enumerate(Alfvenicmodes): # (tiny offset in s to separate)
+            wM = np.where((scan_arr[m_ind]==mode) &(scan_arr[A_sw] == 1))[0]
+            tmp,=ax.plot(scan_arr[s_ind][wM]+0.0001,scan_arr[f_ind][wM],'+',color =colors[ct[mode]],
+                    label='Amode {m} ({n})'.format(m=mode,n=len(wM)))
+            list_of_lines.append(tmp)
+        leg_props = FontProperties(size='small')
+
+        try:       # try to order legend by the codes after "&" in the label
+            #ax=pl.gca() 
+            handles, labels = ax.get_legend_handles_labels()
+            lab_temp = [lab+'&999' for lab in labels]  # add a low priority code 
+                                                       # so that all have some code.
+            lab_text = np.array([ltemp.split('&')[0] for ltemp in lab_temp])
+            lab_order = [ltemp.split('&')[1] for ltemp in lab_temp]
+            lab_inds = np.argsort(lab_order)           # sort by increasing code
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+            leg_sh = ax.legend(np.array(handles)[lab_inds], lab_text[lab_inds],prop=leg_props, fancybox=True,loc='center left', bbox_to_anchor=(1, 0.5)) #SH
+            box = ax2.get_position()
+            ax2.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        except None, details:    
+            print 'hello'
+            if verbose: print('label ordering failed - {d}'.format(details))
+            leg_sh = pl.legend(prop=leg_prop,fancybox=True) #SH
+
+
+        ########################SH mod###################
+        def onpick(event):
+            print 'hello in onpick'
+            # on the pick event, find the orig line corresponding to the
+            # legend proxy line, and toggle the visibility
+            legline = event.artist
+            print legline
+            vis = not legline.get_visible()
+
+            origline = lined[legline]
+            vis = not origline.get_visible()
+            origline.set_visible(vis)
+            # Change the alpha on the line in the legend so we can see what lines
+            # have been toggled
+            if vis:
+                legline.set_alpha(1.0)
+            else:
+                legline.set_alpha(0.2)
+            fig.canvas.draw()
+
+        lined = dict()
+        handles_tmp, labels_tmp = pl.gca().get_legend_handles_labels()
+        for legline, origline in zip(handles_tmp, list_of_lines):
+            legline.set_picker(5)  # 5 pts tolerance
+            lined[legline] = origline
+
+
+        ax.set_title(path.replace('_','-'))
+        ax.set_xlabel('s (flux)')
+        ax.set_ylabel('frequency')
+        am = ' '.join([ str(a) for a in allmodes])
+        fig.suptitle('Total of {t} instances, {m} Xis modes used, {a} Alfvenic, {s}, selected indices: {am}\n{mti}'.
+                    format(t=len(scan_arr[0]), a = len(np.where(scan_arr[A_sw]==1)[0]),
+                           s=tot_plot, m=len(allmodes), am = am, 
+                           mti=mode_table_info),fontsize='small')
+
+        #fig = pl.gcf()
+        #fig2, ax2 = pt.subplots()
+        def onclick(event):
+            print 'button=%d, x=%d, y=%d, xdata=%f, ydata=%f'%(
+                event.button, event.x, event.y, event.xdata, event.ydata)
+            norm = np.max(scan_arr[3,:])
+            min_loc = np.argmin((scan_arr[3,:]/norm - event.ydata/norm)**2 + (scan_arr[2,:] - event.xdata)**2)
+            #min_loc = np.argmin(((scan_arr[3,:] - event.y)/np.max(scan_arr[3,:]))**2 + (scan_arr[2,:] - event.x)**2)
+            print self.mode_shapes.shape, scan_arr.shape, scan_arr[2,min_loc], scan_arr[3,min_loc], min_loc
+            tmp_lut = XIS.lut[scan_arr[4,min_loc]]
+            if event.inaxes==ax and not fig.canvas.manager.toolbar._active:
+                mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
+                title = 'freq:{}, n={} , m={}'.format(scan_arr[3,min_loc],mode_n, mode_m)
+                ax2.cla()
+                #fig2.clf()
+                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes[min_loc,:])
+                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes2[min_loc,:])
+                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes3[min_loc,:])
+                ax2.set_title(title)
+                fig.canvas.draw(); fig.show()
+        self.scan_arr = scan_arr
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+        #fig.canvas.mpl_connect('pick_event',onpick)
+        ax.grid(); ax.set_xlim([0,1]);ax.set_ylim([10,70])
+        fig.canvas.draw(); fig.show()
+        #pl.grid()
+        #pl.show()
+
+
 
 class plot_continua():
     def __init__(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d'):
@@ -253,16 +536,7 @@ class plot_continua():
         for i in range(10): 
             for j in range(len(colorset)): 
                 edgecolors.append(edgecolorset[i])
-        #for i in range(10): edgecolors.extend(len(colorset)*edgecolorset[i])
-
         pl.clf()
-        # try:
-        #     from warnings import warn  # this process_cmd is the latest and greatest (no pyfusion needed)
-        #     #from bdb_utils import process_cmd_line_args
-        #     #exec(process_cmd_line_args())
-        # except None:
-        #     warn('Importing process_cmd_line_args allows variables to be changed from the command line')
-
         if path[-1] != '/': path = path + '/'  # add a trailing / if missing
 
         if suff == '.bz2': 
@@ -279,8 +553,6 @@ class plot_continua():
             buff=outcas3d.readlines(100000)   # arg is # characters to read, approx.
         except IOError, details:
             print('**Warning: out_cas3d file {o} not found - cannot label modes'.format(o=outfn))
-
-        #XIS=ModeTable(buff=buff,target=['User supplied perturbation spectrum','eta'])
         XIS=ModeTable(buff=buff,target=[' xis\n','eta'])
         mode_table_info = XIS.info
 
@@ -472,7 +744,7 @@ class plot_continua():
 
 
 
-def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0.850-kv1.000fixed_dir/cas3d_r_n1_free/', output_log = 'out_cas3d'):
+def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0.850-kv1.000fixed_dir/cas3d_r_n1_free/', output_log = 'out_cas3d', std_dev_cut = 0.28, allowed_n = None, allowed_m = None):
     '''Meant to help find the interesting modes
     '''
     minscan = 1
@@ -531,7 +803,7 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
             if scan_arr == None: scan_arr = a
             elif len(np.shape(a)) == 2 : scan_arr = np.append(scan_arr, a, 1)
             else: print('discarding {f}, shape is {s}'.format(f=scfn, s=np.shape(a)))
-
+    print all_lines[-1]
     if get_wkin: scan_arr = np.loadtxt(StringIO(' '.join(all_lines))).T
     scan_arr.shape[1]
     print len(tmp), scan_arr.shape, len(tmp)/scan_arr.shape[1]
@@ -552,6 +824,9 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
     fig_shapes, ax_shapes = pt.subplots(nrows=2,sharex = True)
     count = 0
     good = np.zeros(mode_shapes_copy.shape[0])
+    #allowed_n = [-5]; allowed_m = [4]; 
+    all_allowed_n = True if allowed_n == None else False
+    all_allowed_m = True if allowed_m == None else False
     for i in range(0,mode_shapes.shape[0],2):
         if ((i%100)==0):print i
         tmp_data = np.abs(mode_shapes[i,:]).flatten()
@@ -563,26 +838,30 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
         std_dev_list.append(std_dev)
 
 
-        if std_dev>0.28:
+        if std_dev>std_dev_cut:
             s_axis = np.linspace(0,1,len(tmp_data))
             orig_index = np.argmin(np.sum(np.abs(mode_shapes_copy - tmp_data),axis=1))
 
             tmp_lut = XIS.lut[scan_arr[4,orig_index]]
             mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
-            mode_details = '{},{}'.format(mode_n, mode_m)
-            if limit_m != None:
-                if mode_m!=limit_m:
-                    plot_mode = False
+            if (mode_n in allowed_n or all_allowed_n) and (mode_m in allowed_m or all_allowed_m):
+                mode_details = '{},{}'.format(mode_n, mode_m)
+                if limit_m != None:
+                    if mode_m!=limit_m:
+                        plot_mode = False
+                    else:
+                        plot_mode = True
                 else:
                     plot_mode = True
-            else:
-                plot_mode = True
-            if plot_mode:
-                ax_shapes[0].plot(s_axis,tmp_data)
-                max_loc = np.argmax(tmp_data)
-                ax_shapes[0].text(s_axis[max_loc],np.max(tmp_data),'{:.2}fkHz,{},{}'.format(scan_arr[3,orig_index], int(scan_arr[4,orig_index]), mode_details))
-                count+=1
-                good[orig_index] = 1
+                if plot_mode:
+                    ax_shapes[0].plot(s_axis,tmp_data)
+                    max_loc = np.argmax(tmp_data)
+                    #print scan_arr[:,orig_index]
+                    #ax_shapes[0].text(s_axis[max_loc],np.max(tmp_data),'{:.2f}kHz,{},{}'.format(scan_arr[3,orig_index], int(scan_arr[4,orig_index]), mode_details))
+                    print scan_arr[12,orig_index]
+                    ax_shapes[0].text(s_axis[max_loc],np.max(tmp_data),'{:.2f}kHz,{},{}'.format(1000.*scan_arr[12,orig_index], int(scan_arr[4,orig_index]), mode_details))
+                    count+=1
+                    good[orig_index] = 1
 
     #fig, ax = pt.subplots()
     good = np.array(good)

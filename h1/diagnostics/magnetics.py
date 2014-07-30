@@ -48,6 +48,7 @@ class probe_array():
         self.b_hat_perp_in_surf = +self.b_hat_par
         self.b_hat_perp = +self.b_hat_par
         #Go through each former and calculate the unit vectors
+            
         for i in range(self.boozer_theta.shape[0]):
             print 'Calculating unit mag field unit vectors former', i
             loc1 = self.cart_nearest[i,:]
@@ -221,7 +222,8 @@ def find_coil_locs(x_coil, y_coil, z_coil, booz_obj,kernel,a,opt_func):
 #Mirnov coil locations
 class HMA(probe_array):
     '''Returns the locations of the HMA 
-    [R(m), phi(rad), z(m)], [x(m), y(m), z(m)]
+    self.cyl is [R(m), phi(rad), z(m)], 
+    self.cart is [x(m), y(m), z(m)]
     '''
     def __init__(self,):
         loc = np.array([[0.9118, 0.0287, 40.7600],
@@ -381,50 +383,11 @@ class HMA(probe_array):
                                         -0.26161613,  0.00243966,  0.75281017,  0.65823316],
                                       [ 0.0579311 ,  0.41746919,  0.90684258,  0.94575988,  0.26790733,
                                         -0.18374961, -0.31965957,  0.86830014, -0.37930544]])
-
-        # self.orientations = np.array([[-0.67061775,  0.6903795 , -0.2713816 ,  0.63736427,  0.34908474,
-        #                                -0.68695461, -0.3795242 , -0.63365289, -0.67412565],
-        #                               [-0.69553035,  0.69734506, -0.17305317,  0.71286859,  0.63967937,
-        #                                -0.28745203, -0.08975471, -0.32329578, -0.94203181],
-        #                               [-0.58283844,  0.81010868, -0.06342939,  0.3087998 ,  0.29301691,
-        #                                0.90486671,  0.75162626,  0.50780412, -0.42094292],
-        #                               [-0.37319355,  0.92613511,  0.05477519, -0.664505  , -0.30803528,
-        #                                0.68084313,  0.64742542,  0.21768788,  0.7303782 ],
-        #                               [-0.17899393,  0.9797635 ,  0.08958044, -0.97085302, -0.1611447 ,
-        #                                -0.17741703, -0.15939132, -0.11872601,  0.98005028],
-        #                               [-0.13353376,  0.98916172,  0.06105592, -0.94620434, -0.10892809,
-        #                                -0.30468349, -0.29473054, -0.09845691,  0.95049469],
-        #                               [ 0.11935783,  0.9811237 ,  0.15215122, -0.26443738,  0.1791257 ,
-        #                                 -0.94762169, -0.95698829,  0.0728716 ,  0.28082583],
-        #                               [ 0.3420745 ,  0.91982615,  0.19210646,  0.38615283,  0.04877525,
-        #                                 -0.92114438, -0.85666272,  0.38928246, -0.3385087 ],
-        #                               [ 0.54961079,  0.8241983 ,  0.13647401,  0.81784394, -0.49748584,
-        #                                 -0.28920429, -0.1704678 ,  0.27056424, -0.94748917],
-        #                               [ 0.66929789,  0.73138242,  0.13084376,  0.70048662, -0.67985619,
-        #                                 0.2170577 ,  0.24770712, -0.05362196, -0.96734992],
-        #                               [ 0.80510499,  0.59066228,  0.05407422,  0.35198868, -0.54917063,
-        #                                 0.75796806,  0.47739912, -0.59121036, -0.65004645],
-        #                               [ 0.90382015,  0.41503353, -0.10419356,  0.31887838, -0.49087911,
-        #                                 0.81077388,  0.2853519 , -0.76601885, -0.57601165],
-        #                               [ 0.91692497,  0.30558187, -0.25664825,  0.28874968, -0.06413159,
-        #                                 0.95525429,  0.27544913, -0.95000361, -0.14704052],
-        #                               [ 0.93690413,  0.28514114, -0.20225027,  0.07362835,  0.40461427,
-        #                                 0.9115186 ,  0.3417448 , -0.8688969 ,  0.35809031],
-        #                               [ 0.93843088,  0.22562413, -0.26161277,  0.00249055,  0.75283456,
-        #                                 0.65820507,  0.34545808, -0.61833152,  0.70592127],
-        #                               [ 0.94574479,  0.26798222, -0.18371803, -0.31971219,  0.86829987,
-        #                                 -0.37926172,  0.05788694,  0.41742169,  0.90686726]])
-
         #Get the frequency response of the coils
         __location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__)))
-        tmp = np.loadtxt(os.path.join(__location__, 'hma_axial_bellows.txt'))
-        self.axial_comp_func = interp.interp1d(tmp[:,0], tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2])))
-        tmp = np.loadtxt(os.path.join(__location__, 'hma_transverse_bellows.txt'))
-        self.comp = tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2]))
-        self.transverse_comp_func = interp.interp1d(tmp[:,0], self.comp)
-        tmp = np.loadtxt(os.path.join(__location__, 'hma_no_bellows.txt'))
-        self.comp = tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2]))
-        self.naked_comp_func = interp.interp1d(tmp[:,0], self.comp)
+        for i in ['hma_axial_bellows', 'hma_transverse_bellows', 'hma_no_bellows']:
+            tmp = np.loadtxt(os.path.join(__location__, '{}.txt'.format(i)))
+            setattr(self, i, interp.interp1d(tmp[:,0], tmp[:,1]*np.exp(1j*np.deg2rad(tmp[:,2]))))
 
         
 class PMA1(probe_array):
@@ -800,6 +763,15 @@ def euler_func(tmp, V, B):
     return np.sqrt(np.sum(diff**2)/np.max(B.shape))
 
 def coil_orientation():
+    '''Calculates the orientation of the probes in the HMA. relies on
+    a field dictionary which has the components of the magnetic field
+    due to the various coils as calculated by heliac. These can be
+    used along with the probe outputs to calculate the orientation of
+    each of the probes on each former. It does this by performing
+    euler rotations, and finding the optimum orientation.
+
+    SRH: 28July2014
+    '''
     field_dictionary = pickle.load(file('/home/srh112/code/python/heliac/field_dictionary.pickle','r'))
     coil_list = range(0,16)
     hma = HMA()    
@@ -964,6 +936,12 @@ def extract_data2(file_names, applied_frequency, cutoff_freqs,ax1,ax2,file_names
     return overall_freq, overall_amplitude, overall_phase
 
 def frequency_response():
+    '''This function calculates the frequency response of the probes
+    with and without the bellows using the linear sweep from a
+    function generator and the Hilbert transform
+
+    SRH : 28July 2014
+    '''
     inc_freq = 1
     non_ax_bell_file_names = ['bellows2_12.csv','bellows2_13.csv','bellows2_14.csv','bellows2_15.csv','bellows2_16.csv','bellows2_17.csv']
     ax_bell_file_names = ['bellows2_35.csv','bellows2_34.csv','bellows2_33.csv','bellows2_32.csv','bellows2_31.csv','bellows2_30.csv']
