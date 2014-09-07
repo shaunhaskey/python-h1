@@ -1,4 +1,18 @@
 #!/usr/bin/env python
+'''
+This widget is for changing the setting for the HMA amplifiers. The MDSplus write has not been implemented yet - still need to check it works properly first.
+
+#f1 : 1.45MHz 2 pole LP
+#f2 : 1.66MHz 2 pole LP
+#f3 : 927Hz 2 pole HP
+#f4 : 380kHz 2 pole LP
+#AA : 1MHz 4 pole LP (1.45MHz 2 pole and 1.66MHz 2 pole)
+#gain : 1=125x, 2=350x, 3=625x, 4=1500x
+
+
+SRH : 4Aug2014
+'''
+
 
 import pygtk
 pygtk.require('2.0')
@@ -7,65 +21,82 @@ import MDSplus
 class MyProgram:
     def __init__(self):
         # create a new window
+
+
+        labels = []
+        self.filt1 = []; self.filt2 = []; self.filt3 = []; self.filt4 = []
+        self.aa = []; self.gain = []
+
+
         app_window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        app_window.set_size_request(800, 800)
+        app_window.set_size_request(1100, 800)
         app_window.set_border_width(10)
         app_window.set_title("HMA amplifier settings")
 
+        #Add a parent vbox
         vbox_app = gtk.VBox(False, 0)
         app_window.add(vbox_app)
         vbox_app.show()
 
+        #Add a hbox for the MDSplus buttons
         hbox_app = gtk.HBox(False, 0)
         hbox_app.show()
         vbox_app.pack_start(hbox_app, expand = False)
 
-        button_get_mds = gtk.Button(label = 'get_mds')
+        #Add the MDSplus buttons
+        button_get_mds = gtk.Button(label = 'get from MDSplus')
         button_get_mds.connect("clicked", self.get_mds)
         hbox_app.pack_start(button_get_mds,)
         button_get_mds.show()
-
-        button_save_mds = gtk.Button(label = 'save_mds')
+        button_save_mds = gtk.Button(label = 'save to MDSplus')
         button_save_mds.connect("clicked", self.save_mds)
         hbox_app.pack_start(button_save_mds,)
         button_save_mds.show()
 
-        
-        scrolled_window = gtk.ScrolledWindow(hadjustment=None, vadjustment=None)
-        scrolled_window.show()
-        vbox_app.add(scrolled_window)
+        #Add a table for the header section
+        table_layout_hdr = gtk.Table(rows=2, columns=7, homogeneous=True)
+        table_layout_hdr.show()
 
-        table_layout = gtk.Table(rows=48+2, columns=7, homogeneous=True)
         count = 0
-        labels = []
-        self.filt1 = []; self.filt2 = []; self.filt3 = []; self.filt4 = []
-        self.aa = []; self.gain = []
         overall_filts = []
-        lab_list = ['', 'LP 2pole', 'LP 2pole', 'HP 2pole', 'LP 2pole', '4 pole LP']
+        lab_list = ['', '1.45MHz LP 2pole', '1.66MHzLP 2pole', '927Hz HP 2pole', '380kHz LP 2pole', '1MHz 4 pole LP']
         for i, (filt_list, lab) in enumerate(zip([self.filt1, self.filt1, self.filt2, self.filt3, self.filt4, self.aa],lab_list)):
             #overall_filts.append(gtk.CheckButton("Filt{}".format(i+1)))
             tmp = (gtk.Label(lab))
             tmp.show()
-            table_layout.attach(tmp, i, i+1, count, count + 1, 0,0,0,0)
+            table_layout_hdr.attach(tmp, i, i+1, count, count + 1, 0,0,0,0)
         count += 1
         labels.append(gtk.Label("All"))
         labels[-1].show()
-        table_layout.attach(labels[-1], 0, 1, count, count+1, 0,0,0,0)
+        table_layout_hdr.attach(labels[-1], 0, 1, count, count+1, 0,0,0,0)
         for i, (filt_list, lab) in enumerate(zip([self.filt1, self.filt2, self.filt3, self.filt4, self.aa],lab_list[1:])):
             #overall_filts.append(gtk.CheckButton("Filt{}".format(i+1)))
             overall_filts.append(gtk.CheckButton(lab))
             overall_filts[-1].connect("toggled", self.all_checkbox_changed, filt_list)
             overall_filts[-1].set_active(True)  # Set the defaut
             overall_filts[-1].show()
-            table_layout.attach(overall_filts[-1], i+1, i+2, count, count + 1, 0,0,0,0)
+            table_layout_hdr.attach(overall_filts[-1], i+1, i+2, count, count + 1, 0,0,0,0)
         overall_filts.append(gtk.combo_box_new_text())
-        for iii in range(1,5):overall_filts[-1].append_text('gain {}'.format(iii))
+
+        #Overall gain settings
+        gains = ['125x','350x', '625x', '1500x']
+        for gain_lab in gains:overall_filts[-1].append_text(gain_lab)
         overall_filts[-1].set_active(0)
         overall_filts[-1].show()
-        table_layout.attach(overall_filts[-1], i+2, i+3, count, count+1, 0,0,0,0)
         overall_filts[-1].connect("changed", self.all_gain_changed, self.gain)
-        count += 1
 
+        vbox_app.pack_start(table_layout_hdr,expand = False)
+
+        #The main table
+        table_layout = gtk.Table(rows=48+2, columns=7, homogeneous=True)
+        table_layout.attach(overall_filts[-1], i+2, i+3, count, count+1, 0,0,0,0)
+
+        #Everything goes in a scroll window
+        scrolled_window = gtk.ScrolledWindow(hadjustment=None, vadjustment=None)
+        scrolled_window.show()
+        vbox_app.pack_start(scrolled_window)
+
+        count = 0
         for i in range(16):
             for j in ['x','y','z']:
                 labels.append(gtk.Label("coil {}{}".format(i+1,j)))
@@ -75,33 +106,23 @@ class MyProgram:
                 for ii, (filt_list, lab) in enumerate(zip([self.filt1, self.filt2, self.filt3, self.filt4, self.aa],lab_list[1:])):
                     #filt_list.append(gtk.CheckButton("Filt{}".format(ii+1)))
                     filt_list.append(gtk.CheckButton(lab))
+                    #filt_list.append(gtk.CheckButton(''))
                     #filt_list[-1].connect("toggled", self.entry_checkbox, check_box)
                     filt_list[-1].set_active(True)  # Set the defaut
                     filt_list[-1].show()
                     table_layout.attach(filt_list[-1], ii+1, ii+2, count, count+1, 0,0,0,0)
                 self.gain.append(gtk.combo_box_new_text())
-                for iii in range(1,5):self.gain[-1].append_text('gain {}'.format(iii))
+                for iii in gains:self.gain[-1].append_text(iii)
                 self.gain[-1].set_active(0)
                 self.gain[-1].show()
                 table_layout.attach(self.gain[-1], ii+2, ii+3, count, count+1, 0,0,0,0)
-                #filt_list[-1].connect("toggled", self.entry_checkbox, check_box)
-                #self.gain[-1].set_active(True)  # Set the defaut
-                #self.gain[-1].show()
-                #table_layout.attach(self.gain[-1], ii+1, ii+2, count, count+1, 0,0,0,0)
-                
                 count +=1
         table_layout.show()
-        #vbox_app.add(table_layout)
-        
         scrolled_window.add_with_viewport(table_layout)
-
         app_window.connect("delete_event", lambda w,e: gtk.main_quit())
-
-        # Program goes here  ...
-
         app_window.show()
-
         return
+
     def all_checkbox_changed(self, widget, data):
         act = widget.get_active()
         #print act

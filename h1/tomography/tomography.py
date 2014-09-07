@@ -2340,6 +2340,7 @@ def single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, count
 
     SRH : 12Feb2014
     '''
+    print 'hello'
     z, tomo_valid_channels, tomo_measurements = LOS_obj.return_combined_matrices(tomo_modes_n, tomo_modes_m, harmonic, tomo_orient)
     print 'z_shape', z.shape
     if decimate!=False:
@@ -2723,7 +2724,7 @@ def compare_num_of_views(tomo_list, LOS_object, n, m,marker=None,labels = None, 
         print filename
     fig.canvas.draw(); fig.show()
 
-def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid', max_phase = np.pi):
+def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = False, extra_txt = '', single_mode =None,marker ='x',color=None,linestyle='solid', max_phase = np.pi,  inc_legend = True):
     
     plot_dict = {'linestyle':linestyle, 'marker':marker}
     if color!=None: plot_dict['color'] = color
@@ -2735,6 +2736,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
     inc_phase = True if len(ax)==2 else False
     #Find biggest mode and norm factor    
     amp_list = []
+    amp_list2 = []
     if norm:
         for n_cur, m_cur in zip(n,m):
             cor_run = True
@@ -2742,7 +2744,8 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
             cur_T = T[start:end]
             start = +end
             amp_list.append(np.sum(np.abs(cur_T)))
-        norm_fact = np.max(amp_list)
+            amp_list2.append(np.max(np.abs(cur_T[:-4])))
+        norm_fact = np.max(amp_list2)
     start = 0
     for index, (n_cur, m_cur) in enumerate(zip(n,m)):
         cor_run = True
@@ -2769,7 +2772,7 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
                 angs = ((np.angle(cur_T)-center_phase + np.pi)%(2.*np.pi)) + center_phase - np.pi
             if inc_phase: ax[1].plot(segment_midpoints, angs, label='Arg({},{})'.format(n_cur, m_cur), **plot_dict)
             #ax[1].text(max_s, angs[max_ind], extra_txt)
-            ax[0].legend(loc='best', fontsize = 7)#prop={'size':6})
+            if inc_legend:ax[0].legend(loc='best', fontsize = 7)#prop={'size':6})
             ax[0].set_ylabel('Amplitude (a.u)')
             ax[0].set_xlim([0,1])
             if inc_phase and index == 0:
@@ -2785,8 +2788,20 @@ def plot_radial_structure(T, segment_midpoints, n, m, prov_ax = None, norm = Fal
 
 def run_inversion(tomo_modes_n, tomo_modes_m, tomo_orient, tomo_orient_extrap, filename, answer, harmonic = 1, method = 'Direct', cycles=300, lamda=0.5, cut_values = None, plot_wave_fields = False, plot_old_reproj_comparison = False, plot_old_combo = False, plot_reprojection_comp1 = False, plot_reprojection_comp2 = False, plot_wave_animation = False, tomo_DC = None, dI_I = False):
     '''Run the tomographic inversion for the combination of modes in tomo_modes_n, tomo_modes_m
+    tomo_modes_n, tomo_modes_m: list of n and m modes use in the inversion
+    tomo_orient: which camera orientations to use in the inversions
+    tomo_orient_extrap : which camera views to include in the reprojection
+    filename : Name of image to be saved
+    answer : The LOS object that contains all of the geometry
+    harmonic : Which harmonic to use from the expt data0: DC, 1: fundamental
+    method : Type of tomographic inversion technique to use
+    cycles, lamda: for some of the tomographic inversion algorithms
+    cut_values : cuts to plot
+    switches for different plots : plot_wave_fields, plot_old_reproj_comparison, plot_old_combo, plot_reprojection_comp1, plot_reprojection_comp2, plot_wave_animation,
+    tomo_DC : provide the DC tomographic inversion for dI_I
+    dI_I: whether to calculate dI/I or dI
 
-    SRH: 12Feb2014
+    SRH: 10Aug2014
     '''
     tomo_inv = single(tomo_modes_n, tomo_modes_m, tomo_orient, lamda, method, cycles, 0, 1,True, harmonic, tomo_DC, tomo_orient_extrap, answer)[3]
     if plot_old_combo:

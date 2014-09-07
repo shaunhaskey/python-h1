@@ -479,6 +479,7 @@ class LOS():
             for pixel_x in range(self.CCD_pixels_x):
                 #print pixel_y,pixel_x
                 self.LOS_point[pixel_y, pixel_x, :] = ((float(pixel_x)+0.5)/self.CCD_pixels_x - 0.5) * self.CCD_width * self.v_hat + (-((float(pixel_y)+0.5)/self.CCD_pixels_y) + 0.5) * self.CCD_length * self.u_hat + self.CCD_position
+                #self.LOS_point[pixel_y, pixel_x, :] = ((float(pixel_x)+0.5)/self.CCD_pixels_x - 0.5) * self.CCD_width * self.v_hat + (-float(pixel_y) * self.CCD_length / (self.CCD_pixels_y - 1) + self.CCD_length/2) * self.u_hat + self.CCD_position
                 self.LOS_gradient[pixel_y, pixel_x, :] = self.focal_point - self.LOS_point[pixel_y, pixel_x, :]
 
     def find_intersections(self,):
@@ -1062,11 +1063,22 @@ class LOS():
 
 
 def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0,phi_range = 30, n_phi = 30, decimate_pixel=16, measurements = None, no_theta = 50, patch_pickle = None, elevation_angle = 0., elevation = 0., right_tilt = 0., patch_object = None, n_pixels_x = 512, n_pixels_y=512, CCD_L=0.01575, s_ind = -1, get_intersections = True, min_pixel=None, max_pixel=None, plot_LOS_lines = False):
-    '''Convenience function containing the required geometry for the
-    imax camera
-
+    '''Convenience function containing the required geometry for the imax camera
+    plot_LOS, plot_patch, plot_intersections_plot_pfc, plot_tfc : whether to plot these items
+    phi_range, n_phi, no_theta :  determine the patch grid to look for intersections on
+    decimate_pixel : the decimation for the pixels ::decimate_pixel
+    measurements : the name of the camera location measurements to use
+    patch_pickle : filename for the pickled patch object
+    elevation_angle, elevation, right_tilt : for the top and bottom views
+    patch_object : patch object
+    n_pixels_x, n_pixels_y : number of pixels in each direction
+    CCD_L : height and width of the CCD
+    s_ind : which s index in the Boozer file to use
+    get_intersections : whether to find out where the LOS intersect the plasma
+    min_pixel, max_pixel : range of pixels that are valid
+    plot_LOS_lines : 
     
-    SRH: 12July2013
+    SRH: 10Aug2014
     '''
     # LOS(CCD, CCD_width, CCD_length)
     u_hat = np.array([0.,0.,1.])
@@ -1242,7 +1254,7 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     CCD_position = np.array([CCD_x, CCD_y, CCD_z])
     v_hat = np.array([-np.cos(np.deg2rad(90-CCD_phi)), np.sin(np.deg2rad(90-CCD_phi)),0])
     u_hat = np.array([0,0,1])
-    CCD_L = 50./100
+    CCD_L = 50./100+0.025 #Note the 0.025 is because the routine tries to put the pixels in the 'middle'
     CCD_x = 0.001; CCD_y = CCD_L
     n_pixels = 512
     CCD_pixels_x = 1; CCD_pixels_y = 21
@@ -1408,7 +1420,22 @@ def LOS_geometry(kh, use_pickled_data, light_type, orientations, shot_database, 
     '''Convenience function to get all three orientations in one go
 
     uses the imax_camera function for each view
-    SRH : 12Feb2014
+
+    kh, light_type, are used to find camera details from the shot_database
+    use_pickled_data : use the pickled patch file if it exists
+    orientations (list) are the camera orientations to use in the database
+    shot_database - passed database of shots
+    phi_range, n_phi are passed to imax_camera
+    decimate_pixel - how to decimate the data
+    measurements - passed to imax_camera - which camera location measurements to use
+    n_pixels_x, n_pixels_y, min_valid_pixel, max_valid_pixel - passed to imax_camera, how many pixels in each direction on the CCD, and which ones to disregard
+    fourier_data - experimental data - used for plotting
+    cut_values - used for plotting
+    TFC_intersection - whether or not to include intersections with the TFC when calculating the valid pixels
+    save_patch_grid - save the patch grid
+    boozer_filename - Name of Boozer file to use for the geometry
+
+    SRH : 10Aug2014
     '''
     if boozer_filename==None:
         boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh{:.3f}-kv1.000fixed/boozmn_wout_kh{:.3f}-kv1.000fixed.nc'.format(np.round(kh/0.05)*0.05, np.round(kh/0.05)*0.05)

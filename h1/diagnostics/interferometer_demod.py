@@ -7,34 +7,54 @@ import scipy.optimize as opt
 
 
 class interf_demod(object):
-    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1, chan_list_dig = None, ch_z = None):
+    def __init__(self,shot_number, f_m, dig_mult, start_samples = 10000, force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1, chan_list_dig = None, ch_z = None, load_data_MDSplus = False):
         '''Class for demodulating the sinusoidally modulated interferometer
         SRH : 5Nov2013
         '''
-        self.shot_number = shot_number
-        self.f_m = f_m
-        self.dig_mult = dig_mult
-        self.start_samples = start_samples
-        print self.start_samples,
-        self.start_samples = self.start_samples - self.start_samples%(dig_mult)
-        print self.start_samples
-        self.f_s = self.f_m * self.dig_mult
+        if load_data_MDSplus!=False:
+            self.shot_number = load_data_MDSplus
+            T = MDS.Tree('h1data',self.shot_number)
+            #chan_list = T.getNode('.electr_dens.ne_het.chan_list').data()
+            z_list = T.getNode('.electr_dens.ne_het.chan_z').data()
+            ne_list_decending = np.arange(1,22)[np.argsort(z_list)]
+            for loc, i in enumerate(ne_list_decending):
+                print i,
+                n = T.getNode('.electr_dens.ne_het.ne_{}'.format(i))
+                try:
+                    dat = n.data()
+                    if loc == 0:
+                        self.output = np.zeros((21,len(dat)), dtype = float)
+                        self.t = n.dim_of().data()
+                    self.output[loc,:] = dat
+                    print 'success'
+                except MDS.TdiException:
+                    print 'fail'
 
-        tr = MDS.Tree('electr_dens',shot_number)
-        if chan_list_dig==None:
-            self.chan_list_dig = tr.getNode('\electr_dens::top.ne_het:chan_list').data().tolist()
         else:
-            self.chan_list_dig = chan_list_dig
-        if chan_list_dig==None:
-            self.ch_z = tr.getNode('\electr_dens::top.ne_het:chan_z').data()
-        else:
-            self.ch_z = ch_z
-        if len(self.chan_list_dig)!=len(self.ch_z):
-            raise Exception("chan_list_dig and ch_z are different lengths, each channel needs a z coordinate")
-        top_down_order = (np.argsort(self.ch_z)[::-1]).tolist()
-        self.chan_list_dig_top_down = np.array(self.chan_list_dig)[top_down_order]
+            self.shot_number = shot_number
+            self.f_m = f_m
+            self.dig_mult = dig_mult
+            self.start_samples = start_samples
+            print self.start_samples,
+            self.start_samples = self.start_samples - self.start_samples%(dig_mult)
+            print self.start_samples
+            self.f_s = self.f_m * self.dig_mult
 
-        self.get_up_to_carriers(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc, eps_method = eps_method, tophat_width_prop = tophat_width_prop)
+            tr = MDS.Tree('electr_dens',shot_number)
+            if chan_list_dig==None:
+                self.chan_list_dig = tr.getNode('\electr_dens::top.ne_het:chan_list').data().tolist()
+            else:
+                self.chan_list_dig = chan_list_dig
+            if chan_list_dig==None:
+                self.ch_z = tr.getNode('\electr_dens::top.ne_het:chan_z').data()
+            else:
+                self.ch_z = ch_z
+            if len(self.chan_list_dig)!=len(self.ch_z):
+                raise Exception("chan_list_dig and ch_z are different lengths, each channel needs a z coordinate")
+            top_down_order = (np.argsort(self.ch_z)[::-1]).tolist()
+            self.chan_list_dig_top_down = np.array(self.chan_list_dig)[top_down_order]
+
+            self.get_up_to_carriers(force_symmetric = force_symmetric, individual_eps_calc = individual_eps_calc, eps_method = eps_method, tophat_width_prop = tophat_width_prop)
 
     def get_up_to_carriers(self,force_symmetric = 1, individual_eps_calc = 1, eps_method = 'using_1st_carrier', tophat_width_prop = 1):
         '''Convenience function to do several things at once - it gets you the carriers as a function of time
