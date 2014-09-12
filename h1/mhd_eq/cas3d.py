@@ -335,55 +335,44 @@ class cas3d_continua_data():
         tmp2 = []
         tmp3 = []
         import time
+        def read_scan_old():
+            overall = []
+            for ind in range(1,4):
+                tmp = []
+                for n in range(minscan,maxscan):
+                    xisn = path+'xis{}_{}.dat'.format(ind, n) + suff
+                    with OPEN(xisn,"r") as xf: 
+                        xfbuff = xf.readlines()
+                        for i in xfbuff:
+                            z = i.rstrip('\n').split(' ')
+                            for j in z:
+                                if j!='':
+                                    if j.find('E')>=0:
+                                        tmp.append(float(j))
+                                    else:
+                                        tmp.append(0)
+                overall.append(tmp)
+            return overall
+        import fileinput
+
+        def read_scan_new():
+            overall = []
+            for ind in range(1,4):
+                data = np.loadtxt(fileinput.input([path+'xis{}_{}.dat'.format(ind, n) + suff for n in range(minscan,maxscan)]))
+                print data
+                print data.shape
+                overall.append(data)
+            return overall
+
         for n in range(minscan,maxscan):
             scfn = path+'scan_{0}.dat'.format(n) + suff
             wkfn = path+'wkin_{0}.dat'.format(n) + suff
-            xisn1 = path+'xis1_{0}.dat'.format(n) + suff
-            xisn2 = path+'xis2_{0}.dat'.format(n) + suff
-            xisn3 = path+'xis3_{0}.dat'.format(n) + suff
-
             if get_wkin:
-                #str1 = ' '.join(al).replace('\n',' ').replace('E-','-').replace('E+','+').replace('-','E-').replace('+','E+')
-                #al = file(a,'r').readlines()
                 try:
                     with OPEN(scfn,"r") as sf: 
                         scbuff = sf.readlines()
                     with OPEN(wkfn,"r") as wf: 
                         wkbuff = wf.readlines()
-                    start = time.time()
-                    if load_eig_funcs:
-                        with OPEN(xisn1,"r") as xf: 
-                            xfbuff = xf.readlines()
-                            for i in xfbuff:
-                                z = i.rstrip('\n').split(' ')
-                                for j in z:
-                                    if j!='':
-                                        if j.find('E')>=0:
-                                            tmp1.append(float(j))
-                                        else:
-                                            tmp1.append(0)
-                        print '{:.2f}'.format(time.time() - start)
-                        with OPEN(xisn2,"r") as xf: 
-                            xfbuff = xf.readlines()
-                            for i in xfbuff:
-                                z = i.rstrip('\n').split(' ')
-                                for j in z:
-                                    if j!='':
-                                        if j.find('E')>=0:
-                                            tmp2.append(float(j))
-                                        else:
-                                            tmp2.append(0)
-                        with OPEN(xisn3,"r") as xf: 
-                            xfbuff = xf.readlines()
-                            for i in xfbuff:
-                                z = i.rstrip('\n').split(' ')
-                                for j in z:
-                                    if j!='':
-                                        if j.find('E')>=0:
-                                            tmp3.append(float(j))
-                                        else:
-                                            tmp3.append(0)
-
                     for (ln, s_line) in enumerate(scbuff[2:]):
                         hashes=(s_line[0]+wkbuff[ln+1][0])
                         hashes_cvt = hashes.replace(' ','0 ').replace('#','1 ')
@@ -407,20 +396,32 @@ class cas3d_continua_data():
         #18:?, 19:?,20:?
         if get_wkin: self.scan_arr = np.loadtxt(StringIO(' '.join(all_lines))).T
         if load_eig_funcs:
-            self.mode_shapes = np.abs(np.resize(tmp1, (self.scan_arr.shape[1],len(tmp1)/self.scan_arr.shape[1])))
-            self.mode_shapes2 = np.abs(np.resize(tmp2, (self.scan_arr.shape[1],len(tmp1)/self.scan_arr.shape[1])))
-            self.mode_shapes3 = np.abs(np.resize(tmp3, (self.scan_arr.shape[1],len(tmp1)/self.scan_arr.shape[1])))
-            print len(tmp1), self.scan_arr.shape, len(tmp1)/self.scan_arr.shape[1], self.mode_shapes.shape
-
+            with file(path+'xis{}_{}.dat'.format(1, 0) + suff,'r') as file_handle:
+                self.new_method = True if len(file_handle.readlines()[0])>100 else False
+            if self.new_method == False:
+                tmp1, tmp2, tmp3 = read_scan_old()
+                self.mode_shapes_all = np.zeros((3,self.scan_arr.shape[1],len(tmp1)/self.scan_arr.shape[1]),dtype = float)
+                for i, tmp_tmp in enumerate([tmp1,tmp2, tmp3]):
+                    self.mode_shapes_all[i,:,:] = np.resize(tmp_tmp, (self.scan_arr.shape[1],len(tmp1)/self.scan_arr.shape[1]))
+                self.mode_nums = False
+            else:
+                overall = read_scan_new()
+                self.mode_shapes_all = np.zeros((len(overall),self.scan_arr.shape[1],overall[0].shape[1]-3),dtype = float)
+                self.mode_nums = np.zeros((len(overall),self.scan_arr.shape[1]),dtype = float)
+                print 'mode_shapes_all', self.mode_shapes_all
+                print 'mode_nums', self.mode_nums
+                for i, tmp_tmp in enumerate(overall):
+                    print tmp_tmp[:,1:-2].shape
+                    self.mode_shapes_all[i,:,:] = tmp_tmp[:,1:-2]
+                    self.mode_nums[i,:] = tmp_tmp[:,0]
         if no_hash: 
             w_no_hash = np.where(self.scan_arr[hash_ind] == 0)[0]
             print('Ignoring {h} hashed of {t} instances'.
                   format(h=len(self.scan_arr[0])-len(w_no_hash), t=len(self.scan_arr[0])))
             self.scan_arr=self.scan_arr[:,w_no_hash]
             if load_eig_funcs:
-                self.mode_shapes = self.mode_shapes[w_no_hash,:]
-                self.mode_shapes2 = self.mode_shapes2[w_no_hash,:]
-                self.mode_shapes3 = self.mode_shapes3[w_no_hash,:]
+                self.mode_shapes_all = self.mode_shapes_all[:,w_no_hash,:]
+                if self.new_method: self.mode_nums = self.mode_nums[:,w_no_hash]
         print self.scan_arr.shape
         if alf_sound_ratio == 'sum':
             self.mratio = self.scan_arr[self.A_cpt]/np.sum(self.scan_arr[self.A_cpt:self.A_cpt+3].T,1)
@@ -464,7 +465,8 @@ class cas3d_continua_data():
         self.s = a[:,0]; self.beta = a[:,1]; self.iota = a[:,2]; self.rho = a[:,3]; self.p = a[:,4]
         #list_of_lines = [] #SH added
 
-    def plot_continua(self, ax, colorset = None, edgecolorset = None, dith = None, rest_same = True, size_scale = 50, sym_all = '.c', ms_all = 1, label_type = 'full', linewidths = None, ylims = None, plot_crosses = True,):
+    def plot_continua(self, ax, colorset = None, edgecolorset = None, dith = None, rest_same = True, size_scale = 50, sym_all = '.c', ms_all = 1, label_type = 'full', linewidths = None, ylims = None, plot_crosses = True,plot_styles = None):
+        self.plot_styles = {} if plot_styles == None else plot_styles
         if dith==None: dith = [0.001, .1]
         if colorset == None: colorset = ('b,g,r,c,m,y,k,orange,purple,lightgreen,gray'.split(','))
         if edgecolorset == None: edgecolorset='k,b,darkgreen,r,purple,green,darkgray,darkblue,c,m'.split(',')
@@ -518,17 +520,41 @@ class cas3d_continua_data():
                     truth = (tmp_y > ylims[0]) * (tmp_y < ylims[1])
                 else:
                     truth = np.ones(len(tmp_x),dtype = bool)
-
+                pop_list = []
+                for tmp_i in self.plot_styles.keys():
+                    clr = self.plot_styles[tmp_i][0]
+                    edge_clr = self.plot_styles[tmp_i][1]
+                    for iii in range(len(colors)):
+                        if (colors[iii]==clr) and (edgecolors[iii] == edge_clr):pop_list.append(iii)
+                for iii in pop_list:
+                    colors.pop(iii)
+                    edgecolors.pop(iii)
                 if np.sum(truth)>10:
+                    plot_style_key = '{},{}'.format(self.XIS.lut[mode]['n'], self.XIS.lut[mode]['m'])
+                    if plot_style_key in self.plot_styles.keys():
+                        clr = self.plot_styles[plot_style_key][0]
+                        edge_clr = self.plot_styles[plot_style_key][1]
+                        #pop_list = []
+                        #for iii in range(len(colors)):
+                        #    if (colors[iii]==clr) and (edgecolors[iii] == edge_clr):pop_list.append(iii)
+                        #for iii in pop_list:
+                        #    colors.pop(iii)
+                        #    edgecolors.pop(iii)
+                    else:
+                        clr = colors[self.ct[mode]]
+                        edge_clr = edgecolors[self.ct[mode]]
+                        self.plot_styles[plot_style_key] = [clr, edge_clr]
                     z=ax.scatter(tmp_x[truth], tmp_y[truth], s = tmp_z[truth],marker='o',
-                                 c = colors[self.ct[mode]],edgecolors=edgecolors[self.ct[mode]],
+                                 c = clr,edgecolors=edge_clr,
                                  label=label, zorder = 100,rasterized = True, linewidths = linewidths)  
-        print 'hello !'
+                    #z=ax.scatter(tmp_x[truth], tmp_y[truth], s = tmp_z[truth],marker='o',
+                    #             c = colors[self.ct[mode]],edgecolors=edgecolors[self.ct[mode]],
+                    #             label=label, zorder = 100,rasterized = True, linewidths = linewidths)  
         # the fine dot plots are dithered only in S
 
-    def picker_widget(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d'):
+    def picker_widget(self, path = '/home/jbb105/short/030_n1_low_tinier/', suff = '', debug = 1, size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d', sharex = False):
         tot_plot = 0
-        fig, ax = pt.subplots(nrows = 2)
+        fig, ax = pt.subplots(nrows = 2, sharex = sharex)
         ax, ax2 = ax
         self.plot_continua(ax, colorset = colorset, edgecolorset = edgecolorset, dith = dith, rest_same = rest_same, size_scale = size_scale, sym_all = sym_all, ms_all = ms_all)
         leg_props = FontProperties(size='small')
@@ -562,19 +588,28 @@ class cas3d_continua_data():
                 event.button, event.x, event.y, event.xdata, event.ydata)
             min_loc = np.argmin((self.scan_arr[3,:]/norm - event.ydata/norm)**2 + (self.scan_arr[2,:] - event.xdata)**2)
             #min_loc = np.argmin(((scan_arr[3,:] - event.y)/np.max(scan_arr[3,:]))**2 + (scan_arr[2,:] - event.x)**2)
-            print self.mode_shapes.shape, self.scan_arr.shape, self.scan_arr[2,min_loc], self.scan_arr[3,min_loc], min_loc
+            print self.mode_shapes_all.shape, self.scan_arr.shape, self.scan_arr[2,min_loc], self.scan_arr[3,min_loc], min_loc
             tmp_lut = self.XIS.lut[self.scan_arr[4,min_loc]]
+
+            if self.new_method:
+                mode_str = ','.join(['({},{})'.format(self.XIS.lut[self.mode_nums[i,min_loc]]['n'], self.XIS.lut[self.mode_nums[i,min_loc]]['m']) for i in range(self.mode_nums.shape[0])])
+            else:
+                mode_str = ''
+            print mode_str
             if event.inaxes==ax and not fig.canvas.manager.toolbar._active:
                 mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
-                title = 'freq:{}, ew:{:.4e}, n={} , m={}'.format(self.scan_arr[3,min_loc], self.scan_arr[12,min_loc], mode_n, mode_m)
+                title = 'freq:{}, ew:{:.4e}, n={} , m={}, {}'.format(self.scan_arr[3,min_loc], self.scan_arr[12,min_loc], mode_n, mode_m, mode_str)
+                if self.new_method:
+                    print min_loc,self.scan_arr[4,min_loc], self.mode_nums[0,min_loc], self.mode_nums[1,min_loc], self.mode_nums[2,min_loc]
                 ax2.cla()
                 #fig2.clf()
                 if self.star!=None: self.star[0].remove()
                 self.star = ax.plot(self.scan_arr[2,min_loc], self.scan_arr[3,min_loc],'*', markersize = 20)
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes[min_loc,:])
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes2[min_loc,:])
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes3[min_loc,:])
+                for i in range(self.mode_shapes_all.shape[0]):
+                    ax2.plot(np.linspace(0,1,self.mode_shapes_all.shape[2]),self.mode_shapes_all[i,min_loc,:], zorder = 200)
                 ax2.set_title(title)
+                ax2.set_xlabel('xis')
+                ax2.set_ylabel('s')
                 #ax2.draw_artist(self.star[0])
                 #ax2.draw_artist(ax2.patch)
                 #ax2.draw_artist(ax2.xaxis)
@@ -619,46 +654,6 @@ class cas3d_continua_data():
         if figname!=None: 
             for i in ['.svg','.pdf','.eps']: fig.savefig(figname + i, bbox_extra_artists=(leg_sh,), bbox_inches='tight')
         fig.canvas.draw(); fig.show()
-        1/0
-        ax.set_title(path.replace('_','\_'))
-        ax.set_xlabel('s (flux)')
-        ax.set_ylabel('Frequency (kHz)')
-        am = ' '.join([ str(a) for a in self.allmodes])
-        fig.suptitle('Total of {t} instances, {m} Xis modes used, {a} Alfvenic, {s}, selected indices: {am}\n{mti}'.
-                    format(t=len(self.scan_arr[0]), a = len(np.where(self.scan_arr[self.A_sw]==1)[0]),
-                           s=tot_plot, m=len(self.allmodes), am = am, 
-                           mti=self.mode_table_info),fontsize='small')
-        self.star = None
-        norm = np.max(self.scan_arr[3,:])
-        def onclick(event):
-            print 'button=%d, x=%d, y=%d, xdata=%f, ydata=%f'%(
-                event.button, event.x, event.y, event.xdata, event.ydata)
-            min_loc = np.argmin((self.scan_arr[3,:]/norm - event.ydata/norm)**2 + (self.scan_arr[2,:] - event.xdata)**2)
-            #min_loc = np.argmin(((scan_arr[3,:] - event.y)/np.max(scan_arr[3,:]))**2 + (scan_arr[2,:] - event.x)**2)
-            print self.mode_shapes.shape, self.scan_arr.shape, self.scan_arr[2,min_loc], self.scan_arr[3,min_loc], min_loc
-            tmp_lut = self.XIS.lut[self.scan_arr[4,min_loc]]
-            if event.inaxes==ax and not fig.canvas.manager.toolbar._active:
-                mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
-                title = 'freq:{}, ew:{:.4e}, n={} , m={}'.format(self.scan_arr[3,min_loc], self.scan_arr[12,min_loc], mode_n, mode_m)
-                ax2.cla()
-                #fig2.clf()
-                if self.star!=None: self.star[0].remove()
-                self.star = ax.plot(self.scan_arr[2,min_loc], self.scan_arr[3,min_loc],'*', markersize = 20)
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes[min_loc,:])
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes2[min_loc,:])
-                ax2.plot(np.linspace(0,1,self.mode_shapes.shape[1]),self.mode_shapes3[min_loc,:])
-                ax2.set_title(title)
-                #ax2.draw_artist(self.star[0])
-                #ax2.draw_artist(ax2.patch)
-                #ax2.draw_artist(ax2.xaxis)
-                #ax2.draw_artist(ax2.yaxis)
-                #fig.canvas.update()
-                fig.canvas.draw(); fig.show()
-        #self.scan_arr = scan_arr
-
-        cid = fig.canvas.mpl_connect('button_press_event', onclick)
-        #fig.canvas.mpl_connect('pick_event',onpick)
-
 
 
 
@@ -1108,6 +1103,9 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
     if ax == None and fig == None:
         print 'creating a new figure'
         fig, ax = pt.subplots(nrows = n_plots, sharex = True); 
+        sup_fig = False
+    else:
+        sup_fig = True
     if n_plots == 1: ax = [ax]
     if ylims == None: ylims = [[0,100] for i in kh_list]
     if ellipses == None: ellipses = [[] for i in kh_list]
@@ -1123,10 +1121,14 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
         linewidths = [linewidths]*len(kh_list)
     except (ValueError, TypeError) as e:
         pass
+    plot_styles = None
     for i, (ax_tmp, kh, ylim, size_scale_tmp, linewidth, tmp_ellipse) in enumerate(zip(ax, kh_list, ylims, size_scale, linewidths, ellipses)):
         directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_fixed/'.format(kh)
+        directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_free_lin/'.format(kh)
+        #directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_tiniest_free_lin/'.format(kh)
         cont = cas3d_continua_data(path = directory, maxscan = 32,output_log='out_cas3d_r', load_eig_funcs = False)
-        cont.plot_continua(ax_tmp, colorset = colorset, edgecolorset = edgecolorset, dith = dith, rest_same = rest_same, size_scale = size_scale_tmp, sym_all = sym_all, ms_all = ms_all, label_type = 'small', linewidths = linewidth, ylims = ylim, plot_crosses = False,)
+        cont.plot_continua(ax_tmp, colorset = colorset, edgecolorset = edgecolorset, dith = dith, rest_same = rest_same, size_scale = size_scale_tmp, sym_all = sym_all, ms_all = ms_all, label_type = 'small', linewidths = linewidth, ylims = ylim, plot_crosses = False, plot_styles = plot_styles)
+        plot_styles = cont.plot_styles
         ax_tmp.grid(); ax_tmp.set_xlim([0,1])
         for ii in tmp_ellipse:
             ii['ax']=ax_tmp
@@ -1164,7 +1166,8 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
     #ax[-1].set_position([box.x0, box.y0, box.width * 0.8, box.height])
     if figname!=None: 
         for i in ['.svg','.pdf']: fig.savefig(figname + i, bbox_extra_artists=(leg_sh,), bbox_inches='tight')
-    fig.canvas.draw(); fig.show()
+    if sup_fig==False:
+        fig.canvas.draw(); fig.show()
 
 
 def ellipse(w_radius=1, h_radius=1, c_x=0, c_y=0, n_pts=100, plot = False, ax = None, plot_kwargs = None):

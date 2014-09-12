@@ -346,7 +346,7 @@ class HMA(probe_array):
                                       [ 1.12298962,  1.06854099,  1.01712037],
                                       [ 1.12435199,  1.0632905 ,  1.01356087],
                                       [ 1.1201823 ,  1.06012822,  1.00936083]])
-
+        self.probe_sensitivities = self.resistance_comp
         #rows are former # starting at 1 and columns are x (Blue), y (Black axial), z (Grey)b
         #The x, y, and z correspond with the markings on the copper amplifier box
         #x(Blue)x, x(Blue)y, x(Blue)z, y(Black)x, y(Black)y, y(Black)z, z(Grey)x, z(Grey)y, z(Grey)z

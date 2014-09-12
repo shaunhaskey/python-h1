@@ -80,6 +80,9 @@ def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_io
     n_plots = len(kh_list)+inc_iota
     if ax == None and fig == None:
         fig, ax = pt.subplots(nrows = n_plots, sharex = True); 
+        sup_fig = False
+    else:
+        sup_fig = True
     if n_plots == 1: ax = [ax]
     if ylims == None: ylims = [[0,100] for i in kh_list]
     if inc_legend == None: inc_legend = [True for i in kh_list]
@@ -134,7 +137,8 @@ def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_io
     # #ax[-1].set_position([box.x0, box.y0, box.width * 0.8, box.height])
     if figname!=None: 
         for i in ['.svg','.pdf']: fig.savefig(figname + i, bbox_extra_artists=(leg_sh,),bbox_inches='tight')
-    fig.canvas.draw(); fig.show()
+    if sup_fig == False:
+        fig.canvas.draw(); fig.show()
 
 
 #     def onpick(event):
