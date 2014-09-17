@@ -13,7 +13,7 @@ class cas3d_results():
         self.single_eig = single_eig
         self.output_filename = output_filename
 
-    def plot_eigenvalues(self, ax = None, ylims = None, max_harms = None, sqrt_s = False, multiplier = 1, plot_kwargs = None):
+    def plot_eigenvalues(self, ax = None, ylims = None, max_harms = None, sqrt_s = False, multiplier = 1, plot_kwargs = None,):
         with file(self.directory + '/'+ self.output_filename, 'r') as file_handle:
             file_lines = file_handle.readlines()
         if plot_kwargs == None: plot_kwargs = {}
@@ -110,6 +110,7 @@ class cas3d_results():
         #fname_ne = 'perturbed_ne_f.dat'
         #fname_Te = 'perturbed_pressure_f.dat'
         #fname_P = 'perturbed_ne_f.dat'
+        print 'divide {}, multiply {}'.format(divide, multiply)
         fnames = []; yax = []
         divisors = []
         pert_quants = []
@@ -160,16 +161,20 @@ class cas3d_results():
             a = np.loadtxt(self.directory + '/'+fname, comments='#')
             tmp_amps = +a[:,1:] if not divide else a[:,1:]/div[:, np.newaxis]
             tmp_amps = tmp_amps if not multiply else tmp_amps*mult[:, np.newaxis]
-            dx = a[1,0] - a[0,0]
+            dominant_ind = np.argmax(np.sum(np.abs(tmp_amps[3:-3,:]), axis = 0))
+            #mode_sums = np.sum(tmp_amps[5:-5,:]**2,axis = 1)
+            max_mode = tmp_amps[:, dominant_ind]
+            #dx = a[1,0] - a[0,0]
             #multiplier = multiplier/np.abs(multiplier) / np.max(np.sum(np.abs(tmp_amps), axis = 0)* dx)
             #max_loc = np.max(tmp_amps)
-            max_val = np.min(tmp_amps) if np.abs(np.min(tmp_amps))>np.max(tmp_amps) else np.max(tmp_amps)
+            #max_val = np.min(tmp_amps) if np.abs(np.min(tmp_amps))>np.max(tmp_amps) else np.max(tmp_amps)
+            max_val = np.min(max_mode) if (np.min(max_mode)**2>np.max(max_mode)**2) else np.max(max_mode)
+            
             #multiplier = multiplier/np.abs(multiplier) / tmp_amps[max_loc]
             multiplier = multiplier/np.abs(multiplier) / max_val
             #multiplier = multiplier/np.abs(multiplier) / np.max(tmp_amps)
             print np.sum(tmp_amps, axis = 0), np.sum(tmp_amps, axis = 0).shape
-            print np.max(np.sum(np.abs(tmp_amps), axis = 0))*dx, multiplier
-            dominant_ind = np.argmax(np.sum(np.abs(tmp_amps), axis = 0))
+            print 'mult at end', multiplier
             self.s_cur = a[:,0]
             #max_ind = np.argmin(np.abs(self.s_cur - 1.0))
             max_ind = None
@@ -188,6 +193,7 @@ class cas3d_results():
                     label = text_string if dominant else None
                     if not plotted_non_dom and not dominant:
                         plotted_non_dom = True; label = 'EIG'
+                    #if dominant and np.sum(plot_val)<0: plot_val *= -1
                     ax_cur.plot(x_ax, plot_val*multiplier, plot_style, label = label)
                     max_val = np.max(plot_val[:max_ind]*multiplier)
                     min_val = np.min(plot_val[:max_ind]*multiplier)
@@ -203,7 +209,7 @@ class cas3d_results():
             #if ylim!=None: ax_cur.set_ylim(ylim)
             print max_val_plot
             #ax_cur.set_ylim([-max_val_plot*1.05, max_val_plot*1.05])
-            ax_cur.set_ylim([min_val_plot*1.1, max_val_plot*1.1])
+            ax_cur.set_ylim([min_val_plot-0.2, max_val_plot+0.2])
             ax_cur.grid(True)
         if own_plots: fig.canvas.draw(); fig.show()
 

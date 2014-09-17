@@ -1243,7 +1243,7 @@ def imax_camera(boozer_filename = '/home/srh112/code/python/h1_eq_generation/res
 
 
 
-def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0, patch_object = None, patch_pickle = None, get_intersections = True):
+def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.350-kv1.000fixed/boozmn_wout_kh0.350-kv1.000fixed.nc', plot_LOS = 0, plot_patch = 0, plot_intersections = 0, plot_pfc = 0, plot_tfc = 0, patch_object = None, patch_pickle = None, get_intersections = True, mult_factor = 1):
     '''Convenience function containing the required geometry for the
     interferometer
 
@@ -1257,7 +1257,7 @@ def interferometer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/
     CCD_L = 50./100+0.025 #Note the 0.025 is because the routine tries to put the pixels in the 'middle'
     CCD_x = 0.001; CCD_y = CCD_L
     n_pixels = 512
-    CCD_pixels_x = 1; CCD_pixels_y = 21
+    CCD_pixels_x = 1; CCD_pixels_y = 21 * mult_factor
     CCD_focal_distance = 10000
     plot_length = 2./CCD_focal_distance
     phi_min =CCD_phi - 30; phi_max = CCD_phi+30;n_phi = 15;no_theta = 35;n_interp_pts = 100
