@@ -25,16 +25,30 @@ class cas3d_results():
         if own_plots: fig, ax = pt.subplots(nrows = len(harmonic_strings), sharex =True , sharey=False)
         self.identifiers = []; self.m_n_list = []; self.max_value = []
         if ylims == None: ylims = [None] * len(harmonic_strings)
+
         for i in range(0, len(harmonic_strings)):
             max_val_plot = 0.
             min_val_plot = 0.
             identifier, m_n_list, max_value = self.return_harmonics(file_lines, harmonic_strings[i])
             svals, coefficient_array = self.return_coeffs(file_lines, coeff_strings[i])
+            dominant_ind = np.argmax(np.sum(np.abs(coefficient_array[3:-3,:]**2), axis = 0))
+            max_mode = coefficient_array[3:-3,dominant_ind]
+            max_val = np.min(max_mode) if (np.min(max_mode)**2>np.max(max_mode)**2) else np.max(max_mode)
+            multiplier = multiplier/np.abs(multiplier) / max_val
+
             max_ind = np.argmin(np.abs(svals - 0.95))
             if max_harms == None: max_harms = len(m_n_list) - 1
+            plotted_non_dom = False
             for j in range(0,max_harms+1):
+                dominant = dominant_ind == j
+                plot_kwargs['color'] = 'k' if dominant else 'r'
+                text_string = 'CAS3D:({},{})'.format(-m_n_list[j][1],-m_n_list[j][0])
+                plot_kwargs['label'] = text_string if dominant else None
+                if not plotted_non_dom and not dominant:
+                    plotted_non_dom = True; plot_kwargs['label'] = 'CAS3D:all'
                 xax = svals if not sqrt_s else np.sqrt(svals)
-                ax[i].plot(xax, coefficient_array[:,j]*multiplier, label = '{}'.format(m_n_list[j]), **plot_kwargs)
+                #ax[i].plot(xax, coefficient_array[:,j]*multiplier, label = '{}'.format(m_n_list[j]), **plot_kwargs)
+                ax[i].plot(xax, coefficient_array[:,j]*multiplier,  **plot_kwargs)
                 max_loc = np.argmax(np.abs(coefficient_array[:max_ind,j]))
                 max_val = np.max(coefficient_array[:max_ind,j])
                 min_val = np.min(coefficient_array[:max_ind,j])
@@ -169,7 +183,6 @@ class cas3d_results():
             #max_loc = np.max(tmp_amps)
             #max_val = np.min(tmp_amps) if np.abs(np.min(tmp_amps))>np.max(tmp_amps) else np.max(tmp_amps)
             max_val = np.min(max_mode) if (np.min(max_mode)**2>np.max(max_mode)**2) else np.max(max_mode)
-            
             #multiplier = multiplier/np.abs(multiplier) / tmp_amps[max_loc]
             multiplier = multiplier/np.abs(multiplier) / max_val
             #multiplier = multiplier/np.abs(multiplier) / np.max(tmp_amps)
@@ -187,12 +200,12 @@ class cas3d_results():
                     x_ax = np.sqrt(self.s_cur) if sqrt_s else self.s_cur
                     plot_val = +a[:,i] if not divide else a[:,i]/div
                     plot_val = plot_val if not multiply else plot_val*mult
-                    text_string = 'EIG:{},{}'.format(-int(mode_nums[i-1].split(',')[1]), -int(mode_nums[i-1].split(',')[0]))
+                    text_string = 'CAS3D:{},{}'.format(-int(mode_nums[i-1].split(',')[1]), -int(mode_nums[i-1].split(',')[0]))
                     dominant = dominant_ind == (i-1)
                     plot_style = '-k.' if dominant else '-r'
                     label = text_string if dominant else None
                     if not plotted_non_dom and not dominant:
-                        plotted_non_dom = True; label = 'EIG'
+                        plotted_non_dom = True; label = 'CAS3D:all'
                     #if dominant and np.sum(plot_val)<0: plot_val *= -1
                     ax_cur.plot(x_ax, plot_val*multiplier, plot_style, label = label)
                     max_val = np.max(plot_val[:max_ind]*multiplier)
@@ -1103,19 +1116,20 @@ def plot_mode_shapes(path = '/home/srh112/code/python/cas3d_playground/input.kh0
     print count
 
 
-def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d', figname = None, kh_list = None, inc_iota = False, ylims = None, inc_legend = True, linewidths = 0.5, ellipses = None, ax = None, fig = None):
-    tot_plot = 0
+def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colorset = None, edgecolorset = None, dith = None, minscan = 0, maxscan = 40, modes = 'polar', get_wkin = True, no_hash = True, exception = Exception, output_log = 'out_cas3d', figname = None, kh_list = None, inc_iota = False, ylims = None, inc_legend = True, linewidths = 0.5, ellipses = None, ax = None, fig = None, direct_format = None, txt_details = None, plot_styles = None, adjust_for_leg = True, plot_a_b = False):
+    #tot_plot = 0
     n_plots = len(kh_list)+inc_iota
+    if direct_format == None: direct_format = r'/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_free_lin/'
     if ax == None and fig == None:
         print 'creating a new figure'
         fig, ax = pt.subplots(nrows = n_plots, sharex = True); 
+        gen_funcs.setup_publication_image(fig, height_prop = n_plots*0.65)
         sup_fig = False
     else:
         sup_fig = True
     if n_plots == 1: ax = [ax]
     if ylims == None: ylims = [[0,100] for i in kh_list]
     if ellipses == None: ellipses = [[] for i in kh_list]
-    gen_funcs.setup_publication_image(fig, height_prop = n_plots*0.65)
     if inc_legend==True: inc_legend = [True]*len(kh_list)
     try:
         tmp = int(size_scale)
@@ -1127,10 +1141,9 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
         linewidths = [linewidths]*len(kh_list)
     except (ValueError, TypeError) as e:
         pass
-    plot_styles = None
     for i, (ax_tmp, kh, ylim, size_scale_tmp, linewidth, tmp_ellipse) in enumerate(zip(ax, kh_list, ylims, size_scale, linewidths, ellipses)):
         directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_fixed/'.format(kh)
-        directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_free_lin/'.format(kh)
+        directory = direct_format.format(kh)
         #directory = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/cas3d_r_n1_tiniest_free_lin/'.format(kh)
         cont = cas3d_continua_data(path = directory, maxscan = 32,output_log='out_cas3d_r', load_eig_funcs = False)
         cont.plot_continua(ax_tmp, colorset = colorset, edgecolorset = edgecolorset, dith = dith, rest_same = rest_same, size_scale = size_scale_tmp, sym_all = sym_all, ms_all = ms_all, label_type = 'small', linewidths = linewidth, ylims = ylim, plot_crosses = False, plot_styles = plot_styles)
@@ -1146,7 +1159,9 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
         else:
             if kh!=kh_list[i-1]:
                 ax_tmp.set_title('$\kappa_H = '+ '0.{}$'.format(kh))
-
+        if txt_details!=None:
+            if txt_details['axes'][i] == True:
+                for txt, loc in zip(txt_details['txts'],txt_details['locs']):ax_tmp.text(loc[0],loc[1],txt, **txt_details['txt_kwargs'])
     if inc_iota:
         for n,m in zip([5,4], [4,3]):
             ax[-1].axhline(float(n)/m)
@@ -1166,15 +1181,16 @@ def pub_plot(size_scale = 50, rest_same = True, sym_all = '.c', ms_all = 1, colo
         lab_order = [ltemp.split('&')[1] for ltemp in lab_temp]
         lab_inds = np.argsort(lab_order)           # sort by increasing code
         box = ax_tmp.get_position()
-        ax_tmp.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        if adjust_for_leg: ax_tmp.set_position([box.x0, box.y0, box.width * 0.8, box.height])
         if leg_tmp: leg_sh = ax_tmp.legend(np.array(handles)[lab_inds], lab_text[lab_inds],prop=leg_props, fancybox=True,loc='center left', bbox_to_anchor=(1, 0.5))
     #box = ax[-1].get_position()
     #ax[-1].set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    if plot_a_b :gen_funcs.a_b_c(ax, x_locs = 0.3, y_locs = 0.85, kwargs = {'backgroundcolor':'white','zorder':1000})
     if figname!=None: 
         for i in ['.svg','.pdf']: fig.savefig(figname + i, bbox_extra_artists=(leg_sh,), bbox_inches='tight')
     if sup_fig==False:
         fig.canvas.draw(); fig.show()
-
+    return plot_styles
 
 def ellipse(w_radius=1, h_radius=1, c_x=0, c_y=0, n_pts=100, plot = False, ax = None, plot_kwargs = None):
     theta = np.linspace(-np.pi,np.pi,n_pts)

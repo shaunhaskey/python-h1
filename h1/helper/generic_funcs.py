@@ -1,6 +1,7 @@
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import MaxNLocator
+import numpy as np
 
 def setup_publication_image(fig, height_prop = 1./1.618, single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None):
     cm_to_inch=0.393701
@@ -43,5 +44,15 @@ def modify_axis(ax, modifiers):
         tmp = getattr(ax, k)
         tmp(v)
 
-
-
+def a_b_c(ax, x_locs = 0.1, y_locs = 0.8, kwargs = None):
+    if kwargs == None: kwargs = {}
+    if ax.__class__ == np.ndarray: ax = ax.tolist()
+    if x_locs.__class__!=list:x_locs = [x_locs]*len(ax)
+    if y_locs.__class__!=list:y_locs = [y_locs]*len(ax)
+    start = ord('a')
+    for i, (ax_tmp, x_loc, y_loc) in enumerate(zip(ax, x_locs, y_locs)):
+        x_lim = ax_tmp.get_xlim()
+        y_lim = ax_tmp.get_ylim()
+        ax_tmp.text(x_lim[0]+x_loc*(x_lim[1]-x_lim[0]),
+                    y_lim[0]+y_loc*(y_lim[1]-y_lim[0]),
+                    '({})'.format(chr(start+i)), **kwargs)

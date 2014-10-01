@@ -44,14 +44,14 @@ class conti_results():
                     self.symbol.append(int(tmp.split()[-1]))
 
     def plot_sound_modes(self,allowed_n= None, allowed_m=None, ax = None, plot_props = None, sqrt_s = False):
-        if allowed_n == None: allowed_n_list = self.n_modes
-        if allowed_m == None: allowed_m_list = self.m_modes
+        if allowed_n == None: allowed_n = self.n_modes
+        if allowed_m == None: allowed_m = self.m_modes
         if ax == None: fig, ax = pt.subplots()
         #if plot_props == None: plot_props = {'color':(0.5,0.5,0.5), 'markersize':0.5,'marker':'.', 'linestyle':'None', 'rasterized':True, 'zorder':50}
         if plot_props == None: plot_props = {'markersize':0.5,'marker':'.', 'linestyle':'None', 'rasterized':True, 'zorder':50}
         print plot_props
         for i in range(1,len(self.overal_s_list)):
-            if (self.symbol[i]==2) and (self.n_modes[i] in allowed_n_list) and (self.m_modes[i] in allowed_m_list):
+            if (self.symbol[i]==2) and (self.n_modes[i] in allowed_n) and (self.m_modes[i] in allowed_m):
                 #ax.plot(self.overal_s_list[i], self.overal_freq_list[i],'.',color=(0.5,0.5,0.5),markersize=0.5)
 
                 x_ax = np.sqrt(self.overal_s_list[i]) if sqrt_s else np.array(self.overal_s_list[i])
@@ -62,31 +62,70 @@ class conti_results():
                 plot_props['linestyle'] = '-'
                 ax.plot(x_ax[tmp], y_ax[tmp],**plot_props)
 
-    def plot_alfven_modes(self,allowed_n= None, allowed_m=None, ax = None, plot_props = None, sqrt_s = False, ylim = None):
-        if allowed_n == None: allowed_n_list = self.n_modes
-        if allowed_m == None: allowed_m_list = self.m_modes
+    def plot_alfven_modes(self,allowed_n= None, allowed_m=None, ax = None, plot_props = None, sqrt_s = False, ylim = None, plot_styles = None):
+        self.plot_styles = {} if plot_styles == None else plot_styles
+        colorset = None; edgecolorset = None
+        if colorset == None: colorset = ('b,g,r,c,m,y,k,orange,purple,lightgreen,gray'.split(','))
+        if edgecolorset == None: edgecolorset='k,b,darkgreen,r,purple,green,darkgray,darkblue,c,m'.split(',')
+        edgecolors = []
+        colors = 10*colorset
+        pop_list = []
+        for i in range(10): 
+            for j in range(len(colorset)): 
+                edgecolors.append(edgecolorset[i])
+        for tmp_i in self.plot_styles.keys():
+            clr = self.plot_styles[tmp_i][0]
+            edge_clr = self.plot_styles[tmp_i][1]
+            for iii in range(len(colors)):
+                if (colors[iii]==clr) and (edgecolors[iii] == edge_clr):pop_list.append(iii)
+        for iii in pop_list:
+            colors.pop(iii)
+            edgecolors.pop(iii)
+
+        if allowed_n == None: allowed_n = self.n_modes
+        if allowed_m == None: allowed_m = self.m_modes
         if ax == None: fig, ax = pt.subplots()
-        if plot_props == None: plot_props = {'markersize':2,'marker':'o', 'linestyle':'None', 'rasterized':True, 'zorder':100}
+        if plot_props == None: plot_props = {'markersize':5,'marker':'o', 'linestyle':'None', 'rasterized':True, 'zorder':100}
         print plot_props
+        decimate = 1
         for i in range(1,len(self.overal_s_list)):
-            if (self.symbol[i]==1) and (self.n_modes[i] in allowed_n_list) and (self.m_modes[i] in allowed_m_list):
+            if (self.symbol[i]==1) and (self.n_modes[i] in allowed_n) and (self.m_modes[i] in allowed_m):
+                plot_style_key = '{},{}'.format(self.n_modes[i],self.m_modes[i])
+                if plot_style_key in self.plot_styles.keys():
+                    clr = self.plot_styles[plot_style_key][0]
+                    edge_clr = clr#self.plot_styles[plot_style_key][1]
+                    #edge_clr = self.plot_styles[plot_style_key][1]
+                    label = '({},{})'.format(-self.n_modes[i],-self.m_modes[i])
+                    plot_props['zorder'] = 100
+                else:
+                    clr = '0.5'
+                    edge_clr = '0.5'
+                    plot_props['zorder'] = 1
+                    label = None
+                    #clr = colors[self.ct[mode]]
+                    #edge_clr = edgecolors[self.ct[mode]]
+                    #self.plot_styles[plot_style_key] = [clr, edge_clr]
+
                 x_ax = np.sqrt(self.overal_s_list[i]) if sqrt_s else np.array(self.overal_s_list[i])
                 y_ax = np.array(self.overal_freq_list[i])
                 if ylim==None or (np.sum((y_ax>ylim[0]) * (y_ax<ylim[1]))>5):
                     #tmp, = ax.plot(x_ax, y_ax, label = 'm=%d,n=%d'%(self.m_modes[i],self.n_modes[i]),**plot_props)
-                    tmp, = ax.plot(x_ax, y_ax, label = '({},{})'.format(-self.n_modes[i],-self.m_modes[i]),**plot_props)
+                    ord = np.argsort(x_ax)
+                    ord = np.arange(len(x_ax))
+                    tmp, = ax.plot(x_ax[ord][::decimate], y_ax[ord][::decimate], label = label, markeredgecolor=edge_clr, markerfacecolor=clr,**plot_props)
+                    #tmp, = ax.plot(x_ax[ord], y_ax[ord], label = '({},{})'.format(-self.n_modes[i],-self.m_modes[i]),**plot_props)
 
-def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_iota = False, ylims = None, inc_sound = True, alf_plot_props = None, inc_legend = None, ax = None, fig = None):
+def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_iota = False, ylims = None, inc_sound = True, alf_plot_props = None, inc_legend = None, ax = None, fig = None, plot_styles = None, direct_format = None, adjust_for_leg = True):
     n_plots = len(kh_list)+inc_iota
     if ax == None and fig == None:
         fig, ax = pt.subplots(nrows = n_plots, sharex = True); 
+        gen_funcs.setup_publication_image(fig, height_prop = n_plots*0.65)
         sup_fig = False
     else:
         sup_fig = True
     if n_plots == 1: ax = [ax]
     if ylims == None: ylims = [[0,100] for i in kh_list]
     if inc_legend == None: inc_legend = [True for i in kh_list]
-    gen_funcs.setup_publication_image(fig, height_prop = n_plots*0.65)
     if alf_plot_props == None: alf_plot_props = {'markersize':2,'marker':'o', 'linestyle':'None', 'rasterized':True, 'zorder':100}
     # try:
     #     tmp = int(size_scale)
@@ -98,12 +137,15 @@ def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_io
     #     linewidths = [linewidths]*len(kh_list)
     # except (ValueError, TypeError) as e:
     #     pass
+    if direct_format == None: direct_format = r'/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/CONTI_n1_free_lin_off_100_incomp/'
     for i, (ax_tmp, kh, ylim) in enumerate(zip(ax, kh_list, ylims)):
         file_name = output_log
-        base_dir = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/CONTI_n1_fixed_expt_ne/'.format(kh)
+        #base_dir = '/home/srh112/SSD_mount/raijin_short/whale_tail/input.kh0.{}0-kv1.000fixed_dir/CONTI_n1_fixed_expt_ne/'.format(kh)
+        base_dir = direct_format.format(kh)
         c = conti_results(base_dir, file_name)
         if inc_sound:c.plot_sound_modes(allowed_n= None, allowed_m=None, ax = ax_tmp, sqrt_s = False)
-        c.plot_alfven_modes(allowed_n= None, allowed_m=None, ax = ax_tmp, sqrt_s = False, plot_props = alf_plot_props, ylim = ylim)
+        c.plot_alfven_modes(allowed_n= None, allowed_m=None, ax = ax_tmp, sqrt_s = False, plot_props = alf_plot_props, ylim = ylim, plot_styles = plot_styles)
+        plot_styles = c.plot_styles
         ax_tmp.grid(); ax_tmp.set_xlim([0,1])
         ax_tmp.set_ylim(ylim)#ax.set_ylim([np.min(self.scan_arr[3,:]),np.max(self.scan_arr[3,:])])
         if inc_iota:ax[-1].plot(cont.s, cont.iota,label = 'kh=0.{}'.format(kh))
@@ -131,7 +173,7 @@ def pub_plot(output_log = 'continuum_h1', figname = None, kh_list = None, inc_io
         #lab_order = [ltemp.split('&')[1] for ltemp in lab_temp]
         #lab_inds = np.argsort(lab_order)           # sort by increasing code
         box = ax_tmp.get_position()
-        ax_tmp.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        if adjust_for_leg:ax_tmp.set_position([box.x0, box.y0, box.width * 0.8, box.height])
         if leg_tmp: leg_sh = ax_tmp.legend(prop=leg_props, fancybox=True,loc='center left', bbox_to_anchor=(1, 0.5))
     # #box = ax[-1].get_position()
     # #ax[-1].set_position([box.x0, box.y0, box.width * 0.8, box.height])
