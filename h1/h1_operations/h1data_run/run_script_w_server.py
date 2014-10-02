@@ -30,21 +30,21 @@ verbose= 1
 #key must also exist in disable_buttons below to set the default value
 #item is a list of nodes that are to be disabled/enabled for that particular key
 disable_nodes = {'mirnov' : ['.mirnov.ACQ132_7', 
-                     '.mirnov.ACQ132_8', 
-                     '.mirnov.ACQ132_9', 
-                     '.mirnov.HMA_AMPS'],
-         'electron_density': ['.electr_dens.camac.TR612_7',
-                              '.electr_dens.camac.TR612_8',
-                              '.electr_dens.camac.TR612_9',
-                              '.electr_dens.camac.TR612_10'],
-         'alex_camera':['.mirnov.cam_alex'],
-         'greg_camera':['.mirnov.pimax']}
+                             '.mirnov.ACQ132_8', 
+                             '.mirnov.ACQ132_9', 
+                             '.mirnov.HMA_AMPS'],
+                 'electron density': ['.electr_dens.camac.TR612_7',
+                                      '.electr_dens.camac.TR612_8',
+                                      '.electr_dens.camac.TR612_9',
+                                      '.electr_dens.camac.TR612_10'],
+                 'Reentrant Camera':['.mirnov.cam_alex'],
+                 'ISOPlane spectr':['.mirnov.pimax']}
 
 #Default values for the disable_nodes above
 disable_buttons = {'mirnov': True,
-                   'electron_density': True,
-                   'alex_camera':True,
-                   'greg_camera':True}
+                   'electron density': True,
+                   'Reentrant Camera':True,
+                   'ISOPlane spectr':True}
 
 class GUI_control():
     def __init__(self):
@@ -67,14 +67,15 @@ class GUI_control():
         self.l_current.modify_font(pango.FontDescription("sans 48"))
 
         self.check_buttons = {}
-        for i in disable_nodes:
-            self.check_buttons[i] = gtk.CheckButton(i)
-
+        for i in disable_nodes:self.check_buttons[i] = gtk.CheckButton(i)
+        tmp_label = gtk.Label('Ticked is enabled')
         self.button = gtk.Button("Reinitialise Shot")
         self.vbox.pack_start(self.button, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_phase, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_executing, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_current, expand=True, fill=True, padding=0)
+
+        self.vbox.pack_start(tmp_label, expand=True, fill=True, padding=0)
         for i in self.check_buttons.keys(): self.vbox.pack_start(self.check_buttons[i], expand=True, fill=True, padding=0)
 
         self.button.connect("clicked", self.reinit, None)
@@ -86,6 +87,8 @@ class GUI_control():
         self.l_phase.show()
         self.l_executing.show()
         self.l_current.show()
+        tmp_label.set_justify(gtk.JUSTIFY_LEFT)
+        tmp_label.show()
         self.window.show()
 
     def reinit(self, widget, data=None):
