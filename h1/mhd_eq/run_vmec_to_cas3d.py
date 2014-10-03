@@ -4,13 +4,17 @@ import subprocess
 import numpy as np
 import sys
 
+##################Star editable values###############
+###Run control###
 vmec = False
 mc3d = False
-prerun = True
+prerun = False
 cas3d_matrix = True
 cas3d_eig = True
 conti = False
 cas3d_single_eig = False
+
+####Settings####
 free_boundary = True
 N = 1
 ew = 2.6070e-4
@@ -33,12 +37,32 @@ ew = 6.4371e-5
 #ew = 1.0249e-3
 #ew = 2.7942e-4
 mode_table_size = 'tiny' #'tiny', 'tiniest'
-mode_table_size = 'tiniest' #'tiny', 'tiniest'
-mode_table_size = 'full'
-density_profile = 'lin' #'flat', 'lin', 'lin_off', 'expt'
+mode_table_size = 'full' #'full','tiny', 'tiniest' 'tiniestest'
+#mode_table_size = 'tiniestestestest'
+density_profile = 'lin_off' #'flat', 'lin', 'lin_off', 'expt'
 density_profile_eig = 'expt' #'flat', 'lin', 'lin_off', 'expt', 'quad', 'cubic', 'quartic'
-size_txt = '' if mode_table_size=='full' else '_{}'.format(mode_table_size)
+max_scan_freq = 125 #kHz 125
+min_scan_freq = 1 #kHz
+number_ew = 30000 #Too many will make you run into the wall time
+number_dens = 0.06 #in e20m-3 This needs to take into account the fact that we are assuming H
+vmec_surfaces = 353
+prerun_surfaces = 100 #number of surfaces used in CAS3D and onwards, make sure the prerun for this exists...
+compressibility = 'comp'#'comp', 'incomp'
+conti_dens = 6.0e18
+if compressibility=='comp':
+    gamma = 5./3
+elif compressibility=='incomp':
+    gamma = 1.e-5
+else:
+    print 'compressibility needs to be either comp or incomp'
+    raise(ValueError)
 
+##################End editable values###############
+size_txt = '' if mode_table_size=='full' else '_{}'.format(mode_table_size)
+fac_khertz=10000.*np.sqrt(1./(4.*np.pi*1*1.6726*number_dens))/(2.*np.pi)
+min_ew = (min_scan_freq/fac_khertz)**2
+max_ew = (max_scan_freq/fac_khertz)**2
+print fac_khertz, min_ew, max_ew
 try:
     kappain = np.float(sys.argv[1])
     print kappain
@@ -47,14 +71,11 @@ except:
     print 'problems'
     pass
 
-
 input_vmec_file = 'input.kh{:.3f}-kv1.000fixed'.format(kappain)
 #/short/y08/srh112/
 print input_vmec_file
 input_dir = '/short/y08/srh112/' + 'vmec_input_files/'
 work_directory = '/short/y08/srh112/whale_tail/'+ input_vmec_file +'_dir'
-vmec_surfaces = 353
-prerun_surfaces = 300
 vmec_dir = work_directory+'/vmec/'
 mc3d_dir = work_directory+'/mc3d/'
 prerun_dir = work_directory+'/prerun_{}/'.format(prerun_surfaces)
@@ -306,27 +327,37 @@ if prerun:
     #os.system('qsub jobscript')
 
 conti_change_settings = {'m_min':'0',
-                         'm_max':'18',
-                         'n_tor':'18',
-                         'tor_harms':'-23 -22 -20 -19 -17 -16 -14 -13 -11 -10 -8 -7 -5 -4 -2 -1 1 2 ',
+                         'm_max':'25',
+                         'n_tor':'24',
+                         'tor_harms':'-25 -26 -23 -22 -20 -19 -17 -16 -14 -13 -11 -10 -8 -7 -5 -4 -2 -1 1 2 4 5 7 8',
                          'freq_low':'0.0',
                          'freq_high':'500.0',
                          'idens':'2 1 -1',
-                         'rad_points':'500'
+                         'rad_points':'500',
+                         'rho0':'{:e}'.format(conti_dens)
                          }
-
+if kappain == 0.33:
+    conti_change_settings['B0'] = '0.4830638'
+elif kappain == 0.44:
+    conti_change_settings['B0'] = '0.482235'
+elif kappain == 0.69:
+    conti_change_settings['B0'] = '0.4708551'
+elif kappain == 0.83:
+    conti_change_settings['B0'] = '0.4805152'
+else:
+    conti_change_settings['B0'] = '0.46'   
 
 #'idens':'6 0.84827165 4.31756279 -35.54226959 76.85344266 -68.80442217 22.33691942',
 #'idens':'2 1 -1'
 
 CAS3D_m_change_settings = {'surfaces':str(prerun_surfaces),
-                           'gamma':'1.6666',
+                           'gamma':'{:e}'.format(gamma),
                            'evp':'1',
                            'shift':'5.44182E-04',
-                           'shiftmin':'0.0',
-                           'shiftmax':'8.000e-03',
-                           'number':'30000',
-                           'number_dens':'0.06',
+                           'shiftmin':'{:.4e}'.format(min_ew),
+                           'shiftmax':'{:.4e}'.format(max_ew),
+                           'number':'{}'.format(number_ew),
+                           'number_dens':'{:.5f}'.format(number_dens),
                            'idens':'2 1.  -1',
                            'IRAND':'0',
                            'IFIX':'1',
@@ -336,6 +367,7 @@ CAS3D_m_change_settings = {'surfaces':str(prerun_surfaces),
                            'nxis':'95','neta':'95','nmu':'209',
                            'm_pot':'10', 'n_pot':'10','nu_vac':'100',
                            'nv_vac':'100'}
+
 #'idens':'6 0.84827165 4.31756279 -35.54226959 76.85344266 -68.80442217 22.33691942',
 #'idens':'4 1.  0. -3. 2.',
 #Dave's fit to HELIAC iota
@@ -386,6 +418,39 @@ elif mode_table_size == 'tiniest':
     munmax = 5 
     etatol= 4
     mutol = 4
+elif mode_table_size == 'tiniestest':
+    mmin = 3
+    mmax = 5
+    mummin = 2
+    mummax = 6
+    nmin = -13
+    nmax = 2
+    munmin = -16
+    munmax = 5 
+    etatol= 3
+    mutol = 3
+elif mode_table_size == 'tiniestestest':
+    mmin = 3
+    mmax = 5
+    mummin = 3
+    mummax = 5
+    nmin = -13
+    nmax = 2
+    munmin = -16
+    munmax = 5 
+    etatol= 3
+    mutol = 3
+elif mode_table_size == 'tiniestestestest':
+    mmin = 4
+    mmax = 5
+    mummin = 4
+    mummax = 5
+    nmin = -13
+    nmax = 2
+    munmin = -16
+    munmax = 5 
+    etatol= 3
+    mutol = 3
 else:
     raise ValueError('mode_table_size must be full, tiny or tiniest')
 if density_profile == 'flat':
@@ -393,7 +458,7 @@ if density_profile == 'flat':
 elif density_profile == 'lin':
     idens_txt = '2 1.  -1'
 elif density_profile == 'lin_off':
-    idens_txt = '2 1  -0.8'
+    idens_txt = '2 1  -0.99'
 elif density_profile == 'expt':
     #idens_txt = '4 1. 0. -3. 2.'
     idens_txt = '6 0.84827165 4.31756279 -35.54226959 76.85344266 -68.80442217 22.33691942'
@@ -519,10 +584,11 @@ CAS3D_m_change_settings['xis'] = etatable.rstrip('\n')
 # fout.close()
 free_b_string = 'fixed'
 if free_boundary: free_b_string='free'
-suffix = '{}{}_{}_{}'.format(N, size_txt, free_b_string, density_profile)
-suffix = '{}{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, prerun_surfaces)
-cas3d_r_dir = work_directory+'/cas3d_r_n{}/'.format(suffix,)
+#suffix = '{}{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, gamma)
+suffix = '{}{}_{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, prerun_surfaces, compressibility)
+cas3d_r_dir = work_directory+'/cas3d_r_n{}_{}-{}kHz_{}ews/'.format(suffix,min_scan_freq, max_scan_freq, number_ew)
 cas3d_m_dir = work_directory+'/cas3d_m_n{}/'.format(suffix,)
+
 #suffix_eig = '{}{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, density_profile_eig)
 suffix_eig = '{}{}_{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, density_profile_eig, prerun_surfaces)
 cas3d_single_eig_dir = work_directory+'/cas3d_m_n{}_ew_{:.4e}/'.format(suffix_eig, ew)
@@ -623,7 +689,12 @@ for i in CAS3D_settings.keys():
 print new_job_string
 
 '''
-conti_dir = work_directory+'/CONTI_n{}_{}_expt_ne/'.format(N, free_b_string)
+#conti_dir = work_directory+'/CONTI_n{}_{}_expt_ne/'.format(N, free_b_string)
+conti_dir = work_directory+'/CONTI_n{}_dens{:e}/'.format(suffix,conti_dens)
+#cas3d_r_dir = work_directory+'/cas3d_r_n{}_{}-{}kHz_{}ews/'.format(suffix,min_scan_freq, max_scan_freq, number_ew)
+#suffix = '{}{}_{}_{}_{}_{}'.format(N, size_txt, free_b_string, density_profile, prerun_surfaces, compressibility)
+conti_change_settings['idens'] = idens_txt
+conti_change_settings['gamma'] = '{:.4f}'.format(gamma)
 
 if conti:
     os.system('mkdir '+conti_dir)
