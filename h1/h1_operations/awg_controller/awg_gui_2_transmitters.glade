@@ -30,13 +30,13 @@
             <property name="can_focus">False</property>
             <child>
               <object class="GtkLinkButton" id="help">
-                <property name="label" translatable="yes">HELP (http://h1svr.anu.edu.au/wiki/)</property>
+                <property name="label" translatable="yes">HELP (http://h1svr.anu.edu.au/wiki/RFmodulation)</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
                 <property name="use_action_appearance">False</property>
                 <property name="relief">none</property>
-                <property name="uri">http://h1svr.anu.edu.au/wiki/</property>
+                <property name="uri">http://h1svr.anu.edu.au/wiki/RFmodulation</property>
               </object>
               <packing>
                 <property name="expand">True</property>

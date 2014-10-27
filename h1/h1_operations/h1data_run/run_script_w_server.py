@@ -14,7 +14,7 @@ import subprocess, os
 import sys
 import threading
 import SocketServer
-
+import numpy as np
 import pygtk
 import pango
 import gobject
@@ -69,6 +69,7 @@ class GUI_control():
         self.check_buttons = {}
         for i in disable_nodes:self.check_buttons[i] = gtk.CheckButton(i)
         tmp_label = gtk.Label('Ticked is enabled')
+        self.quality_text = gtk.Label('Shot Quality\n test2')
         self.button = gtk.Button("Reinitialise Shot")
         self.vbox.pack_start(self.button, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_phase, expand=True, fill=True, padding=0)
@@ -77,6 +78,7 @@ class GUI_control():
 
         self.vbox.pack_start(tmp_label, expand=True, fill=True, padding=0)
         for i in self.check_buttons.keys(): self.vbox.pack_start(self.check_buttons[i], expand=True, fill=True, padding=0)
+        self.vbox.pack_start(self.quality_text, expand=True, fill=True, padding=0)
 
         self.button.connect("clicked", self.reinit, None)
         self.window.add(self.vbox)
@@ -84,6 +86,7 @@ class GUI_control():
         self.button.show()
         for i in self.check_buttons.keys(): self.check_buttons[i].set_active(True)
         for i in self.check_buttons.keys(): self.check_buttons[i].show()
+        self.quality_text.show()
         self.l_phase.show()
         self.l_executing.show()
         self.l_current.show()
@@ -389,6 +392,7 @@ class shot_cycle():
         self.GUI.l_phase.set_text('Phase :' + self.cycle)
         self.GUI.l_current.set_text('Current :' + str(self.cur_shot))
         self.GUI.l_executing.set_text('Executing :' + str(self.executing_shot))
+        self.GUI.quality_text.set_text('Shot quality\n' + str(self.shot_quality.quality_string))
 
     def init_shot(self,):
         '''Perform all the required tasks to initialise the shot
@@ -503,6 +507,9 @@ class shot_cycle():
             raw_input()
             self.current_day = datetime.datetime.now().day
             print '--> continuing'
+        print self.shot_quality.check_quality(self.executing_shot)
+        gobject.idle_add(self.update_label,)
+
         self.executing_shot += 1
         self.shot_count += 1
         return 1
@@ -518,15 +525,76 @@ class shot_cycle():
             dispatch_cmd2('close tree', self.destination)
         else:
             print('Cannot abort if not in the INIT phase')
-        
+
+
+#############################################
+## Things to check the quality of the shots##
+
+def check_mirnov_amps(shot):
+    n = MDSplus.Tree('h1data',shot).getNode('.mirnov.hma_amps.amp_success')
+    try:
+        dat = n.data()
+        if dat == '1':
+            return_string = '{}: Mirnov amps GOOD'.format(shot)
+        else:
+            return_string = '{}: Mirnov amps BAD'.format(shot)
+    except MDSplus.TdiException:
+        print ' Exception obtaining mirnov amplifier settings success'
+        return_string = '{}: Mirnov amps data unavailable'.format(shot)
+    return return_string
+
+def check_mirnov_data(shot):
+    return_list = []
+    for i in [7,8,9]:
+        n = MDSplus.Tree('h1data',shot).getNode('.mirnov.ACQ132_{}:input_01'.format(i))
+        try:
+            dat = n.record.data()
+            time_dat = n.dim_of().data()
+            start_loc = np.argmin(np.abs(time_dat - 0.01))
+            end_loc = np.argmin(np.abs(time_dat - 0.03))
+            DC_val = np.mean(dat[start_loc:end_loc])
+            RMS = np.sqrt(np.mean((dat[start_loc:end_loc]-DC_val)**2))
+            print DC_val, RMS
+            return_list.append('{}: Mirnov ACQ132_{} success RMS:{:.2f}mV\n'.format(shot, i, RMS*1000))
+        except (MDSplus.TdiException, MDSplus.TreeNoDataException) as e:
+            return_list.append('{}: Mirnov ACQ132_{} FAIL\n'.format(shot, i))
+            print ' Exception obtaining ACQ132_{} data'.format(i)
+    return ''.join(return_list).rstrip('\n')
+
+quality_funcs = [check_mirnov_data, check_mirnov_amps]
+
+class shot_quality():
+    def __init__(self, ):
+        self.quality_funcs = quality_funcs
+        self.count = 0
+        self.quality_string = ''
+        print 'shot_quality has begun'
+        self.current_strings = ['' for i in quality_funcs]
+    def check_quality(self, shot):
+        #shot += self.count
+        for i in range(len(self.quality_funcs)):
+            tmp_func = self.quality_funcs[i]
+            try:
+                return_val = tmp_func(shot)
+            except:
+                return_val = 'Exception'
+            self.current_strings[i] = '{} ({})'.format(return_val, tmp_func.__name__,)
+        print self.current_strings
+        self.quality_string = '\n'.join(self.current_strings)
+        self.count = self.count  + 1
+
+#############################################
+
+
 class shot_engine():
-    def __init__(self, shot_cycle, expected_shots):
+    def __init__(self, shot_cycle, expected_shots, shot_quality = None):
         '''This cycles shot_cycle through the shots
 
         SRH: 19July2013
         '''
         self.shot_cycle = shot_cycle
         self.expected_shots = expected_shots
+        #self.shot_quality = shot_quality
         print 'shot_engine initialised'
 
     def start(self,):
@@ -538,6 +606,8 @@ class shot_engine():
                 a = self.shot_cycle.init_shot()
                 self.shot_cycle.abort = 0
             b = self.shot_cycle.store_shot()
+            #if self.shot_quality!=None:
+            #    b = self.shot_quality.check_quality(self.shot_cycle.cur_shot)
 
 
 if __name__=='__main__':
@@ -652,6 +722,16 @@ if __name__=='__main__':
     killed_all = 0
     shot_cycle = shot_cycle(cur_shot, executing_shot, include_transmitter_check, manual_init, tree, destination, transmitter_nums, single_sweep, store_rf_data_mdsplus, initial_trans_check, cro_proc)
 
+
+    #Create the shot quality checker, start it in a separate daemon thread
+    #shot_quality = 
+    shot_cycle.shot_quality = shot_quality()
+    print '!!!hello world!!!'
+    print shot_cycle.shot_quality
+    #shot_thread = threading.Thread(target=shot_engine_instance.start)
+    #shot_thread.daemon = True
+    #shot_thread.start()
+
     TCP_PORT = 8111
     TCP_server_thread, TCP_server = start_TCP_server(TCP_PORT)
 
@@ -678,6 +758,7 @@ if __name__=='__main__':
     shot_thread = threading.Thread(target=shot_engine_instance.start)
     shot_thread.daemon = True
     shot_thread.start()
+
 
     # Start a thread with the server -- that thread will then start one
     # more thread for each request
