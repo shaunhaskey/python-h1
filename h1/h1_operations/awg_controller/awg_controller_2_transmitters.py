@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 '''
+Run it as:
+$ ./awg_controller_2_transmitters.py AWG_IP
+where AWG_IP is the IP address of the AWG. If this argument is not supplied
+it defaults to "192.168.1.153"
+
 Notes:
 -It is important for the output to go into 50Ohms, otherwise you don't get what you think you will...
 -The voltage range should go from -32767-> 32767, then use amplitude and offset to set the meaning of the max and min
@@ -12,11 +17,14 @@ from matplotlib.backends.backend_gtkagg import NavigationToolbar2GTKAgg as Navig
 import gtk
 import numpy as np
 import socket, time
-import datetime
+import datetime, sys
 
 import matplotlib.pyplot as pt
 class awg():
     def __init__(self,host, PORT):
+        '''This class handles all of the communication with the AWG over the network
+        SRH : 29Oct2014
+        '''
         self.host = host
         self.PORT = PORT
         self.connect_to_awg()
@@ -24,7 +32,7 @@ class awg():
     def connect_to_awg(self):
         '''
         Open a socket to the AWG
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print 'connecting to host: %s:%d'%(self.host,self.PORT)
@@ -33,7 +41,7 @@ class awg():
     def reset_awg(self):
         '''
         Clear the settings on the AWG
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         print ' Resetting AWG'
         self.s.send("*RST\n")
@@ -43,7 +51,7 @@ class awg():
     def download_data_to_awg(self, data_to_send, filename, chan=1):
         '''
         Download waveform to the AWG, and load it into memory
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         bytes_to_send = len(data_to_send)
         len_bytes_to_send = len(str(bytes_to_send))
@@ -59,7 +67,7 @@ class awg():
     def setup_arb_mode(self):
         '''
         Setup up for ARB waveform on the AWG and load file we sent
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         #self.s.send('FUNCtion ARB\n')
         success = 1
@@ -88,7 +96,7 @@ class awg():
     def setup_trigger(self):
         '''
         Setup the trigger settings for the AWG
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         success = True
         for i in [1,2]:
@@ -105,7 +113,7 @@ class awg():
     def set_status_on(self):
         '''
         Start the AWG waiting for a trigger
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         success = True
         for i in [1,2]:
@@ -116,7 +124,7 @@ class awg():
     def close_socket(self):
         '''
         close the socket
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         print 'Closing connection to AWG'
         self.s.close()
@@ -203,6 +211,9 @@ class nice_gui():
         gtk.main()
 
     def default_settings(self,dum):
+        '''Go back to some sane default settings when the detault button is pressed
+        SRH : 29Oct2013
+        '''
         self.waveform_inp.set_text('2*step(0.001,0.1)')
         self.waveform_inp_T2.set_text('2*step(0.001,0.1)')
         self.end_time_inp.set_text('0.15')
@@ -212,8 +223,10 @@ class nice_gui():
         self.check_button_50ohm.set_active(False)
         self.same_check_toggled(None)
 
-
     def same_check_toggled(self,toggle):
+        '''Function to check if both transmitters are the same
+        SRH : 29Oct2013
+        '''
         self.duplicate_transmitters = self.same_check_toggle.get_active()
         print self.duplicate_transmitters
         if self.duplicate_transmitters:
@@ -225,7 +238,7 @@ class nice_gui():
     def text_changed(self, widget):
         '''
         Some of the settings have changed - disable the execute button
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         self.execute_button.set_sensitive(False)
         self.status_label.set_markup('<span color="red">STATUS : WAVEFORM CHANGED, NEED TO VALIDATE AND PROGRAM AWG</span>')
@@ -353,7 +366,7 @@ class nice_gui():
     def create_arb_file(self, chan_count, samp_rate, amp, offset, mark_point, filt, data):
         '''
         Create the arb file based on the settings given
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         output = 'File Format:1.10\n'
         output += 'Checksum:0\n'
@@ -401,7 +414,7 @@ class nice_gui():
     def execute(self,button):
         '''
         Download the data to the AWG, and set everything up so its ready to trigger
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         success = True
         print('###################################################')
@@ -427,12 +440,12 @@ class nice_gui():
         else:
             self.status_label.set_markup('<span color="red">STATUS : ERROR DOWNLOADING WAVEFORM</span>')
             print '########!!!!! ERROR SETTING UP AWG ########'
-        print '#######################################'
+        print '#########################################'
 
     def retreive(self,button):
         '''
         Going to implement something with MDSplus here
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         
         print 'Retreive!!'
@@ -440,7 +453,7 @@ class nice_gui():
     def store(self,button):
         '''
         Going to implement something with MDSplus here for the future
-        SH : 11Mar2013
+        SRH : 11Mar2013
         '''
         print 'Store!!'
         self.error('BLAHHHHHH')
@@ -455,6 +468,10 @@ class nice_gui():
         self.dia.hide()
 
 if __name__ == '__main__':
+    try:
+        host = sys.argv[1]
+    except:
+        host = "192.168.1.153"
+        print "Host input IP argument not supplied, going with default:{}".format(host)
     PORT = 5025
-    host = "192.168.1.153"
     a = nice_gui(host, PORT)

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-#./run_script.py tree pause initial_trans_check manual_pause
+#./run_script.py tree pause initial_trans_check manual_pause pll_poll
 #-- tree is the tree it 'runs' - usually h1data
 #-- pause is a manual pause AFTER init - needed if there is no LAMwait. 1: include manual pause
 #-- initial_trans_check, 1: include initial trans check, 0: exclude initial trans check
 #-- manual_pause : 1:include pause before each init phase to allow settings to be changed etc...
+#-- pll_poll : 1:check to see if the currents have been written to the tree before going to pulse phase
 
 #could set this up so that it creates its own jDispatcher.properties?
 #read the text in the exception further below for a description of input arguments
@@ -448,6 +449,41 @@ class shot_cycle():
         if self.abort!=0:print('Shot was aborted')
         return self.abort
 
+    def pulse_shot(self,):
+        '''Perform all the required tasks to move to the pulse phase of the shot
+        SRH: 11Nov2014
+        '''
+        self.cycle = 'PULSE_ON'
+        gobject.idle_add(self.update_label,)
+        tmp_time = time.time()
+        #dispatch_cmd('dispatch /build', self.destination)
+        #dispatch_cmd2('ABORT PHASE', self.destination)
+        #dispatch_cmd('close tree', self.destination)
+        #dispatch_cmd('set tree %s /shot=%d'%(self.tree,self.executing_shot), self.destination)
+        #dispatch_cmd('dispatch /build', self.destination)
+        dispatch_cmd('dispatch /phase PULSE', self.destination)
+        print '--> time to perform PULSE %.2fs'%(time.time() - tmp_time)
+        if self.abort!=0:print('Shot was aborted')
+        return self.abort
+
+    def plc_poll(self,):
+        '''Perform all the required tasks to move to the pulse phase of the shot
+        SRH: 11Nov2014
+        '''
+        self.cycle = 'PLC_POLL'
+        gobject.idle_add(self.update_label,)
+        print ' Polling the PLC'
+        cur_dat = 234
+        time.sleep(3)
+        while cur_dat == 234 and self.abort == 0:
+            T = MDSplus.Tree('h1data',shot=self.executing_shot)
+            n = T.getNode('.operations.magnetsupply.lcu.setup_main:I2')
+            cur_dat = int(n.data())
+            print ' {}'.format(cur_dat)
+            time.sleep(1)
+        if self.abort!=0:print(' Shot was aborted')
+        return self.abort
+
     def store_shot(self,):
         '''Perform all the required tasks to store a shot
         SRH: 19July2013
@@ -523,6 +559,12 @@ class shot_cycle():
             self.abort = 1
             dispatch_cmd2('ABORT PHASE', self.destination)
             dispatch_cmd2('close tree', self.destination)
+        elif self.cycle == 'PULSE_ON':
+            self.abort = 1
+            dispatch_cmd2('ABORT PHASE', self.destination)
+            dispatch_cmd2('close tree', self.destination)
+        elif self.cycle == 'PLC_POLL':
+            self.abort = 1
         else:
             print('Cannot abort if not in the INIT phase')
 
@@ -587,14 +629,15 @@ class shot_quality():
 
 
 class shot_engine():
-    def __init__(self, shot_cycle, expected_shots, shot_quality = None):
+    def __init__(self, shot_cycle, expected_shots, shot_quality = None, plc_poll=True):
         '''This cycles shot_cycle through the shots
 
         SRH: 19July2013
         '''
         self.shot_cycle = shot_cycle
         self.expected_shots = expected_shots
-        #self.shot_quality = shot_quality
+        self.plc_poll = plc_poll
+        if self.plc_poll==1:self.plc_poll=True
         print 'shot_engine initialised'
 
     def start(self,):
@@ -603,8 +646,21 @@ class shot_engine():
             a = 1
             while a==1:
                 print('cycle',a)
+                #Initialise the shot, a=0 is success
                 a = self.shot_cycle.init_shot()
+                #reset the abort flag
                 self.shot_cycle.abort = 0
+                #PLC_POLL if previous step was successful (a=0)
+                if a == 0 and self.plc_poll:
+                    a = self.shot_cycle.plc_poll()
+                    #reset the abort flag
+                    self.shot_cycle.abort = 0
+                #PULSE if previous step was successful (a=0)
+                if a == 0:
+                    a = self.shot_cycle.pulse_shot()
+                    #reset the abort flag
+                    self.shot_cycle.abort = 0
+            #If all the previous was successful (i.e a=0 at the end)
             b = self.shot_cycle.store_shot()
             #if self.shot_quality!=None:
             #    b = self.shot_quality.check_quality(self.shot_cycle.cur_shot)
@@ -624,12 +680,13 @@ if __name__=='__main__':
         pause = int(sys.argv[2])
         initial_trans_check = int(sys.argv[3])
         manual_init = int(sys.argv[4])
+        plc_poll = int(sys.argv[5])
     except:
         print 'You need to specify a tree and whether or not you want a manual pause, if you want the initial transmitter check, and if you want a manual pause before init'
-        print 'eg, run h1data without pause - i.e lamwait based, skip the initial transmitter check, no manual pause before init'
-        print './run_script.py h1data 0 0 0'
+        print 'eg, run h1data without pause - i.e lamwait based, skip the initial transmitter check, no manual pause before init, plc_poll before pulse phase'
+        print './run_script.py h1data 0 0 0 1'
         print 'eg, run sh_test3 with pause and include the initial transmitter check, include manual pause before init'
-        print './run_script.py sh_test3 1 1 1'
+        print './run_script.py sh_test3 1 1 1 0'
         print 'exiting'
         sys.exit()
 
@@ -653,6 +710,7 @@ if __name__=='__main__':
 
     computer_details['h1operator@h1svr']['programs'] = [('jDispatcherIp', tree),('jDispatchMonitor','h1svr:8006')]#, ('run_script.py','python')]
 
+    #computer_details['h1operator@h1svr']['servers'] = [('jServer',8011)]
     computer_details['h1operator@h1svr']['servers'] = []
 
     ##################################################################################
@@ -754,7 +812,7 @@ if __name__=='__main__':
     shot_cycle.GUI = GUI
 
     #Create the shot engine and start it in a separate daemon thread
-    shot_engine_instance = shot_engine(shot_cycle, expected_shots)
+    shot_engine_instance = shot_engine(shot_cycle, expected_shots, plc_poll = plc_poll)
     shot_thread = threading.Thread(target=shot_engine_instance.start)
     shot_thread.daemon = True
     shot_thread.start()
