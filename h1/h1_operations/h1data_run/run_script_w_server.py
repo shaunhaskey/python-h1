@@ -1,10 +1,6 @@
 #!/usr/bin/env python
-#./run_script.py tree pause initial_trans_check manual_pause pll_poll
+#./run_script.py tree
 #-- tree is the tree it 'runs' - usually h1data
-#-- pause is a manual pause AFTER init - needed if there is no LAMwait. 1: include manual pause
-#-- initial_trans_check, 1: include initial trans check, 0: exclude initial trans check
-#-- manual_pause : 1:include pause before each init phase to allow settings to be changed etc...
-#-- pll_poll : 1:check to see if the currents have been written to the tree before going to pulse phase
 
 #could set this up so that it creates its own jDispatcher.properties?
 #read the text in the exception further below for a description of input arguments
@@ -23,8 +19,6 @@ pygtk.require('2.0')
 import gtk
 import atexit
 
-#Cro is set to single sweep after data is saved
-single_sweep = 0
 verbose= 1
 
 #key should be the same as the label next to the checkbox
@@ -66,34 +60,53 @@ class GUI_control():
         self.l_phase.modify_font(pango.FontDescription("sans 48"))
         self.l_executing.modify_font(pango.FontDescription("sans 48"))
         self.l_current.modify_font(pango.FontDescription("sans 48"))
+        self.poll_plc_check = gtk.CheckButton('Poll PLC before finishing INIT')
 
         self.check_buttons = {}
-        for i in disable_nodes:self.check_buttons[i] = gtk.CheckButton(i)
+        for i in disable_nodes.keys():self.check_buttons[i] = gtk.CheckButton(i)
         tmp_label = gtk.Label('Ticked is enabled')
         self.quality_text = gtk.Label('Shot Quality\n test2')
+        self.quality_text.set_use_markup(True)
         self.button = gtk.Button("Reinitialise Shot")
+        self.button_cycle_trans = gtk.Button("Cycle Transmitters")
         self.vbox.pack_start(self.button, expand=True, fill=True, padding=0)
+        self.vbox.pack_start(self.button_cycle_trans, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_phase, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_executing, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_current, expand=True, fill=True, padding=0)
+        self.vbox.pack_start(self.poll_plc_check, expand=True, fill=True, padding=0)
 
         self.vbox.pack_start(tmp_label, expand=True, fill=True, padding=0)
         for i in self.check_buttons.keys(): self.vbox.pack_start(self.check_buttons[i], expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.quality_text, expand=True, fill=True, padding=0)
 
         self.button.connect("clicked", self.reinit, None)
+        self.button_cycle_trans.connect("clicked", self.cycle_trans, None)
         self.window.add(self.vbox)
         self.vbox.show()
         self.button.show()
+        self.button_cycle_trans.show()
         for i in self.check_buttons.keys(): self.check_buttons[i].set_active(True)
         for i in self.check_buttons.keys(): self.check_buttons[i].show()
         self.quality_text.show()
         self.l_phase.show()
         self.l_executing.show()
         self.l_current.show()
+        self.poll_plc_check.set_active(True)
+        self.poll_plc_check.show()
         tmp_label.set_justify(gtk.JUSTIFY_LEFT)
         tmp_label.show()
         self.window.show()
+
+    def cycle_trans(self, widget,data=None):
+        print "This is where the cycle transmitters goes"
+        args = ['ssh', 'prl@prl60', '/home/prl/transmitter_snmp/rf_snmp_mdsplus.py %d'%shot]
+
+        for i in [1,2]:
+            args = ['ssh', 'prl@prl60', "/home/prl/snmp/transmitter {} program recycle_after_high_power_blast".format(i)]
+            a = subprocess.Popen(args, stdout=subprocess.PIPE, 
+                                 stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+            print "Sent command to cycle T{}".format(i)
 
     def reinit(self, widget, data=None):
         print "Reinitialise called"
@@ -323,12 +336,16 @@ def start_servers(computer, prog_details, local=0, execute = True):
     gnome_term_list = []
     for tmp_prog_details in prog_details:
         if local==0:
-            args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", "ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
+            #args = ["xterm", "-T", "%s %s %d"%(computer, tmp_prog_details[0], tmp_prog_details[1]),"-e", "ssh", computer, "-t", "bash -l %s_%d.sh"%(tmp_prog_details[0], tmp_prog_details[1])]
             args = ["ssh", computer, "-t", "bash -l '%s_%d.sh'"%(tmp_prog_details[0], tmp_prog_details[1])]
+            if tmp_prog_details[0] == 'jServer':
+                args = ["ssh", computer, "-t", "bash -l '%s %d'"%('jServer_wrapper', tmp_prog_details[1])]
+            else:
+                args = ["ssh", computer, "-t", "bash -l '%s %d'"%('jServer_wrapper', tmp_prog_details[1])]
             term_title = "%s %s %d"%(computer[computer.find('@')+1:], tmp_prog_details[0], tmp_prog_details[1])
         else:
             if tmp_prog_details[1]==None:
-                args = ["xterm", "-T", "%s %s"%(computer, tmp_prog_details[0]),"-e", tmp_prog_details[0]]
+                #args = ["xterm", "-T", "%s %s"%(computer, tmp_prog_details[0]),"-e", tmp_prog_details[0]]
                 args = [tmp_prog_details[0]]
                 term_title = "%s %s"%(computer[computer.find('@')+1:], tmp_prog_details[0]),"-e", tmp_prog_details[0]
             else:
@@ -375,7 +392,7 @@ class shot_cycle():
         self.cur_shot = cur_shot
         self.executing_shot = executing_shot
         self.include_transmitter_check = include_transmitter_check
-        self.manual_init = manual_init
+        #self.manual_init = manual_init
         self.tree = tree
         self.destination = destination
         self.shot_count = 0
@@ -386,6 +403,7 @@ class shot_cycle():
         self.abort = 0
         self.store_rf_data_mdsplus = store_rf_data_mdsplus
         self.cro_proc = cro_proc
+
     def update_label(self,):
         '''update the text on the GUI
         SRH: 19July2013
@@ -393,7 +411,8 @@ class shot_cycle():
         self.GUI.l_phase.set_text('Phase :' + self.cycle)
         self.GUI.l_current.set_text('Current :' + str(self.cur_shot))
         self.GUI.l_executing.set_text('Executing :' + str(self.executing_shot))
-        self.GUI.quality_text.set_text('Shot quality\n' + str(self.shot_quality.quality_string))
+        #self.GUI.quality_text.set_text('Shot quality\n' + str(self.shot_quality.quality_string))
+        self.GUI.quality_text.set_markup('Shot quality\n' + str(self.shot_quality.quality_string))
 
     def init_shot(self,):
         '''Perform all the required tasks to initialise the shot
@@ -470,28 +489,30 @@ class shot_cycle():
         '''Perform all the required tasks to move to the pulse phase of the shot
         SRH: 11Nov2014
         '''
-        self.cycle = 'PLC_POLL'
-        gobject.idle_add(self.update_label,)
-        print ' Polling the PLC'
-        cur_dat = 234
-        time.sleep(3)
-        while cur_dat == 234 and self.abort == 0:
-            T = MDSplus.Tree('h1data',shot=self.executing_shot)
-            n = T.getNode('.operations.magnetsupply.lcu.setup_main:I2')
-            cur_dat = int(n.data())
-            print ' {}'.format(cur_dat)
-            time.sleep(1)
-        if self.abort!=0:print(' Shot was aborted')
+        if self.GUI.poll_plc_check.get_active():
+            self.cycle = 'PLC_POLL'
+            gobject.idle_add(self.update_label,)
+            print ' Polling the PLC'
+            cur_dat = 234
+            time.sleep(3)
+            while cur_dat == 234 and self.abort == 0 and self.GUI.poll_plc_check.get_active():
+                T = MDSplus.Tree('h1data',shot=self.executing_shot)
+                n = T.getNode('.operations.magnetsupply.lcu.setup_main:I2')
+                cur_dat = int(n.data())
+                #print ' {}'.format(cur_dat)
+                time.sleep(1)
+            if self.abort!=0:print(' Shot was aborted')
         return self.abort
 
     def store_shot(self,):
         '''Perform all the required tasks to store a shot
         SRH: 19July2013
         '''
-        #SRH MINISTER VISIT
-        #time.sleep(18)
         self.cycle = 'STORE'
         gobject.idle_add(self.update_label,)
+
+        #If including the transmitter check, start the process here
+        #The resuls will be checked in the init phase
         if self.include_transmitter_check:
             print 'starting transmitter check'
             self.transmitter_process = start_checking_transmitters(self.transmitter_nums)
@@ -501,11 +522,12 @@ class shot_cycle():
         #start storing the cro data
         self.cro_proc = start_storing_cro(self.executing_shot, self.single_sweep)
 
+        #dispatch the STORE command including some ABORT PHASE and close tree commands
+        #to try and keep the jDispatcher/jServer happy
         dispatch_cmd2('ABORT PHASE', self.destination)
         dispatch_cmd('close tree', self.destination)
         dispatch_cmd('set tree %s /shot=%d'%(self.tree,self.executing_shot), self.destination)
         dispatch_cmd('dispatch /build', self.destination)
-
         dispatch_cmd('dispatch /phase STORE', self.destination)
         print '--> time to perform STORE %.2fs'%(time.time() - tmp_time)
         dispatch_cmd2('ABORT PHASE', self.destination)
@@ -579,11 +601,15 @@ def check_mirnov_amps(shot):
         if dat == '1':
             return_string = '{}: Mirnov amps GOOD'.format(shot)
         else:
-            return_string = '{}: Mirnov amps BAD'.format(shot)
+            return_string = '<span color="red">{}: Mirnov amps BAD</span>'.format(shot)
     except MDSplus.TdiException:
         print ' Exception obtaining mirnov amplifier settings success'
-        return_string = '{}: Mirnov amps data unavailable'.format(shot)
+        return_string = '<span color="red">{}: Mirnov amps data unavailable</span>'.format(shot)
     return return_string
+
+def check_rf_prl60(shot):
+    pass
+    
 
 def check_mirnov_data(shot):
     return_list = []
@@ -599,9 +625,9 @@ def check_mirnov_data(shot):
             print DC_val, RMS
             return_list.append('{}: Mirnov ACQ132_{} success RMS:{:.2f}mV\n'.format(shot, i, RMS*1000))
         except (MDSplus.TdiException, MDSplus.TreeNoDataException) as e:
-            return_list.append('{}: Mirnov ACQ132_{} FAIL\n'.format(shot, i))
+            return_list.append('<span color="red">{}: Mirnov ACQ132_{} FAIL</span>\n'.format(shot, i))
             print ' Exception obtaining ACQ132_{} data'.format(i)
-    return ''.join(return_list).rstrip('\n')
+    return ''.join(return_list).rstrip('\n'), success
 
 quality_funcs = [check_mirnov_data, check_mirnov_amps]
 
@@ -666,10 +692,31 @@ class shot_engine():
             #    b = self.shot_quality.check_quality(self.shot_cycle.cur_shot)
 
 
+def read_jDispatch_properties(fname):
+    with file(fname, 'r') as fname_handle:
+        lines = fname_handle.readlines()
+    computer_details = {}
+    ip_list = []; port_list = []
+    for i in lines:
+        i = i.lstrip(' ')
+        if i.find('.address')>0 and i[0] !='#':
+            tmp = i.split('=')[-1].rstrip('\n').rstrip(' ').lstrip(' ')
+            tmp2 = tmp.split(':')
+            ip_list.append('h1operator@'+tmp2[0])
+            port_list.append(tmp2[1])
+
+    print ip_list
+    print port_list
+    for i in ip_list: computer_details[i] = {'servers':[]}
+    for i,p in zip(ip_list,port_list): computer_details[i]['servers'].append(('jServer',int(p)))
+    return computer_details
+    print computer_details
+
 if __name__=='__main__':
     #Cro is set to single sweep after data is saved
     print 'using python-h1 version'
-    single_sweep = 1
+    #Cro is set to single sweep after data is saved
+    single_sweep = 0
     include_transmitter_check = 0
     store_rf_data_mdsplus = 1
     transmitter_nums = [1,2]
@@ -677,35 +724,34 @@ if __name__=='__main__':
 
     try:
         tree = str(sys.argv[1])
-        pause = int(sys.argv[2])
-        initial_trans_check = int(sys.argv[3])
-        manual_init = int(sys.argv[4])
-        plc_poll = int(sys.argv[5])
+        #pause = int(sys.argv[2])
+        initial_trans_check = 0
+        #int(sys.argv[2])
+        #manual_init = int(sys.argv[4])
+        manual_init = 0
     except:
-        print 'You need to specify a tree and whether or not you want a manual pause, if you want the initial transmitter check, and if you want a manual pause before init'
-        print 'eg, run h1data without pause - i.e lamwait based, skip the initial transmitter check, no manual pause before init, plc_poll before pulse phase'
-        print './run_script.py h1data 0 0 0 1'
-        print 'eg, run sh_test3 with pause and include the initial transmitter check, include manual pause before init'
-        print './run_script.py sh_test3 1 1 1 0'
-        print 'exiting'
-        sys.exit()
+        print 'Tree was not specified, assuming h1data!!'
+        tree = 'h1data'
 
     current_day = datetime.datetime.now().day
-    destination = 'prl40:8003'
     destination = 'h1svr:8003'
-    #local_comp = 'prl@prl40'
     local_comp = 'h1operator@h1svr'
     expected_shots = 300
     computer_details = {}
-    computer_details['prl@prl24'] = {}
-    computer_details['prl@prl40'] = {}
+
+    computer_details = read_jDispatch_properties('jDispatcher.properties')
+
+
+    #computer_details['prl@prl24'] = {}
+    #computer_details['h1operator@prl40'] = {}
     computer_details['h1operator@h1svr'] = {}
-    computer_details['prl@prl45'] = {}
+    #computer_details['h1operator@prl45'] = {}
     computer_details['datasys@h1svr'] = {}
-    computer_details['prl@prl24']['servers'] = [('jServer',8010)]
+    #computer_details['prl@prl24']['servers'] = [('jServer',8010)]
     computer_details['datasys@h1svr']['servers'] = [('jServer',8010)]
-    computer_details['prl@prl40']['servers'] = [('jServer',8010),('jServer',8011)]#,("/usr/local/mdsplus/bin/mdsip -s -p 8050 -h /usr/local/mdsplus/etc/mdsip.hosts",None)]
-    computer_details['prl@prl45']['servers'] = [('jServer',8010),('mdsip',8004),('jServer',8011), ('jServer',8012)]
+    #computer_details['h1operator@prl40']['servers'] = [('jServer',8010),('jServer',8011)]#,("/usr/local/mdsplus/bin/mdsip -s -p 8050 -h /usr/local/mdsplus/etc/mdsip.hosts",None)]
+    #computer_details['h1operator@prl45']['servers'] = [('jServer',8010),('mdsip',8004),('jServer',8011), ('jServer',8012)]
+
     computer_details['h1operator@h1svr']['programs'] = [('/usr/local/mdsplus/bin/jDispatcherIp', tree),('/usr/local/mdsplus/bin/jDispatchMonitor','prl40:8006'), ('run_script.py','python')]
 
     computer_details['h1operator@h1svr']['programs'] = [('jDispatcherIp', tree),('jDispatchMonitor','h1svr:8006')]#, ('run_script.py','python')]
@@ -713,7 +759,7 @@ if __name__=='__main__':
     #computer_details['h1operator@h1svr']['servers'] = [('jServer',8011)]
     computer_details['h1operator@h1svr']['servers'] = []
 
-    ##################################################################################
+   ##################################################################################
     #Start of script
     #kill all jServers
     print '='*8, 'Checking for and kill all servers that could conflict', '='*8
@@ -812,7 +858,7 @@ if __name__=='__main__':
     shot_cycle.GUI = GUI
 
     #Create the shot engine and start it in a separate daemon thread
-    shot_engine_instance = shot_engine(shot_cycle, expected_shots, plc_poll = plc_poll)
+    shot_engine_instance = shot_engine(shot_cycle, expected_shots, plc_poll = True)
     shot_thread = threading.Thread(target=shot_engine_instance.start)
     shot_thread.daemon = True
     shot_thread.start()
