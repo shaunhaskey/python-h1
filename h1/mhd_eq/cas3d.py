@@ -13,7 +13,32 @@ class cas3d_results():
         self.single_eig = single_eig
         self.output_filename = output_filename
 
+    def get_ew_khz(self,):
+        fname = '{}/{}'.format(self.directory, self.output_filename)
+        print 'fname :', fname
+        with file(fname, 'r') as file_handle:
+            data = file_handle.readlines()
+        found = False
+        for i in range(len(data)):
+            if data[i].find('hydrogen')>=0:
+                print 'found!!', data[i]
+                out_data = data[i:i+4]
+                found = True
+                break
+        #print out_data
+        if found:
+            for i in out_data:
+                if i.find('frequency')>=0:
+                    dat = i[i.find('=')+1:i.find('[')]
+                    break
+            self.ew_freq_khz = float(dat)
+        else:
+            self.ew_freq_khz = 0
+        print self.ew_freq_khz
+
     def plot_eigenvalues(self, ax = None, ylims = None, max_harms = None, sqrt_s = False, multiplier = 1, plot_kwargs = None,):
+
+        self.get_ew_khz()
         with file(self.directory + '/'+ self.output_filename, 'r') as file_handle:
             file_lines = file_handle.readlines()
         if plot_kwargs == None: plot_kwargs = {}
@@ -45,7 +70,7 @@ class cas3d_results():
                 text_string = 'CAS3D:({},{})'.format(-m_n_list[j][1],-m_n_list[j][0])
                 plot_kwargs['label'] = text_string if dominant else None
                 if not plotted_non_dom and not dominant:
-                    plotted_non_dom = True; plot_kwargs['label'] = 'CAS3D:all'
+                    plotted_non_dom = True; plot_kwargs['label'] = 'CAS3D:rest'
                 xax = svals if not sqrt_s else np.sqrt(svals)
                 #ax[i].plot(xax, coefficient_array[:,j]*multiplier, label = '{}'.format(m_n_list[j]), **plot_kwargs)
                 ax[i].plot(xax, coefficient_array[:,j]*multiplier,  **plot_kwargs)
@@ -205,7 +230,7 @@ class cas3d_results():
                     plot_style = '-k.' if dominant else '-r'
                     label = text_string if dominant else None
                     if not plotted_non_dom and not dominant:
-                        plotted_non_dom = True; label = 'CAS3D:all'
+                        plotted_non_dom = True; label = 'CAS3D:rest'
                     #if dominant and np.sum(plot_val)<0: plot_val *= -1
                     ax_cur.plot(x_ax, plot_val*multiplier, plot_style, label = label)
                     max_val = np.max(plot_val[:max_ind]*multiplier)
@@ -617,7 +642,8 @@ class cas3d_continua_data():
             print mode_str
             if event.inaxes==ax and not fig.canvas.manager.toolbar._active:
                 mode_n, mode_m  = [tmp_lut['n'], tmp_lut['m']]
-                title = 'freq:{}, ew:{:.4e}, n={} , m={}, {}'.format(self.scan_arr[3,min_loc], self.scan_arr[12,min_loc], mode_n, mode_m, mode_str)
+                en = np.sum(np.abs(self.scan_arr[self.A_cpt:self.A_cpt+3,min_loc]))
+                title = 'freq:{}, ew:{:.4e}, n={} , m={}, {}, Shear:{:.1f},Sound:{:.1f},Fast:{:.1f},{:.3f}'.format(self.scan_arr[3,min_loc], self.scan_arr[12,min_loc], mode_n, mode_m, mode_str, self.scan_arr[self.A_cpt,min_loc]/en*100, self.scan_arr[self.A_cpt+1,min_loc]/en*100, self.scan_arr[self.A_cpt+2,min_loc]/en*100,self.mratio[min_loc])
                 if self.new_method:
                     print min_loc,self.scan_arr[4,min_loc], self.mode_nums[0,min_loc], self.mode_nums[1,min_loc], self.mode_nums[2,min_loc]
                 ax2.cla()
