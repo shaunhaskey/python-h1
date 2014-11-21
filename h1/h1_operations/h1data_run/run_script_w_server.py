@@ -69,8 +69,10 @@ class GUI_control():
         self.quality_text.set_use_markup(True)
         self.button = gtk.Button("Reinitialise Shot")
         self.button_cycle_trans = gtk.Button("Cycle Transmitters")
+        self.button_soft_trigger = gtk.Button("Pulse Blaster Software Trigger")
         self.vbox.pack_start(self.button, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.button_cycle_trans, expand=True, fill=True, padding=0)
+        self.vbox.pack_start(self.button_soft_trigger, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_phase, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_executing, expand=True, fill=True, padding=0)
         self.vbox.pack_start(self.l_current, expand=True, fill=True, padding=0)
@@ -82,10 +84,12 @@ class GUI_control():
 
         self.button.connect("clicked", self.reinit, None)
         self.button_cycle_trans.connect("clicked", self.cycle_trans, None)
+        self.button_soft_trigger.connect("clicked", self.soft_trigger, None)
         self.window.add(self.vbox)
         self.vbox.show()
         self.button.show()
         self.button_cycle_trans.show()
+        self.button_soft_trigger.show()
         for i in self.check_buttons.keys(): self.check_buttons[i].set_active(True)
         for i in self.check_buttons.keys(): self.check_buttons[i].show()
         self.quality_text.show()
@@ -107,6 +111,12 @@ class GUI_control():
             a = subprocess.Popen(args, stdout=subprocess.PIPE, 
                                  stderr=subprocess.PIPE, stdin=subprocess.PIPE)
             print "Sent command to cycle T{}".format(i)
+
+
+    def soft_trigger(self, widget,data=None):
+        print "Triggering the pulse blasters"
+        #Run this is a subprocess?? What happens if it doesn't work?
+        os.system('ssh prl@prl40 "python /home/prl/pb_scripts/soft_trigger.py"')
 
     def reinit(self, widget, data=None):
         print "Reinitialise called"
