@@ -23,7 +23,7 @@ verbose= 1
 
 #key should be the same as the label next to the checkbox
 #key must also exist in disable_buttons below to set the default value
-#item is a list of nodes that are to be disabled/enabled for that particular key
+#list of nodes that are to be disabled/enabled for that particular key
 disable_nodes = {'mirnov' : ['.mirnov.ACQ132_7', 
                              '.mirnov.ACQ132_8', 
                              '.mirnov.ACQ132_9', 
@@ -41,13 +41,13 @@ disable_buttons = {'mirnov': True,
                    'Reentrant Camera':True,
                    'ISOPlane spectr':True}
 
+
 class GUI_control():
     def __init__(self):
-        '''Supposed to be GUI control of the run script
-        SRH: 19July2013 
+        '''The GUI side of the run script
+        SRH: 22Nov2014 
         '''
-
-        #setup the GUI with a button and 3 labels
+        #setup the GUI incuding all buttons and labels
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.connect("delete_event", self.delete_event)
         self.window.connect("destroy", self.destroy)
@@ -103,9 +103,12 @@ class GUI_control():
         self.window.show()
 
     def cycle_trans(self, widget,data=None):
-        print "This is where the cycle transmitters goes"
+        '''This method gets called when the cycle transmitters button is pushed
+        spawns the important script on prl60. This currently happens in a subprocess, but could be changed to block?
+        SRH : 22Nov2014
+        '''
+        print '######## Cycling transmitters #########'
         args = ['ssh', 'prl@prl60', '/home/prl/transmitter_snmp/rf_snmp_mdsplus.py %d'%shot]
-
         for i in [1,2]:
             args = ['ssh', 'prl@prl60', "/home/prl/snmp/transmitter {} program recycle_after_high_power_blast".format(i)]
             a = subprocess.Popen(args, stdout=subprocess.PIPE, 
@@ -114,15 +117,25 @@ class GUI_control():
 
 
     def soft_trigger(self, widget,data=None):
+        '''This method gets called when the soft trigger button is pushed
+        it software triggers the pulse blasters by spawning the relevant script on prl40
+        Currently run using os.system, so it blocks and you can see all of the output. Move to subprocess?
+        SRH : 22Nov2014
+        '''
         print "Triggering the pulse blasters"
         #Run this is a subprocess?? What happens if it doesn't work?
         os.system('ssh prl@prl40 "python /home/prl/pb_scripts/soft_trigger.py"')
 
     def reinit(self, widget, data=None):
+        ''' Called when reinitialise button is clicked
+        SRH : 22Nov2014
+        '''
         print "Reinitialise called"
         self.shot_cycle.abort_shot()
 
     def delete_event(self, widget, event, data=None):
+        '''Not sure what this is for
+        '''
         print "delete event occurred"
         return False
 
@@ -137,6 +150,9 @@ class GUI_control():
 
 class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
+        '''Handling for the server. Currently used by Micks Labview stuff to figure out where in the shot cycle we are when they initially startup
+        SRH: 22Nov2014
+        '''
         termination_character = '\r\n'
         sep_char = chr(0x09) 
         data = ''
@@ -156,6 +172,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
             response = "{}: {} : {} :{}".format(cur_thread.name, data, self.server.shot_cycle.cycle, self.server.shot_cycle.executing_shot)
         self.request.sendall(response)
         if data.find('ABORT')>=0: self.server.shot_cycle.abort_shot()
+
 class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
     pass
 
@@ -603,26 +620,47 @@ class shot_cycle():
 
 #############################################
 ## Things to check the quality of the shots##
-
 def check_mirnov_amps(shot):
+    '''Checks to see if the HMA amps program was successfully retrieved
+    SRH : 22Nov2014
+    '''
+
     n = MDSplus.Tree('h1data',shot).getNode('.mirnov.hma_amps.amp_success')
+    return_code = 0
     try:
         dat = n.data()
         if dat == '1':
             return_string = '{}: Mirnov amps GOOD'.format(shot)
         else:
-            return_string = '<span color="red">{}: Mirnov amps BAD</span>'.format(shot)
+            return_code = 2
+            return_string = '{}: Mirnov amps FAIL - switched on?'.format(shot)
     except MDSplus.TdiException:
+        return_code = 2
         print ' Exception obtaining mirnov amplifier settings success'
-        return_string = '<span color="red">{}: Mirnov amps data unavailable</span>'.format(shot)
-    return return_string
+        return_string = '{}: Mirnov amps data unavailable</span>'.format(shot)
+    return return_string, return_code
 
-def check_rf_prl60(shot):
+def check_rf_prl60(shot,):
+    '''This is supposed to check to see if prl60 successfully recorded the previous shot... should probably move the whole transmitter checking to an MDSplus device....
+    SRH : 22Nov2014
+    '''
     pass
-    
 
-def check_mirnov_data(shot):
+def check_electron_density(shot,):
+    '''Check to see if the electron density data was properly recorded... how should the post processing of the electron density properly fit into the MDSplus shot system?
+    It could be a post processing node?
+
+    SRH : 22Nov2014
+    '''
+    pass
+
+def check_mirnov_data(shot,):
+    '''Check to see if the HMA amplifiers successfully recorded data, and report on the RMS of input_01 for each of the digitisers
+
+    SRH : 22Nov2014
+    '''
     return_list = []
+    return_code = 0
     for i in [7,8,9]:
         n = MDSplus.Tree('h1data',shot).getNode('.mirnov.ACQ132_{}:input_01'.format(i))
         try:
@@ -635,39 +673,51 @@ def check_mirnov_data(shot):
             print DC_val, RMS
             return_list.append('{}: Mirnov ACQ132_{} success RMS:{:.2f}mV\n'.format(shot, i, RMS*1000))
         except (MDSplus.TdiException, MDSplus.TreeNoDataException) as e:
-            return_list.append('<span color="red">{}: Mirnov ACQ132_{} FAIL</span>\n'.format(shot, i))
+            return_code = 2
+            return_list.append('{}: Mirnov ACQ132_{} FAIL\n'.format(shot, i))
             print ' Exception obtaining ACQ132_{} data'.format(i)
-    return ''.join(return_list).rstrip('\n'), success
+    return ''.join(return_list).rstrip('\n'), return_code
 
 quality_funcs = [check_mirnov_data, check_mirnov_amps]
 
 class shot_quality():
     def __init__(self, ):
+        '''This object is in charge of post processing to check the quality of the shot and provide fast feedback on what is going on
+
+        SRH: 22Nov2014
+        '''
         self.quality_funcs = quality_funcs
         self.count = 0
         self.quality_string = ''
         print 'shot_quality has begun'
         self.current_strings = ['' for i in quality_funcs]
+
     def check_quality(self, shot):
-        #shot += self.count
+        '''When this gets called it checks the 'shot'. It gets called as part of the shot cycle after store
+        SRH: 22Nov2014
+        '''
         for i in range(len(self.quality_funcs)):
             tmp_func = self.quality_funcs[i]
             try:
-                return_val = tmp_func(shot)
+                return_val, return_code = tmp_func(shot)
             except:
                 return_val = 'Exception'
-            self.current_strings[i] = '{} ({})'.format(return_val, tmp_func.__name__,)
+                return_code = 'Exception'
+            if return_code == 0:
+                pre = '<span color="black">'
+            elif return_code == 1:
+                pre = '<span color="orange">'
+            else:
+                pre = '<span color="red">'
+            self.current_strings[i] = '{}{} ({})<\span>'.format(pre, return_val, tmp_func.__name__,)
         print self.current_strings
         self.quality_string = '\n'.join(self.current_strings)
         self.count = self.count  + 1
 
 #############################################
-
-
 class shot_engine():
     def __init__(self, shot_cycle, expected_shots, shot_quality = None, plc_poll=True):
         '''This cycles shot_cycle through the shots
-
         SRH: 19July2013
         '''
         self.shot_cycle = shot_cycle
@@ -700,7 +750,6 @@ class shot_engine():
             b = self.shot_cycle.store_shot()
             #if self.shot_quality!=None:
             #    b = self.shot_quality.check_quality(self.shot_cycle.cur_shot)
-
 
 def read_jDispatch_properties(fname):
     with file(fname, 'r') as fname_handle:
@@ -750,7 +799,6 @@ if __name__=='__main__':
     computer_details = {}
 
     computer_details = read_jDispatch_properties('jDispatcher.properties')
-
 
     #computer_details['prl@prl24'] = {}
     #computer_details['h1operator@prl40'] = {}
@@ -822,9 +870,6 @@ if __name__=='__main__':
         computer_details[i]['processes'] = [subproc]
     computer_details[local_comp]['processes'] = [subproc]
 
-    #time.sleep(6)
-
-
     #Everything should be running now, give it a bit of time to get going
     time.sleep(7)
 
@@ -835,7 +880,6 @@ if __name__=='__main__':
     executing_shot = cur_shot + 1
     killed_all = 0
     shot_cycle = shot_cycle(cur_shot, executing_shot, include_transmitter_check, manual_init, tree, destination, transmitter_nums, single_sweep, store_rf_data_mdsplus, initial_trans_check, cro_proc)
-
 
     #Create the shot quality checker, start it in a separate daemon thread
     #shot_quality = 
@@ -873,7 +917,6 @@ if __name__=='__main__':
     shot_thread.daemon = True
     shot_thread.start()
 
-
     # Start a thread with the server -- that thread will then start one
     # more thread for each request
     try:
@@ -891,18 +934,3 @@ if __name__=='__main__':
                 kill_servers(i, computer_details[i]['servers'], local=0)
         kill_servers(local_comp, computer_details[local_comp]['programs'], local=1)
         print 'Program finished'
-        
-    #tidy up, but check to see if it already happened first
-    #this one will probably happen because you have run out of shots
-    #might be better to reset 'shot clock' and go back to the beginning
-    # if killed_all != 1:
-    #     print 'killing all subprocesses'
-    #     kill_everything(computer_details)
-    #     for i in computer_details.keys():
-    #         if i==local_comp:
-    #             kill_servers(i, computer_details[i]['servers'], local=1)
-    #         else:
-    #             kill_servers(i, computer_details[i]['servers'], local=0)
-    #     TCP_server.shutdown()
-    #     print 'Program finished'
-
