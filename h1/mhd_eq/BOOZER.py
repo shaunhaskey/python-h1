@@ -214,8 +214,10 @@ from H1ErrorClasses import *
 import convenience
 import netCDF4Tools
 import SPLINE
-from spline_spec import leadingfunction_mod as leadingfunction
-from spline_spec import spline_spec_mod as spline_spec
+
+#Commented out for now because of errors loading the functions
+#from spline_spec import leadingfunction_mod as leadingfunction
+#from spline_spec import spline_spec_mod as spline_spec
 import GRID3D
 import miscmath
 

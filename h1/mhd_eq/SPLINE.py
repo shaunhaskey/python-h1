@@ -49,8 +49,9 @@ try:
 except: raise Exception, 'Unable to load netCDF4 module/library'
 
 
-from spline_spec import leadingfunction_mod as leadingfunction
-from spline_spec import spline_spec_mod as spline_spec
+#Commented out for now SRH - problem loading them into Python from the .so 
+#from spline_spec import leadingfunction_mod as leadingfunction
+#from spline_spec import spline_spec_mod as spline_spec
 
 import collections as collections
 if (not collections.__dict__.has_key('OrderedDict')):

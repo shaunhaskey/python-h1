@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as pt
 import scipy.signal as sig
 import scipy.optimize as opt
+import h1.helper.generic_funcs as generic
 
 
 class interf_demod(object):
@@ -98,7 +99,10 @@ class interf_demod(object):
         '''Get epsilon from the digitised fm modulation signal 
         '''
         T = MDS.Tree('h1data',self.shot_number)
-        n = T.getNode('.electr_dens.camac.A14_24.input_5')
+        if self.chan_list_dig[0].find('TR612')>=0:
+            n = T.getNode('.electr_dens.camac.TR612_10.input_5')
+        else:
+            n = T.getNode('.electr_dens.camac.A14_24.input_5')
         #-ve is because of a polarity problem on the BNC-> lemo connector
         sync_signal = -n.data()[:self.raw_signals.shape[1]]
         sync_signal_fft = np.fft.fft(sync_signal)
@@ -849,6 +853,28 @@ def compare_sinusoidal_sinusoidal(sinusoidal1_shot, sinusoidal1_freq, sinusoidal
     fig_big.subplots_adjust(hspace=0.015, wspace=0.015,left=0.10, bottom=0.10,top=0.95, right=0.95)
     fig_big.canvas.draw(); fig_big.show()
 
+def get_raw_data_MDSplus(shot):
+    tr = MDS.Tree('electr_dens',shot)
+    chan_list_dig = tr.getNode('\electr_dens::top.ne_het:chan_list').data().tolist()
+    ch_z = tr.getNode('\electr_dens::top.ne_het:chan_z').data()
+    top_down_order = (np.argsort(ch_z)[::-1]).tolist()
+    fig, ax = pt.subplots(nrows = 21, sharex = True)
+    for i, ch in enumerate(top_down_order):
+        #n = tr.getNode('\electr_dens::top.ne_het:ne_{}'.format(ch+1))
+        node_loc = '\electr_dens::top.camac:{}'.format(chan_list_dig[ch])
+        print i,ch, node_loc
+        n = tr.getNode(node_loc)
+        sig = n.data()
+        if i==0:
+            output_data = np.zeros((len(top_down_order),len(sig)),dtype=float)
+            t = n.dim_of().data()
+            #t = np.arange(len(sig))
+        output_data[i,:] = +sig
+        ax[i].plot(n.dim_of().data(), sig)
+        ax[i].set_ylabel('{}'.format(i))
+    fig.suptitle('{}'.format(shot))
+    fig.canvas.draw();fig.show()
+    return t, output_data
 
 def plot_from_MDSplus(shot):
     fig,ax = pt.subplots()
@@ -1026,25 +1052,37 @@ def plot_wobbly_mirror_results(big_fit_values, t, big_fit, art, mirror_depth, ti
     fig.canvas.draw(); fig.show()
 
 def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_length = 20, plot=False, use_simul_phase1 = False):
+    '''
+    This function extracts the important wobbly mirror data and plots it
+    SRH: 26Dec2014
+    '''
     if plot:
         fig, ax = pt.subplots(nrows = 2, sharey = True)
         fig2, ax2 = pt.subplots(nrows = 2, sharey = True)
     start_list = []
+
+    # Whether or not to use the data obtained using the simultaneous phi1
     if use_simul_phase1:
         output_new = inter_obj.output_phase_simul.copy()
     else:
         output_new = inter_obj.output.copy()
+
+    # Loop through each channel
     for i in range(inter_obj.output.shape[0]):
         #smooth the data
         tmp = np.convolve(inter_obj.output[i,:], np.ones(window_length)/float(window_length), mode= 'same')
+
         #remove dc offset by centering about the peaks
-        #output_new[i,:] = tmp - (np.min(tmp) + np.max(tmp))/2
+        #What happens if there aren't enough cycles? Need to think about this more
         output_new[i,:] = tmp - (np.mean(tmp))
+
+        # What is the point of this?
         if (np.min(inter_obj.output[i,:]) + np.max(inter_obj.output[i,:]))<2.*np.pi:
             if plot:
                 ax[0].plot(output_new[i,:])
                 ax2[0].plot(output_new[i,start_loc:end_loc])
                 ax2[1].plot(inter_obj.output[i,start_loc:end_loc])
+
         start_list.append(np.mean(output_new[i, 0:100]))
     if plot:
         tmp = ax[0].get_xlim()
@@ -1061,17 +1099,16 @@ def extract_useful_wobbly_mirror_data(inter_obj, start_loc, end_loc, window_leng
     big_fit_xvals = []
 
     #remove measurements that are going to mess things up
+    #Note that this isn't using output_new, it is using the raw data
     for i in range(inter_obj.output.shape[0]):
         print i
         values = inter_obj.output[i, start_loc:end_loc]
         #for j in range(3):
         if (-np.min(inter_obj.output[i,:]) + np.max(inter_obj.output[i,:]))<(2.*np.pi*1.5):
-            #if j==0:
             big_fit.append(values - np.mean(values))
             big_fit_xvals.append(i)
 
     return output_new, np.array(big_fit), np.array(big_fit_xvals)
-
 
 ###################
 #http://stackoverflow.com/questions/12583970/matplotlib-contour-plots-as-postscript
@@ -1102,30 +1139,84 @@ def insert_rasterized_contour_plot(c):
     return cc
 
 
-def wobbly_mirror_contour_plot(output_new, mirror_depth, n_contours=10, sample_rate = 10000, figname = None):
-    fig, ax = pt.subplots()
+def wobbly_mirror_contour_plot(output_new, mirror_depth, n_contours=10, sample_rate = 10000, figname = None, figname2 = None, comment = "", decimate = 100):
     #im = ax.imshow(output_new, cmap = 'RdBu', aspect='auto')#, interpolation = 'nearest')
     #im.set_clim([-np.pi, np.pi])
     extent = [0, output_new.shape[1]* 1./sample_rate, 0, output_new.shape[0]]
     print extent
+    import scipy.interpolate as interp
+    t = range(output_new.shape[1])
+
+    ch = range(output_new.shape[0])
+    t_grid, ch_grid = np.meshgrid(t, ch)
+
+    ch2 = np.linspace(np.min(ch), np.max(ch),100)
+    t_grid2, ch_grid2 = np.meshgrid(t, ch2)
+    out_dat = []
+    for i in range(0,output_new.shape[1],decimate):
+        #print i
+        f = interp.interp1d(ch,output_new[:,i],kind='cubic')
+        out_dat.append(f(ch2))
+    out_dat = np.array(out_dat).T
+
+    fig2, ax2 = pt.subplots(ncols = 2, sharex = False, sharey = False)
+    generic.setup_publication_image(fig2, height_prop = 1./1.3, single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None)
+
+    im1 = ax2[0].imshow(output_new,aspect='auto',cmap = 'RdBu', interpolation='nearest', rasterized = True, extent = [0,200000,0,21])
+    im1.set_clim([-mirror_depth,mirror_depth])
+    im2 = ax2[1].imshow(out_dat, aspect='auto',cmap = 'RdBu', interpolation='nearest', rasterized = True, extent = [0,200000,0,21])
+    im2.set_clim([-mirror_depth,mirror_depth])
+    cbar = pt.colorbar(im1,ax=ax2[0], use_gridspec=True)
+    cbar.set_label('Phase (rad)')
+    cbar2 = pt.colorbar(im2,ax=ax2[1], use_gridspec=True)
+    cbar2.set_label('Phase (rad)')
+    ax2[0].set_title(comment + ' no interpolation')
+    ax2[1].set_title(comment + ' with cubic interp')
+    for i in ax2: i.set_xlabel('time (a.u.)')
+    ax2[0].set_ylabel('channel #')
+    if figname2!=None: 
+        #fig2.tight_layout(pad = 0.1)
+        fig2.savefig(figname2, bbox_inches = 'tight', pad_inches = 0.1)
+    fig2.canvas.draw(); fig2.show()
+
+    #fig, ax = pt.subplots()
+    fig = pt.figure()
+    ax = fig.add_subplot(111)
+    generic.setup_publication_image(fig, height_prop = 1./1.3, single_col = True, fig_width = None, replacement_kwargs = None, fig_height = None)
     cont = ax.contour(output_new,np.linspace(-mirror_depth,mirror_depth,10), cmap='RdBu', extent = extent)
+    cont.set_clim([-mirror_depth,mirror_depth])
     insert_rasterized_contour_plot(cont)
     #fig.tight_layout(pad = 0.01)
-    pt.colorbar(cont)
-    ax.set_xlabel('time (s)')
-    ax.set_ylabel('Interferometer channel')
-    ax.set_title('Contour map of the phase shift due to moving sinusoidal mirror')
-    if figname!=None: fig.savefig(figname + '.pdf')
+    #pt.colorbar(cont)
+    cbaxes = generic.create_cbar_ax(ax, pad = 3, loc = "right", prop = 5)
+    #cbaxes = fig.add_axes([0.8, 0.1, 0.03, 0.8]) 
+    cb = pt.colorbar(im2, cax = cbaxes)  
+    cb.set_label('Phase shift (rad)')
+    #pt.colorbar(im2)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Channel')
+    #ax.set_title()
+    if figname!=None: 
+        fig.tight_layout(pad = 0.1)
+        #fig.savefig(figname, bbox_inches = 'tight', pad_inches = 0.1)
+        fig.savefig(figname, pad_inches = 0.1)
     fig.canvas.draw(); fig.show()
 
 
 
-def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth, plot = False, figname = None):
+def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth, wave_length, plot = False, figname = None, comment = '', sup_fig = None, ax = None):
+    '''
+
+    SRH: 26Dec2014
+    '''
     #big_fit = np.array(big_fit); big_fit_values = np.array(big_fit_xvals)
     fft_freqs = np.fft.fftfreq(big_fit.shape[1], d=(t[1]-t[0]))
     fft_vals = np.fft.fft(big_fit)/big_fit.shape[1]
-    valid_ones = fft_vals[:,np.argmin(np.abs(fft_freqs - omega_mirror/2./np.pi))]
+    #Note 2 times to tak einto account the -ve frequencies, and 
+    valid_ones = 2.*fft_vals[:,np.argmin(np.abs(fft_freqs - omega_mirror/2./np.pi))]
     answer_phases = np.unwrap(np.angle(valid_ones))
+    print '###############'
+    print answer_phases
     for i in range(len(answer_phases)-1):
         if (answer_phases[i+1] - answer_phases[i])<0:
             answer_phases[i+1:]=answer_phases[i+1:]+2.*np.pi
@@ -1136,25 +1227,60 @@ def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth,
         if (answer_phases[i+1] - answer_phases[i])<(0.8*mean_diff):
             answer_phases[i+1:]=answer_phases[i+1:]+2.*np.pi
 
+    #This fitting procedure 
+    #[k_guess, phase_guess] = np.polyfit(big_fit_xvals, answer_phases, 1)
+    k_actual = 2.*np.pi*25./(wave_length)
+    print k_actual, wave_length
+    new_answer_phases = +answer_phases
+    phase_actual = new_answer_phases[10] - big_fit_xvals[10]*k_actual 
+
+    #new_answer_phases = new_answer_phases - np.rint(phase_actual/(2.*np.pi))*2.*np.pi
+
+    for i in range(len(new_answer_phases)):
+        #cur_shift = ((k_actual * big_fit_xvals[i])-new_answer_phases[i])/(2.*np.pi)
+        cur_shift = ((k_actual * big_fit_xvals[i] + phase_actual)-new_answer_phases[i])/(2.*np.pi)
+        print i, cur_shift, np.rint(cur_shift)
+        new_answer_phases[i] += np.rint(cur_shift)*2.*np.pi
+
+    [k_guess, phase_guess] = np.polyfit(big_fit_xvals, new_answer_phases, 1)
+    phase_shift = phase_guess - phase_guess%(2.*np.pi) 
+    print phase_shift
+    new_answer_phases = new_answer_phases - phase_shift
+    answer_phases = new_answer_phases
+    phase_actual = phase_actual - phase_shift
     [k_guess, phase_guess] = np.polyfit(big_fit_xvals, answer_phases, 1)
     if plot:
-        fig, ax = pt.subplots(ncols = 2, sharex = True)
-        
-        ax[0].plot(big_fit_xvals, answer_phases ,'s', label = 'Measured Starting Phase')
-        ax[1].plot(big_fit_xvals, np.abs(valid_ones)/np.pi,'s', label = 'Measured Mirror Depth')
-        ax[1].axhline(mirror_depth/2/np.pi, label = 'Actual Mirror Depth')
+        if sup_fig == None: fig, ax = pt.subplots(ncols = 2, sharex = True)
+        if np.allclose(mirror_depth,np.pi,atol=1.e-6):
+            marker_tmp = 'd'
+            marker_size = 5
+        else:
+            marker_tmp = 's'
+            marker_size = 3.5
+        ax[0].plot(big_fit_xvals, answer_phases ,marker_tmp, markersize=marker_size,label = '{}mm,{:.2f}rad'.format(wave_length,mirror_depth))
+        #2 times to change to a zero to peak to a peak to peak measurement, and divide by pi to make units of pi
+        ax[1].plot(big_fit_xvals, 2.*np.abs(valid_ones)/np.pi,marker_tmp, markersize =marker_size,label='{}mm,{:.2f}rad'.format(wave_length,mirror_depth))
+        #ax[1].axhline(mirror_depth/2/np.pi, label = 'Actual Mirror Depth')
+        ax[1].axhline(2*mirror_depth/np.pi*np.sinc(10./wave_length))#, label = 'Actual Mirror Depth')
         ax[1].set_ylim([0,mirror_depth/2/np.pi*1.2])
-        ax[0].plot(big_fit_xvals, np.polyval([k_guess, phase_guess], big_fit_xvals), label = 'Linear fit k={:.2f}'.format(k_guess))
+        #ax[0].plot(big_fit_xvals, np.polyval([k_guess, phase_guess], big_fit_xvals), label = 'Linear fit k={:.2f}, lamda={:.2f}mm'.format(k_guess, 2.*np.pi/(k_guess/25.)))
+        ax[0].plot(big_fit_xvals, np.polyval([k_actual, phase_actual], big_fit_xvals),'b-')#, label = 'Actual k={:.2f}, lamda={:.2f}mm'.format(k_actual, 2.*np.pi/(k_actual/25.)))
+        #ax[0].plot(big_fit_xvals, new_answer_phases ,'d', label = 'blah')
+        if sup_fig!=None:
+            ax[0].set_title('{}\nHow accurate the phase offset between\nchannels is'.format(comment))
+            ax[1].set_title('{}\nHow well each channel sees the\nmirror depth '.format(comment))
         ax[0].set_ylabel('Phase (rad)')
-        ax[1].set_ylabel('Amplitude ($\pi$)')
+        ax[1].set_ylabel('Total phase shift (peak to peak) ($\pi$)')
         ax[0].set_xlabel('Interferometer channel')
         ax[1].set_xlabel('Interferometer channel')
+        ax[1].set_ylim([0,2.4])
+        ax[0].set_ylim([-2.*np.pi,35])
         for i in ax: i.grid()
-        for i in ax: i.legend(loc='best')
-        fig.tight_layout(pad = 0.01)
-        if figname!=None: fig.savefig(figname+'.pdf')
-        fig.canvas.draw(); fig.show()
-
+        if figname!=None:
+            fig.tight_layout(pad = 0.01)
+            fig.savefig(figname)
+            for i in ax: i.legend(loc='best')
+        if sup_fig == None: fig.canvas.draw(); fig.show()
         fig, ax = pt.subplots(nrows = 21, sharex = True)
         for i in range(big_fit.shape[0]):
             ax[i].plot(t, big_fit[i,:])
@@ -1163,4 +1289,7 @@ def fft_fit_wobbly_mirror(big_fit, big_fit_xvals, t, omega_mirror, mirror_depth,
         ax[-1].set_xlim([np.min(t), np.max(t)])
         fig.canvas.draw(); fig.show()
 
-    return answer_phases, k_guess, phase_guess, 
+    return answer_phases, k_guess, phase_guess, big_fit_xvals, 2.*np.abs(valid_ones)/np.pi
+
+
+
