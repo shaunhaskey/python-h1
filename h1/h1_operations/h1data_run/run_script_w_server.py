@@ -167,6 +167,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
         data = data.rstrip(termination_character)
         if data == "LOOPER_STATUS":
             response = '{}{}{}{}'.format(self.server.shot_cycle.cycle, sep_char, self.server.shot_cycle.executing_shot, termination_character)
+            print response
         else:
             cur_thread = threading.current_thread()
             response = "{}: {} : {} :{}".format(cur_thread.name, data, self.server.shot_cycle.cycle, self.server.shot_cycle.executing_shot)
@@ -637,7 +638,7 @@ def check_mirnov_amps(shot):
     except MDSplus.TdiException:
         return_code = 2
         print ' Exception obtaining mirnov amplifier settings success'
-        return_string = '{}: Mirnov amps data unavailable</span>'.format(shot)
+        return_string = '{}: Mirnov amps data unavailable'.format(shot)
     return return_string, return_code
 
 def check_rf_prl60(shot,):
@@ -678,7 +679,17 @@ def check_mirnov_data(shot,):
             print ' Exception obtaining ACQ132_{} data'.format(i)
     return ''.join(return_list).rstrip('\n'), return_code
 
-quality_funcs = [check_mirnov_data, check_mirnov_amps]
+def check_rf_phasing(shot,):
+    '''For calculating the RF antenna phasings
+    To be filled in by Boyd
+
+    SRH : 3Dec2014
+    '''
+    import AnuDevices.rf_signals as rf
+    return_string, return_code = rf.run(shot)
+    return return_string, return_code
+   
+quality_funcs = [check_mirnov_data, check_mirnov_amps, check_rf_phasing]
 
 class shot_quality():
     def __init__(self, ):
@@ -709,10 +720,13 @@ class shot_quality():
                 pre = '<span color="orange">'
             else:
                 pre = '<span color="red">'
-            self.current_strings[i] = '{}{} ({})<\span>'.format(pre, return_val, tmp_func.__name__,)
+            self.current_strings[i] = '{}{} ({})</span>'.format(pre, return_val, tmp_func.__name__,)
         print self.current_strings
         self.quality_string = '\n'.join(self.current_strings)
         self.count = self.count  + 1
+#Interferometer one
+
+#
 
 #############################################
 class shot_engine():
