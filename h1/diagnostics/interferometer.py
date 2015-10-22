@@ -17,12 +17,12 @@ SH: 5May2013
 
 import scipy.optimize as optimize
 from scipy.interpolate import griddata as scipy_griddata
-import heliac_vmec_utils as hv_utils
+#import heliac_vmec_utils as hv_utils
 import os,copy, time, scipy, pickle
 import matplotlib.pyplot as pt
 import numpy as np
 from StringIO import StringIO
-import heliac_worker_funcs as heliac
+#import heliac_worker_funcs as heliac
 import scipy.interpolate as interp
 import scipy.stats.distributions as dist
 

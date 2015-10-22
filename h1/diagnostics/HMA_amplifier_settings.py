@@ -43,14 +43,40 @@ class MyProgram:
         hbox_app.show()
         vbox_app.pack_start(hbox_app, expand = False)
 
+        frame_app_get = gtk.Frame()
+        frame_app_set = gtk.Frame()
+        frame_app_get.show()
+        frame_app_set.show()
+        hbox_app.pack_start(frame_app_get, expand = True)
+        hbox_app.pack_start(frame_app_set, expand = True)
+
+        hbox_app_get = gtk.HBox(False, 0)
+        hbox_app_set = gtk.HBox(False, 0)
+        #hbox_app_get = gtk.HBox(False, 0)
+        #hbox_app_set = gtk.HBox(False, 0)
+        hbox_app_get.show()
+        hbox_app_set.show()
+        frame_app_get.add(hbox_app_get)
+        frame_app_set.add(hbox_app_set)
+
+
+
         #Add the MDSplus buttons
         button_get_mds = gtk.Button(label = 'get from MDSplus')
         button_get_mds.connect("clicked", self.get_mds)
-        hbox_app.pack_start(button_get_mds,)
+        tmp_lab = gtk.Label()
+        tmp_lab.show()
+        tmp_lab.set_text('SHOT')
+        self.get_shot_entry = gtk.Entry()
+        hbox_app_get.pack_start(button_get_mds,)
+        hbox_app_get.pack_start(tmp_lab,)
+        hbox_app_get.pack_start(self.get_shot_entry,)
         button_get_mds.show()
-        button_save_mds = gtk.Button(label = 'save to MDSplus')
+        self.get_shot_entry.set_text('-1')
+        self.get_shot_entry.show()
+        button_save_mds = gtk.Button(label = 'save to MDSplus model shot')
         button_save_mds.connect("clicked", self.save_mds)
-        hbox_app.pack_start(button_save_mds,)
+        hbox_app_set.pack_start(button_save_mds,)
         button_save_mds.show()
 
         #Add a table for the header section
@@ -69,27 +95,30 @@ class MyProgram:
         labels.append(gtk.Label("All"))
         labels[-1].show()
         table_layout_hdr.attach(labels[-1], 0, 1, count, count+1, 0,0,0,0)
+        count2 = 0
         for i, (filt_list, lab) in enumerate(zip([self.filt1, self.filt2, self.filt3, self.filt4, self.aa],lab_list[1:])):
             #overall_filts.append(gtk.CheckButton("Filt{}".format(i+1)))
             overall_filts.append(gtk.CheckButton(lab))
             overall_filts[-1].connect("toggled", self.all_checkbox_changed, filt_list)
-            overall_filts[-1].set_active(True)  # Set the defaut
+            overall_filts[-1].set_active(False)  # Set the defaut
             overall_filts[-1].show()
             table_layout_hdr.attach(overall_filts[-1], i+1, i+2, count, count + 1, 0,0,0,0)
+            count2+=1
         overall_filts.append(gtk.combo_box_new_text())
-
         #Overall gain settings
         gains = ['125x','350x', '625x', '1500x']
         for gain_lab in gains:overall_filts[-1].append_text(gain_lab)
         overall_filts[-1].set_active(0)
         overall_filts[-1].show()
         overall_filts[-1].connect("changed", self.all_gain_changed, self.gain)
+        #Note this relies on i from the for list above still being valid!!!
+        table_layout_hdr.attach(overall_filts[-1], count2+1, count2+2, count, count + 1, 0,0,0,0)
 
         vbox_app.pack_start(table_layout_hdr,expand = False)
 
         #The main table
         table_layout = gtk.Table(rows=48+2, columns=7, homogeneous=True)
-        table_layout.attach(overall_filts[-1], i+2, i+3, count, count+1, 0,0,0,0)
+        #table_layout.attach(overall_filts[-1], i+2, i+3, count, count+1, 0,0,0,0)
 
         #Everything goes in a scroll window
         scrolled_window = gtk.ScrolledWindow(hadjustment=None, vadjustment=None)
@@ -97,6 +126,7 @@ class MyProgram:
         vbox_app.pack_start(scrolled_window)
 
         count = 0
+        #hseps = []
         for i in range(16):
             for j in ['x','y','z']:
                 labels.append(gtk.Label("coil {}{}".format(i+1,j)))
@@ -117,10 +147,13 @@ class MyProgram:
                 self.gain[-1].show()
                 table_layout.attach(self.gain[-1], ii+2, ii+3, count, count+1, 0,0,0,0)
                 count +=1
+            #hseps.append(gtk.HSeparator())
+            #hseps[-1].show()
         table_layout.show()
         scrolled_window.add_with_viewport(table_layout)
         app_window.connect("delete_event", lambda w,e: gtk.main_quit())
         app_window.show()
+        self.get_mds(None)
         return
 
     def all_checkbox_changed(self, widget, data):
@@ -134,10 +167,13 @@ class MyProgram:
         for i in data:
             i.set_active(model)
         
-
     def get_mds(self, widget):
-
-        t=MDSplus.Tree('h1data',-1)#, 'READONLY')
+        txt = self.get_shot_entry.get_text()
+        try:
+            shot = int(txt)
+        except ValueError:
+            print 'ERROR!!!! Shot number cannot be turned into an integer...'
+        t=MDSplus.Tree('h1data',shot)#, 'READONLY')
         node=t.getNode('.mirnov:HMA_AMPS:SETTINGS')
         self.data2=[]; self.pastSettings=[]; self.newSettings=[]
 
@@ -151,7 +187,7 @@ class MyProgram:
                     self.data2.extend(formatted_line)
             #print out the existing settings that are to be modified
             print self.pastSettings
-            print 'Coil Settings read in Successfully'
+            print 'Coil Settings read in Successfully from shot : {}'.format(shot)
         except:
             print 'exception reading data in from amp_setup'
 
@@ -273,7 +309,6 @@ class MyProgram:
                 count +=1
             self.newSettings.append(cur_former)
         print self.newSettings
-
         #Format the data to be output to MDSplus
         anotherOutput=''
         for i in range(16):
@@ -281,9 +316,19 @@ class MyProgram:
             line_str = ' '.join('%d' %i for i in tmp_line)
             output_str = '< %s >\n' %line_str
             anotherOutput+=output_str
+        print 'New setting words to put into tree'
         print anotherOutput
-
-
+        try:
+            t = MDSplus.Tree('h1data',-1)#, 'READONLY')
+            node = t.getNode('.mirnov:HMA_AMPS:SETTINGS')
+        except:
+            print 'Error opening tree or node'
+        try:
+            node.putData(anotherOutput)
+            print 'Successfully updated the model shot'
+        except:
+            print 'Error putting data into the tree!!!'
+            
         # print 'save mds data'
 
 def main():
