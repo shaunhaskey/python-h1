@@ -451,13 +451,15 @@ def plot_vmec(vmec_filename = '/home/srh112/code/python/h1_eq_generation/results
     pts = mlab.mesh(x[:,:], y[:,:], z[:,:], **vmec_kwargs)
     return x, y, z, B
 
-def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/boozmn_wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, boozer_args=None, n_phi = 100, n_theta = 100):
+def plot_boozer(boozer_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/boozmn_wout_kh0.100-kv1.000fixed.nc', phi_min=0, phi_max=2.*np.pi, s_ind = -1, boozer_args=None, n_phi = 100, n_theta = 100, inc_B=True):
     #vmec_filename = '/home/srh112/code/python/h1_eq_generation/results7/kh0.100-kv1.000fixed/wout_kh0.100-kv1.000fixed.nc'
     x, y, z, B = extract_BOOZER_surface_data(boozer_filename, s_ind=s_ind, phi_min = phi_min, phi_max = phi_max, n_phi = n_phi, n_theta = n_theta)
-    boozer_kwargs={'opacity':1.0,'scalars':B,'colormap':'hot','representation':'surface' }
+    #boozer_kwargs={'opacity':1.0,'scalars':B,'colormap':'hot','representation':'surface' }
+    boozer_kwargs={'opacity':1.0,'colormap':'hot','representation':'surface' }
+    if inc_B:boozer_kwargs['scalars'] = B
     if boozer_args!=None: 
         for i in boozer_args.keys(): boozer_kwargs[i] = boozer_args[i]
-
+    print boozer_kwargs
     #pts = mlab.mesh(x[:,:], y[:,:], z[:,:], opacity = 1.0, scalars = B, colormap = 'hot', representation='surface')
     pts = mlab.mesh(x[:,:], y[:,:], z[:,:], **boozer_kwargs)
     return x, y, z, B
